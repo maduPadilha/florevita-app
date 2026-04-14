@@ -120,13 +120,15 @@ export function renderDashboard(){
     </select>`;
   }
 
-  // Time inputs helper
-  function timeInputs(o){
-    return `<div style="display:flex;gap:4px;align-items:center;">
-      <input type="time" data-time-start="${o._id}" value="${o.scheduledTime||''}" style="width:70px;padding:2px 4px;border:1px solid #E2E8F0;border-radius:6px;font-size:11px;color:#334155;background:#F8FAFC;" />
-      <span style="color:#94A3B8;font-size:11px;">-</span>
-      <input type="time" data-time-end="${o._id}" value="${o.scheduledTimeEnd||''}" style="width:70px;padding:2px 4px;border:1px solid #E2E8F0;border-radius:6px;font-size:11px;color:#334155;background:#F8FAFC;" />
-    </div>`;
+  // Time display helper — minimalista, mostra horário do pedido
+  function timeDisplay(o){
+    const t1 = o.scheduledTime || '';
+    const t2 = o.scheduledTimeEnd || '';
+    if(t1 && t2) return `<span style="font-size:12px;color:#334155;font-weight:500;">${t1} <span style="color:#CBD5E1;">-</span> ${t2}</span>`;
+    if(t1) return `<span style="font-size:12px;color:#334155;font-weight:500;">${t1}</span>`;
+    const period = o.scheduledPeriod || '';
+    if(period) return `<span style="font-size:11px;color:#94A3B8;">${period}</span>`;
+    return `<span style="font-size:11px;color:#CBD5E1;">—</span>`;
   }
 
   // Render order row
@@ -148,7 +150,7 @@ export function renderDashboard(){
       <td style="text-align:center;width:36px;">
         <input type="checkbox" data-check-order="${o._id}" ${isChecked?'checked':''} style="width:15px;height:15px;cursor:pointer;accent-color:#3B82F6;" />
       </td>
-      <td style="color:#E11D48;font-weight:700;font-size:12px;">${o.orderNumber||o.numero||'\u2014'}</td>
+      <td style="color:#E11D48;font-weight:700;font-size:12px;">${(()=>{const n=o.orderNumber||o.numero||''; const clean=n.replace(/^PED-?/i,''); return clean?'#'+clean:'\u2014';})()}</td>
       <td>
         <div style="font-weight:600;font-size:12px;color:#1E293B;">${esc(buyer)}</div>
         ${phone?`<div style="font-size:10px;color:#94A3B8;">${esc(phone)}</div>`:''}
@@ -159,7 +161,7 @@ export function renderDashboard(){
         ${bairro?`<div style="font-size:10px;color:#94A3B8;">${esc(bairro)}</div>`:''}
       </td>
       <td style="font-weight:700;font-size:12px;color:#1E293B;">${$c(o.total)}</td>
-      <td>${timeInputs(o)}</td>
+      <td>${timeDisplay(o)}</td>
       <td>${paymentSelect(o)}</td>
       <td>
         <select data-status-select="${o._id}" style="background:${selBg};color:${selColor};border:1px solid ${selBg};border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;outline:none;">

@@ -1401,31 +1401,7 @@ function bindPageActions(){
       });
     });
 
-    // Time inputs
-    document.querySelectorAll('[data-time-start]').forEach(inp=>{
-      inp.addEventListener('change', async e=>{
-        const id = inp.dataset.timeStart;
-        const val = e.target.value;
-        try {
-          await PATCH('/orders/'+id, {scheduledTime: val});
-          const order = S.orders.find(o=>o._id===id);
-          if(order) order.scheduledTime = val;
-          invalidateCache('orders');
-        } catch(err){ toast('Erro ao atualizar hor\u00e1rio: '+err.message, true); }
-      });
-    });
-    document.querySelectorAll('[data-time-end]').forEach(inp=>{
-      inp.addEventListener('change', async e=>{
-        const id = inp.dataset.timeEnd;
-        const val = e.target.value;
-        try {
-          await PATCH('/orders/'+id, {scheduledTimeEnd: val});
-          const order = S.orders.find(o=>o._id===id);
-          if(order) order.scheduledTimeEnd = val;
-          invalidateCache('orders');
-        } catch(err){ toast('Erro ao atualizar hor\u00e1rio: '+err.message, true); }
-      });
-    });
+    // (Horário exibido como texto — editável apenas pelo modal de edição)
   }
 
   // ── PDV ────────────────────────────────────────────────────────
