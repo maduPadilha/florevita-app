@@ -475,32 +475,29 @@ export function _isEntregador(){
 
 export function can(mod){
   if(!S.user) return false;
-  // Administrador tem acesso total APENAS se cargo do backend = 'admin'
-  // (evita que role='Administrador' de localStorage antigo bypass as permissões)
+
+  // Admin: cargo='admin' do backend
   if(S.user.cargo==='admin') return true;
+
+  // Entregador: acesso restrito
   if(_isEntregador()) return mod==='delivery' || mod==='ponto' || mod==='rota';
 
-  // 1. Prioriza modulos do backend (S.user.modulos vem do Collaborator no login)
+  // Colaborador: usa APENAS modulos do backend (Collaborator.modulos)
+  // Se não tem modulos, acesso negado (força relogin)
   if(S.user.modulos && typeof S.user.modulos === 'object'){
     return S.user.modulos[mod]===true;
   }
 
-  // 2. Fallback: fv_colabs localStorage (legacy)
-  const colab = findColab(S.user.email||S.user._id);
-  if(colab){
-    if(!colab.active) return false;
-    return (colab.modulos||{})[mod]===true;
-  }
-
-  // 3. Fallback final: permissões padrão por role
-  const p = PERMS_DEFAULT[S.user.role]||[];
-  return p.includes('*')||p.includes(mod);
+  // Sem modulos do backend = colaborador precisa relogar
+  return false;
 }
 
-// Garante que qualquer máquina veja os colaboradores após login do Admin
+// DESABILITADO: essa função criava fv_colabs com PERMS_DEFAULT
+// dando módulos errados aos colaboradores. Agora as permissões
+// vêm exclusivamente do backend (Collaborator.modulos).
 export function autoSyncColabsFromUsers(){
-  // Importa usuários do MongoDB para fv_colabs local
-  // Garante que qualquer máquina veja os colaboradores após login do Admin
+  return; // no-op
+  // eslint-disable-next-line no-unreachable
   try{
     if(!S.users?.length) return;
     const existing = getColabs();

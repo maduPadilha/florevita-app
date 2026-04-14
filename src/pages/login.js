@@ -54,6 +54,12 @@ export function renderLogin(){
     ⚠️ <strong>Primeira vez neste dispositivo?</strong> O Administrador deve fazer login primeiro para ativar o sistema.
   </div>` : ''}
 
+  <div style="margin-top:10px;text-align:center;">
+    <button id="btn-clear-cache" type="button" style="background:none;border:none;font-size:11px;color:#94A3B8;cursor:pointer;text-decoration:underline;">
+      🧹 Limpar cache e recarregar (resolve problemas de acesso)
+    </button>
+  </div>
+
   ${S._loginMsg ? `
   <div style="margin-top:14px;padding:14px 16px;background:linear-gradient(135deg,#FDF4F7,#FDE8EF);border:1.5px solid #F4A7B9;border-radius:12px;text-align:center;">
     <div style="font-size:22px;margin-bottom:6px;display:inline-block;animation:spin 2s linear infinite;">🌸</div>
@@ -67,4 +73,10 @@ export function bindLogin(){
     doLogin(document.getElementById('li-email').value, document.getElementById('li-pass').value);
   });
   document.getElementById('li-pass')?.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btn-login').click();});
+  document.getElementById('btn-clear-cache')?.addEventListener('click',()=>{
+    if(confirm('Isso vai limpar todos os dados salvos neste dispositivo e recarregar a página. Continuar?')){
+      try{ localStorage.clear(); sessionStorage.clear(); }catch(e){}
+      location.reload();
+    }
+  });
 }
