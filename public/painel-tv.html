@@ -391,7 +391,17 @@ function getProduct(o){
 }
 function getClient(o){ return o.clientName||o.cliente||o.recipient||'—'; }
 function getBairro(o){ return o.address?.bairro||o.bairro||o.address?.zone||'—'; }
-function getDriver(o){ return o.driver||o.entregador||o.driverName||o.deliveryPerson||'—'; }
+function getDriver(o){
+  return o.driverName
+      || o.driver
+      || o.entregador
+      || o.deliveryPerson
+      || o.driverEmail
+      || (o.entrega && (o.entrega.entregador || o.entrega.driverName || o.entrega.driver))
+      || o.driverId
+      || o.driverBackendId
+      || '—';
+}
 
 // Retorna URL da imagem do primeiro produto do pedido
 function getProductImg(o){
@@ -517,7 +527,7 @@ function cardHTML(o, type){
           <div class="card-product">${prod}</div>
           <div class="card-info"><span>👤 ${cli}</span><span>📍 ${getBairro(o)}</span></div>
           <div class="card-info">
-            <span style="font-weight:700;color:var(--green);">🚚 ${driver==='—'?'Sem entregador':driver}</span>
+            <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:${driver==='—'?'rgba(255,120,120,.18)':'rgba(46,204,113,.22)'};color:${driver==='—'?'#ff9a9a':'var(--green)'};font-weight:800;border:1px solid ${driver==='—'?'rgba(255,120,120,.45)':'rgba(46,204,113,.55)'};">🚚 ${driver==='—'?'Sem entregador':driver}</span>
             ${sched?`<span style="color:var(--yellow);font-weight:700;">⏰ ${sched}</span>`:''}
             ${turno?`<span class="turno-tag ${turnoClass(turno)}">${turno}</span>`:''}
           </div>

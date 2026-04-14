@@ -28,7 +28,7 @@ export let S = {
   _expDate:'', _expFilter:'',
   _printedCard:JSON.parse(localStorage.getItem('fv_printed_card')||'{}'),
   _printedComanda:JSON.parse(localStorage.getItem('fv_printed_comanda')||'{}'),
-  _relPeriod:'mes', _relUnit:'', _relTab:'geral', _relDriver:'',
+  _relPeriod:'mes', _relUnit:'', _relTab:'geral', _relDriver:'', _relColab:'',
   _finUnit:'', _finMetaPer:'mes', _relMetaPer:'mes',
   _repView:'list', _repDraft:null, _repEditIdx:null, _repViewIdx:0,
   _iaLoading:false, loading:false, toast:null, sidebarOpen:false,

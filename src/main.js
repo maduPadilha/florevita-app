@@ -1548,6 +1548,7 @@ function bindPageActions(){
     document.querySelectorAll('[data-rel-tab]').forEach(b=>{b.onclick=()=>{S._relTab=b.dataset.relTab;render();};});
     document.getElementById('rel-unit-filter')?.addEventListener('change',e=>{S._relUnit=e.target.value;render();});
     document.getElementById('rel-driver-filter')?.addEventListener('change',e=>{S._relDriver=e.target.value;render();});
+    document.getElementById('rel-colab-filter')?.addEventListener('change',e=>{S._relColab=e.target.value;render();});
     {const _el=document.getElementById('btn-export-pdf');if(_el)_el.onclick=()=>window.print();}
     document.querySelectorAll('[data-meta-per]').forEach(b=>{b.onclick=()=>{S._relMetaPer=b.dataset.metaPer;render();};});
     const _si = document.getElementById('order-search-input');

@@ -58,6 +58,46 @@ function getColabStats(colab){
   return {vendas, comissao, montagens, expedicoes};
 }
 
+// Versão que respeita o período escolhido no Relatórios (dia/semana/mes/mes_ant/todos)
+// Separa comissão por tipo (venda / montagem / expedição) e total de faturamento de vendas.
+function getColabStatsForPeriod(colab, inPeriod){
+  const base = {
+    vendas:0, fatVendas:0, comissaoVenda:0,
+    montagens:0, comissaoMontagem:0,
+    expedicoes:0, comissaoExpedicao:0,
+    comissaoTotal:0
+  };
+  if(!colab) return base;
+  const acts = getActivities();
+  const ids = new Set([colab.id, colab.backendId].filter(Boolean));
+  const emailLow = (colab.email||'').toLowerCase();
+  const nameLow  = (colab.name ||'').toLowerCase();
+  const pctV = Number(colab.metas?.comissaoVenda ?? colab.metas?.vendaPct ?? 0) || 0;
+  const vM   = Number(colab.metas?.comissaoMontagem  ?? 0) || 0;
+  const vE   = Number(colab.metas?.comissaoExpedicao ?? 0) || 0;
+
+  acts.forEach(a=>{
+    if(!inPeriod(a.date)) return;
+    const byId   = a.userId && ids.has(a.userId);
+    const byEmail= emailLow && (a.userEmail||'').toLowerCase()===emailLow;
+    const byName = nameLow  && (a.userName ||'').toLowerCase()===nameLow;
+    if(!(byId || byEmail || byName)) return;
+    if(a.type==='venda'){
+      base.vendas++;
+      base.fatVendas += (a.total||0);
+      base.comissaoVenda += (a.total||0) * (pctV/100);
+    } else if(a.type==='montagem'){
+      base.montagens++;
+      base.comissaoMontagem += vM;
+    } else if(a.type==='expedicao'){
+      base.expedicoes++;
+      base.comissaoExpedicao += vE;
+    }
+  });
+  base.comissaoTotal = base.comissaoVenda + base.comissaoMontagem + base.comissaoExpedicao;
+  return base;
+}
+
 function metaBar(atual, meta, label, unit=''){
   if(!meta) return '';
   const pct = Math.min(100, Math.round((atual/meta)*100));
@@ -426,14 +466,41 @@ export function renderRelatorios(){
   const prodList=Object.entries(byProd).sort((a,b)=>b[1].rev-a[1].rev);
   const maxRev=prodList[0]?.[1]?.rev||1;
 
-  // Por usuario (atividades)
-  const byUser={};
-  acts.forEach(a=>{
-    if(!byUser[a.userId])byUser[a.userId]={name:a.userName,role:a.userRole,vendas:0,fat:0,montagens:0,expedicoes:0};
-    if(a.type==='venda'){byUser[a.userId].vendas++;byUser[a.userId].fat+=(a.total||0);}
-    if(a.type==='montagem') byUser[a.userId].montagens++;
-    if(a.type==='expedicao') byUser[a.userId].expedicoes++;
+  // Por usuario (colaboradores nao-Entregadores) — comissões calculadas sobre o período
+  const colabsAll = getColabs().filter(c=>c.active!==false);
+  const selColab  = S._relColab||'';
+  const colabsUsr = colabsAll
+    .filter(c=>c.cargo!=='Entregador')
+    .filter(c=>!selColab || c.id===selColab || c.backendId===selColab || (c.email||'')===selColab);
+  const byUser = colabsUsr.map(c=>{
+    const st = getColabStatsForPeriod(c, inPeriod);
+    return {
+      colab:c,
+      name:c.name, role:c.cargo||'—', email:c.email||'',
+      ...st
+    };
   });
+  // Fallback: incluir atividades de usuários não cadastrados como colaboradores
+  const knownKeys = new Set();
+  colabsAll.forEach(c=>{
+    if(c.id) knownKeys.add(String(c.id));
+    if(c.backendId) knownKeys.add(String(c.backendId));
+    if(c.email) knownKeys.add((c.email||'').toLowerCase());
+    if(c.name)  knownKeys.add((c.name ||'').toLowerCase());
+  });
+  const orphanMap={};
+  acts.forEach(a=>{
+    const k1 = a.userId   ? String(a.userId)            : '';
+    const k2 = a.userEmail? (a.userEmail||'').toLowerCase() : '';
+    const k3 = a.userName ? (a.userName ||'').toLowerCase() : '';
+    if((k1 && knownKeys.has(k1))||(k2 && knownKeys.has(k2))||(k3 && knownKeys.has(k3))) return;
+    const key = k1||k2||k3||'—';
+    if(!orphanMap[key]) orphanMap[key]={name:a.userName||'Sem cadastro',role:a.userRole||'—',email:a.userEmail||'',vendas:0,fatVendas:0,comissaoVenda:0,montagens:0,comissaoMontagem:0,expedicoes:0,comissaoExpedicao:0,comissaoTotal:0,colab:null};
+    if(a.type==='venda'){ orphanMap[key].vendas++; orphanMap[key].fatVendas+=(a.total||0); }
+    if(a.type==='montagem') orphanMap[key].montagens++;
+    if(a.type==='expedicao') orphanMap[key].expedicoes++;
+  });
+  if(!selColab) Object.values(orphanMap).forEach(o=>byUser.push(o));
 
   // Por entregador
   const byDriver={};
@@ -555,24 +622,58 @@ ${tab==='geral'?`
   </div>
 </div>`:''}
 
-<!-- TAB: POR USUARIO -->
+<!-- TAB: POR USUARIO / COLABORADORES -->
 ${tab==='usuarios'?`
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+  <select class="fi" id="rel-colab-filter" style="width:auto;min-width:220px;">
+    <option value="">Todos os colaboradores</option>
+    ${colabsAll.filter(c=>c.cargo!=='Entregador').map(c=>`<option value="${c.id||c.backendId||c.email}" ${selColab===(c.id||c.backendId||c.email)?'selected':''}>${c.name} — ${c.cargo||'—'}</option>`).join('')}
+  </select>
+  <div style="font-size:12px;color:var(--muted)">${periodLabel} · ${byUser.length} colaborador(es)</div>
+</div>
 <div class="card">
-  <div class="card-title">👩‍💼 Desempenho por Usuário — ${periodLabel}</div>
-  ${Object.keys(byUser).length===0?`<div class="empty"><div class="empty-icon">👩‍💼</div><p>Sem atividades registradas no período</p></div>`:`
+  <div class="card-title">👩‍💼 Comissões & Desempenho — ${periodLabel}</div>
+  ${byUser.length===0?`<div class="empty"><div class="empty-icon">👩‍💼</div><p>Sem colaboradores ou atividades no período</p></div>`:`
   <div class="tw"><table>
-    <thead><tr><th>Funcionário</th><th>Cargo</th><th>Vendas</th><th>Faturamento</th><th>Montagens</th><th>Expedições</th><th>Ticket Médio</th></tr></thead>
+    <thead><tr>
+      <th>Colaborador</th><th>Cargo</th>
+      <th>Vendas</th><th>Fat. Vendas</th><th>Comissão Vendas</th>
+      <th>Montagens</th><th>Comissão Mont.</th>
+      <th>Expedições</th><th>Comissão Exp.</th>
+      <th>Total Comissão</th>
+    </tr></thead>
     <tbody>
-    ${Object.values(byUser).sort((a,b)=>b.fat-a.fat).map(u=>`<tr>
-      <td style="font-weight:600">${u.name}</td>
-      <td><span class="tag ${rolec(u.role)}">${u.role}</span></td>
-      <td style="font-weight:600;color:var(--rose)">${u.vendas}</td>
-      <td style="font-weight:700;color:var(--leaf)">${$c(u.fat)}</td>
-      <td style="color:var(--gold)">${u.montagens}</td>
-      <td style="color:var(--purple)">${u.expedicoes}</td>
-      <td>${$c(u.vendas?u.fat/u.vendas:0)}</td>
-    </tr>`).join('')}
+    ${[...byUser].sort((a,b)=>(b.comissaoTotal||0)-(a.comissaoTotal||0)).map(u=>{
+      const mt=u.colab?.metas||{};
+      const pctV=Number(mt.comissaoVenda??mt.vendaPct??0)||0;
+      const vM=Number(mt.comissaoMontagem??0)||0;
+      const vE=Number(mt.comissaoExpedicao??0)||0;
+      return`<tr>
+        <td style="font-weight:600">${u.name}${u.email?`<div style="font-size:10px;color:var(--muted)">${u.email}</div>`:''}</td>
+        <td><span class="tag ${rolec(u.role)}">${u.role}</span></td>
+        <td style="font-weight:600;color:var(--rose)">${u.vendas}</td>
+        <td style="color:var(--leaf)">${$c(u.fatVendas)}</td>
+        <td style="font-weight:700;color:var(--leaf)">${$c(u.comissaoVenda)}<div style="font-size:10px;color:var(--muted)">${pctV?pctV+'%':'—'}</div></td>
+        <td style="color:var(--gold)">${u.montagens}</td>
+        <td style="font-weight:700;color:var(--gold)">${$c(u.comissaoMontagem)}<div style="font-size:10px;color:var(--muted)">${vM?'R$ '+vM.toFixed(2)+'/un':'—'}</div></td>
+        <td style="color:var(--purple)">${u.expedicoes}</td>
+        <td style="font-weight:700;color:var(--purple)">${$c(u.comissaoExpedicao)}<div style="font-size:10px;color:var(--muted)">${vE?'R$ '+vE.toFixed(2)+'/un':'—'}</div></td>
+        <td style="font-weight:800;color:var(--primary);font-size:14px">${$c(u.comissaoTotal)}</td>
+      </tr>`;}).join('')}
     </tbody>
+    <tfoot>
+      <tr style="background:var(--cream);font-weight:700;">
+        <td colspan="2">TOTAL</td>
+        <td>${byUser.reduce((s,u)=>s+u.vendas,0)}</td>
+        <td>${$c(byUser.reduce((s,u)=>s+u.fatVendas,0))}</td>
+        <td>${$c(byUser.reduce((s,u)=>s+u.comissaoVenda,0))}</td>
+        <td>${byUser.reduce((s,u)=>s+u.montagens,0)}</td>
+        <td>${$c(byUser.reduce((s,u)=>s+u.comissaoMontagem,0))}</td>
+        <td>${byUser.reduce((s,u)=>s+u.expedicoes,0)}</td>
+        <td>${$c(byUser.reduce((s,u)=>s+u.comissaoExpedicao,0))}</td>
+        <td style="color:var(--primary)">${$c(byUser.reduce((s,u)=>s+u.comissaoTotal,0))}</td>
+      </tr>
+    </tfoot>
   </table></div>`}
 </div>`:''}
 
@@ -582,7 +683,7 @@ ${tab==='entregadores'?`
 <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
   <select class="fi" id="rel-driver-filter" style="width:auto;min-width:180px;">
     <option value="">Todos os entregadores</option>
-    ${Object.keys(byDriver).map(n=>`<option value="${n}" ${(S._relDriver||''===n)?'selected':''}>${n}</option>`).join('')}
+    ${Object.keys(byDriver).map(n=>`<option value="${n}" ${S._relDriver===n?'selected':''}>${n}</option>`).join('')}
   </select>
   <div style="font-size:12px;color:var(--muted)">
     ${periodLabel} · ${entregues.length} entrega(s) confirmada(s)
@@ -591,7 +692,9 @@ ${tab==='entregadores'?`
 
 <!-- Resumo por entregador -->
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:14px;">
-  ${Object.entries(byDriver).sort((a,b)=>b[1].entregas-a[1].entregas).map(([nome,{entregas,total,valorPorEntrega}])=>{
+  ${Object.entries(byDriver)
+    .filter(([nome])=>!S._relDriver || nome===S._relDriver)
+    .sort((a,b)=>b[1].entregas-a[1].entregas).map(([nome,{entregas,total,valorPorEntrega}])=>{
     const ganho = (valorPorEntrega||0)*entregas;
     return`
   <div style="background:#fff;border-radius:var(--rl);border:1px solid var(--border);padding:16px;box-shadow:var(--shadow);${entregas===0?'opacity:.7':''}">
@@ -644,7 +747,9 @@ ${Object.keys(byDriver).length===0?`<div class="empty card"><div class="empty-ic
   </div>
   ${(()=>{
     const listaEntregas = searchOrders(
-      [...entregues].sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)),
+      [...entregues]
+        .filter(o=>!S._relDriver || (o.driverName||'').toLowerCase()===S._relDriver.toLowerCase())
+        .sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)),
       S._orderSearch
     );
     if(!listaEntregas.length) return `<div class="empty"><p>${S._orderSearch?'Nenhum resultado para "'+S._orderSearch+'"':'Sem entregas confirmadas no período'}</p></div>`;
