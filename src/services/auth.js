@@ -450,7 +450,8 @@ export function _isEntregador(){
 
 export function can(mod){
   if(!S.user) return false;
-  if(S.user.role==='Administrador') return true;
+  // Administrador tem acesso total SEMPRE (sem restrição de colab)
+  if(S.user.role==='Administrador' || S.user.cargo==='admin') return true;
   if(_isEntregador()) return mod==='delivery' || mod==='ponto' || mod==='rota';
   const colab = findColab(S.user.email||S.user._id);
   if(colab){
