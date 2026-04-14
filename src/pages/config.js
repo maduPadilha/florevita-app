@@ -579,7 +579,7 @@ export function bindConfigActions(){
   }});
 
   // Nova zona em Manaus (botao principal)
-  {const _el=document.getElementById('btn-add-zone');if(_el)_el.onclick=()=>{
+  {const _el=document.getElementById('btn-add-zone');if(_el)_el.onclick=async()=>{
     S._modal=`<div class="mo" id="mo"><div class="mo-box" style="max-width:380px;" onclick="event.stopPropagation()">
     <div class="mo-title">Nova Zona — Manaus</div>
     <div class="fg"><label class="fl">Nome da zona *</label><input class="fi" id="zone-name" placeholder="Ex: Taruma"/></div>
@@ -588,7 +588,7 @@ export function bindConfigActions(){
       <button class="btn btn-primary" id="btn-zone-save">Adicionar</button>
       <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
     </div></div></div>`;
-    render();
+    await render();
     document.getElementById('btn-mo-close')?.addEventListener('click',()=>{S._modal='';render();});
     document.getElementById('btn-zone-save')?.addEventListener('click',()=>{
       const zone=document.getElementById('zone-name')?.value?.trim();
@@ -601,7 +601,7 @@ export function bindConfigActions(){
   };}
 
   // Nova cidade
-  {const _el=document.getElementById('btn-add-city');if(_el)_el.onclick=()=>{
+  {const _el=document.getElementById('btn-add-city');if(_el)_el.onclick=async()=>{
     S._modal=`<div class="mo" id="mo"><div class="mo-box" style="max-width:380px;" onclick="event.stopPropagation()">
     <div class="mo-title">Nova Cidade</div>
     <div class="fg"><label class="fl">Nome da cidade *</label><input class="fi" id="city-name" placeholder="Ex: Manacapuru"/></div>
@@ -611,7 +611,7 @@ export function bindConfigActions(){
       <button class="btn btn-primary" id="btn-city-save">Adicionar</button>
       <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
     </div></div></div>`;
-    render();
+    await render();
     document.getElementById('btn-mo-close')?.addEventListener('click',()=>{S._modal='';render();});
     document.getElementById('btn-city-save')?.addEventListener('click',()=>{
       const city=document.getElementById('city-name')?.value?.trim();

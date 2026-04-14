@@ -203,7 +203,7 @@ export async function confirmDeliveryByQR(orderId){
       <button class="btn btn-ghost" onclick="S._modal='';render();">Cancelar</button>
     </div>
   </div></div>`;
-  render();
+  await render();
 
   document.getElementById('btn-qr-confirm')?.addEventListener('click', async()=>{
     S._modal=''; S.loading=true; render();

@@ -302,7 +302,7 @@ ${emProducao.length>0?`
 
 
 // ── MODAL CONFIRMAR ENTREGA ────────────────────────────────────
-export function showConfirmDeliveryModal(orderId){
+export async function showConfirmDeliveryModal(orderId){
   const o = S.orders.find(x=>x._id===orderId);
   if(!o) return;
   S._modal=`<div class="mo" id="mo"><div class="mo-box" style="max-width:480px;" onclick="event.stopPropagation()">
@@ -339,7 +339,7 @@ export function showConfirmDeliveryModal(orderId){
     <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
   </div>
   </div></div>`;
-  render();
+  await render();
 
   document.getElementById('btn-mo-close')?.addEventListener('click',()=>{S._modal='';render();});
 

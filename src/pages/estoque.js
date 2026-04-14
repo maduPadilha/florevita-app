@@ -112,7 +112,7 @@ ${low.length>0?`<div class="alert al-warn">⚠️ <strong>${low.length} itens co
 }
 
 // ── MODAL ESTOQUE ────────────────────────────────────────────
-export function showStockModal(prodId, prodName, type='Entrada'){
+export async function showStockModal(prodId, prodName, type='Entrada'){
   const validUnits = ['Loja Novo Aleixo','Loja Allegro Mall','CDLE'];
   const defaultUnit = validUnits.includes(S.user.unit) ? S.user.unit : 'CDLE';
   S._modal=`<div class="mo" id="mo"><div class="mo-box" onclick="event.stopPropagation()">
@@ -140,13 +140,13 @@ export function showStockModal(prodId, prodName, type='Entrada'){
     <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
   </div>
   </div></div>`;
-  render();
+  await render();
   document.getElementById('btn-mo-close')?.addEventListener('click',()=>{S._modal='';render();});
   document.getElementById('btn-sv-stock')?.addEventListener('click',()=>saveStockMove(prodId,type));
 }
 
 // ── MODAL TRANSFERÊNCIA ──────────────────────────────────────
-export function showTransferModal(){
+export async function showTransferModal(){
   S._modal=`<div class="mo" id="mo"><div class="mo-box" onclick="event.stopPropagation()">
   <div class="mo-title">🔄 Transferência entre Unidades</div>
   <div class="fg"><label class="fl">Produto *</label>
@@ -178,7 +178,7 @@ export function showTransferModal(){
     <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
   </div>
   </div></div>`;
-  render();
+  await render();
   document.getElementById('btn-mo-close')?.addEventListener('click',()=>{S._modal='';render();});
   document.getElementById('btn-sv-transfer')?.addEventListener('click',saveTransfer);
 }

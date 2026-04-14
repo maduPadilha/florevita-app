@@ -89,7 +89,7 @@ export function renderProdutos(){
 }
 
 // ── showNewProductModal ───────────────────────────────────────
-export function showNewProductModal(prod=null){
+export async function showNewProductModal(prod=null){
   const edit = !!prod;
   const cats = getCategorias();
   const tax = prod?.taxation||{};
@@ -255,7 +255,7 @@ export function showNewProductModal(prod=null){
 
   </div></div></div>`;
 
-  render();
+  await render();
 
   // ── Cancelar ──────────────────────────────────────────────
   document.getElementById('btn-mp-cancel')?.addEventListener('click',()=>{
@@ -408,7 +408,7 @@ function saveStockFromModal(){
 }
 
 // ── showProductStockModal ────────────────────────────────────
-export function showProductStockModal(prodId){
+export async function showProductStockModal(prodId){
   const p = S.products.find(x=>x._id===prodId);
   if(!p) return;
   window._stockModalProdId = prodId;
@@ -444,7 +444,7 @@ export function showProductStockModal(prodId){
     <button class="btn btn-ghost" onclick="S._modal='';render();">Cancelar</button>
   </div>
   </div></div>`;
-  render();
+  await render();
 
   document.getElementById('btn-st-save')?.addEventListener('click',async()=>{
     const type   = document.getElementById('st-type')?.value;

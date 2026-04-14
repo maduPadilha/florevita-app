@@ -198,7 +198,7 @@ export function renderClientes(){
 }
 
 // ── MODAL: ADICIONAR DATA ESPECIAL ────────────────────────────
-export function showAddDataEspecialModal(clientId, onSave){
+export async function showAddDataEspecialModal(clientId, onSave){
   const TIPOS = ['Aniversario','Namoro','Casamento','Dia das Maes','Dia dos Pais','Formatura','Outro'];
   const prevModal = S._modal;
   S._modal=`<div class="mo" id="mo-data" onclick="if(event.target===this){document.getElementById('mo-data').remove();}">
@@ -234,7 +234,7 @@ export function showAddDataEspecialModal(clientId, onSave){
       <button class="btn btn-ghost" id="btn-de-cancel">Cancelar</button>
     </div>
   </div></div>`;
-  render();
+  await render();
 
   document.getElementById('btn-de-cancel')?.addEventListener('click',()=>{
     S._modal=''; render();
@@ -267,7 +267,7 @@ export function showAddDataEspecialModal(clientId, onSave){
 }
 
 // ── MODAL CLIENTE ─────────────────────────────────────────────
-export function showClientModal(client=null){
+export async function showClientModal(client=null){
   const edit = !!client;
   const SEGMENTS = ['Novo','Frequente','VIP','Corporativo','Inativo'];
   const datasSync = getDatasEspeciaisSync(client?._id||'');
@@ -342,7 +342,7 @@ export function showClientModal(client=null){
   </div>
   </div></div>`;
 
-  render();
+  await render();
   document.getElementById('btn-cm-cancel')?.addEventListener('click',()=>{S._modal='';render();});
   document.getElementById('btn-cm-save')?.addEventListener('click',()=>saveClient(client?._id));
 
@@ -403,7 +403,7 @@ export async function saveClient(editId=null){
 }
 
 // ── EXCLUIR CLIENTE ───────────────────────────────────────────
-export function deleteClient(id){
+export async function deleteClient(id){
   const c = S.clients.find(x=>x._id===id);
   if(!c) return;
   window._delClientId = id;
@@ -416,7 +416,7 @@ export function deleteClient(id){
     <button class="btn btn-red" id="btn-confirm-del-cli" style="padding:10px 20px;">&#128465;&#65039; Excluir</button>
     <button class="btn btn-ghost" id="btn-cancel-del-cli">Cancelar</button>
   </div></div></div>`;
-  render();
+  await render();
 
   document.getElementById('btn-confirm-del-cli')?.addEventListener('click',()=>confirmDeleteClient());
   document.getElementById('btn-cancel-del-cli')?.addEventListener('click',()=>{S._modal='';render();});

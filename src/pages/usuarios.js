@@ -64,7 +64,7 @@ ${list.length===0?`<div class="empty"><div class="empty-icon">\u{1F465}</div><p>
 </div>`;
 }
 
-export function showNewUserModal(user=null){
+export async function showNewUserModal(user=null){
   const edit=!!user;
   const CARGOS=['Administrador','Gerente','Atendimento','Producao','Expedicao','Financeiro','Entregador'];
   const UNIDADES=['Loja Novo Aleixo','Loja Allegro Mall','CDLE','Todas'];
@@ -96,7 +96,7 @@ export function showNewUserModal(user=null){
     <button type="button" class="btn btn-ghost" id="btn-mo-close-u">Cancelar</button>
   </div>
   </div></div>`;
-  render();
+  await render();
   document.getElementById('btn-mo-close-u')?.addEventListener('click',()=>{S._modal='';render();});
   document.getElementById('btn-sv-user')?.addEventListener('click',()=>saveUser(user?._id));
 }
