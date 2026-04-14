@@ -265,7 +265,7 @@ ${list.map(c=>{
 }
 
 // ── MODAL COLABORADOR ──────────────────────────────────────────
-export function showColabModal(colabId=null, overrideCargo=null){
+export async function showColabModal(colabId=null, overrideCargo=null){
   const colab = colabId ? getColabs().find(c=>c.id===colabId) : null;
   const edit  = !!colab;
   const cargo = overrideCargo || colab?.cargo || 'Atendimento';
@@ -465,7 +465,7 @@ export function showColabModal(colabId=null, overrideCargo=null){
   </div>
   </div></div>`;
 
-  render();
+  await render();
 
   // styleClLbl: funcao local disponivel globalmente para os onclick inline
   window.styleClLbl = function(lbl, on){
