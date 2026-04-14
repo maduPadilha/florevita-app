@@ -1,14 +1,13 @@
 import { S } from '../state.js';
 import { $c, $d, sc, ini, esc } from '../utils/formatters.js';
 import { toast, searchOrders } from '../utils/helpers.js';
-import { PATCH } from '../services/api.js';
+import { PATCH, PUT } from '../services/api.js';
 import { can, getColabs, findColab } from '../services/auth.js';
 import { recarregarDados, invalidateCache } from '../services/cache.js';
 
-async function render(){
-  const { render:r } = await import('../main.js');
-  r();
-}
+async function render(){ const { render:r } = await import('../main.js'); r(); }
+
+export let selectedOrders = [];
 
 export function renderDashboard(){
   const now = new Date();
@@ -18,10 +17,15 @@ export function renderDashboard(){
   const todayOrders = S.orders.filter(o => (o.scheduledDate||o.createdAt?.substring(0,10)) === today);
 
   const totalToday = todayOrders.length;
-  const aguardando = todayOrders.filter(o=>o.status==='Aguardando').length;
+  const recebidos = totalToday;
+  const aguardandoImpressao = todayOrders.filter(o=>o.status==='Aguardando' && !S._printedComanda?.[o._id]).length;
+  const aguardandoProducao = todayOrders.filter(o=>o.status==='Aguardando').length;
   const emPreparo = todayOrders.filter(o=>o.status==='Em preparo').length;
   const saiuEntrega = todayOrders.filter(o=>o.status==='Saiu p/ entrega').length;
   const entregas = todayOrders.filter(o=>o.status==='Entregue').length;
+  const produzidos = todayOrders.filter(o=>o.status==='Pronto').length;
+  const retiradaLoja = todayOrders.filter(o=>o.type==='Retirada'||o.type==='Balcao'||o.type===String.fromCharCode(66,97,108,99,227,111)).length;
+  const cancelados = todayOrders.filter(o=>o.status==='Cancelado').length;
 
   const statusColors = {
     'Aguardando': '#F1F5F9',
@@ -40,7 +44,6 @@ export function renderDashboard(){
     'Cancelado': '#991B1B'
   };
   const unitColors = { 'CDLE':'#DC2626', 'Loja Novo Aleixo':'#1D4ED8', 'Loja Allegro Mall':'#059669' };
-
   const allStatuses = ['Aguardando','Em preparo','Pronto','Saiu p/ entrega','Entregue','Cancelado'];
 
   // Filters
@@ -64,10 +67,10 @@ export function renderDashboard(){
 
   // Group by shift
   const shifts = [
-    { key:'Manhã', icon:'☀️', color:'#F59E0B', orders:[] },
-    { key:'Tarde', icon:'🌤️', color:'#3B82F6', orders:[] },
-    { key:'Noite', icon:'🌙', color:'#7C3AED', orders:[] },
-    { key:'Sem turno', icon:'📋', color:'#6B7280', orders:[] }
+    { key:'Manh\u00e3', icon:'\u2600\uFE0F', color:'#F59E0B', orders:[] },
+    { key:'Tarde', icon:'\uD83C\uDF24\uFE0F', color:'#3B82F6', orders:[] },
+    { key:'Noite', icon:'\uD83C\uDF19', color:'#7C3AED', orders:[] },
+    { key:'Sem turno', icon:'\uD83D\uDCCB', color:'#6B7280', orders:[] }
   ];
   filtered.forEach(o=>{
     const p = (o.scheduledPeriod||'').toLowerCase();
@@ -77,61 +80,98 @@ export function renderDashboard(){
     else shifts[3].orders.push(o);
   });
 
+  // Progress helpers
+  const pctRecebidos = 100;
+  const pctAguardImp = totalToday ? Math.round((aguardandoImpressao/totalToday)*100) : 0;
+  const pctAguardProd = totalToday ? Math.round((aguardandoProducao/totalToday)*100) : 0;
+  const pctPreparo = totalToday ? Math.round((emPreparo/totalToday)*100) : 0;
+  const pctSaiu = totalToday ? Math.round((saiuEntrega/totalToday)*100) : 0;
+  const pctEntregas = totalToday ? Math.round((entregas/totalToday)*100) : 0;
+  const pctProduzidos = totalToday ? Math.round((produzidos/totalToday)*100) : 0;
+  const pctRetirada = totalToday ? Math.round((retiradaLoja/totalToday)*100) : 0;
+  const pctCancelados = totalToday ? Math.round((cancelados/totalToday)*100) : 0;
+
   // Card helper
   function metricCard(title, value, subtitle, borderColor, progress, progressColor){
     const pct = progress!=null ? progress : 0;
-    return `<div style="background:#fff;border-left:4px solid ${borderColor};border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+    return `<div style="background:#fff;border-left:4px solid ${borderColor};border-radius:8px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);min-width:0;">
       <div style="font-size:10px;text-transform:uppercase;color:#94A3B8;font-weight:600;letter-spacing:.5px;margin-bottom:6px;">${title}</div>
-      <div style="font-size:24px;font-weight:700;color:#1E293B;margin-bottom:2px;">${value}</div>
+      <div style="font-size:22px;font-weight:700;color:#1E293B;margin-bottom:2px;">${value}</div>
       <div style="font-size:10px;color:#94A3B8;margin-bottom:8px;">${subtitle}</div>
-      <div style="height:6px;background:#F1F5F9;border-radius:3px;overflow:hidden;">
+      <div style="height:5px;background:#F1F5F9;border-radius:3px;overflow:hidden;">
         <div style="height:100%;width:${pct}%;background:${progressColor||borderColor};border-radius:3px;transition:width .4s;"></div>
       </div>
     </div>`;
   }
 
+  // Payment select helper
+  function paymentSelect(o){
+    const payment = o.paymentMethod||o.formaPagamento||'Ag. Pagamento';
+    const opts = ['Aprovado','Ag. Pagamento','Pagar na Entrega'];
+    const colorMap = {
+      'Aprovado':'background:#D1FAE5;color:#065F46;border-color:#A7F3D0;',
+      'Ag. Pagamento':'background:#FEF3C7;color:#92400E;border-color:#FDE68A;',
+      'Pagar na Entrega':'background:#FFEDD5;color:#9A3412;border-color:#FED7AA;'
+    };
+    const style = colorMap[payment]||colorMap['Ag. Pagamento'];
+    const options = opts.map(op=>`<option value="${op}" ${op===payment?'selected':''}>${op}</option>`).join('');
+    return `<select data-payment-select="${o._id}" style="${style}border:1px solid;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;outline:none;">
+      ${options}
+    </select>`;
+  }
+
+  // Time inputs helper
+  function timeInputs(o){
+    return `<div style="display:flex;gap:4px;align-items:center;">
+      <input type="time" data-time-start="${o._id}" value="${o.scheduledTime||''}" style="width:70px;padding:2px 4px;border:1px solid #E2E8F0;border-radius:6px;font-size:11px;color:#334155;background:#F8FAFC;" />
+      <span style="color:#94A3B8;font-size:11px;">-</span>
+      <input type="time" data-time-end="${o._id}" value="${o.scheduledTimeEnd||''}" style="width:70px;padding:2px 4px;border:1px solid #E2E8F0;border-radius:6px;font-size:11px;color:#334155;background:#F8FAFC;" />
+    </div>`;
+  }
+
   // Render order row
   function orderRow(o){
-    const buyer = o.clientName||o.cliente?.nome||'—';
+    const buyer = o.clientName||o.cliente?.nome||'\u2014';
     const phone = o.clientPhone||o.cliente?.telefone||'';
-    const recip = o.recipient||'—';
-    const recipStyle = recip!=='—' && recip.toLowerCase()!==buyer.toLowerCase() ? 'color:#059669;font-weight:600;' : '';
+    const recip = o.recipient||'\u2014';
+    const recipStyle = recip!=='\u2014' && recip.toLowerCase()!==buyer.toLowerCase() ? 'color:#059669;font-weight:600;' : '';
     const bairro = o.deliveryNeighborhood||o.endereco?.bairro||'';
-    const unit = o.unit||'—';
-    const payment = o.paymentMethod||o.formaPagamento||'—';
-    const paymentApproved = payment==='Pix'||payment==='Aprovado'||(o.paymentStatus||'').toLowerCase()==='aprovado';
-    const payBadgeColor = paymentApproved ? 'background:#D1FAE5;color:#065F46;' : 'background:#FEF3C7;color:#92400E;';
+    const unit = o.unit||'\u2014';
 
     const selBg = statusColors[o.status]||'#F1F5F9';
     const selColor = statusTextColors[o.status]||'#475569';
-
     const statusOpts = allStatuses.map(st=>`<option value="${st}" ${st===o.status?'selected':''}>${st}</option>`).join('');
 
-    return `<tr>
-      <td style="color:#E11D48;font-weight:700;">${o.orderNumber||o.numero||'—'}</td>
+    const isChecked = selectedOrders.includes(o._id);
+
+    return `<tr style="border-bottom:1px solid #F1F5F9;">
+      <td style="text-align:center;width:36px;">
+        <input type="checkbox" data-check-order="${o._id}" ${isChecked?'checked':''} style="width:15px;height:15px;cursor:pointer;accent-color:#3B82F6;" />
+      </td>
+      <td style="color:#E11D48;font-weight:700;font-size:12px;">${o.orderNumber||o.numero||'\u2014'}</td>
       <td>
-        <div style="font-weight:600;font-size:12px;">${esc(buyer)}</div>
+        <div style="font-weight:600;font-size:12px;color:#1E293B;">${esc(buyer)}</div>
         ${phone?`<div style="font-size:10px;color:#94A3B8;">${esc(phone)}</div>`:''}
       </td>
       <td style="${recipStyle}font-size:12px;">${esc(recip)}</td>
       <td>
-        <div style="font-size:12px;">Manaus</div>
+        <div style="font-size:12px;color:#1E293B;">Manaus</div>
         ${bairro?`<div style="font-size:10px;color:#94A3B8;">${esc(bairro)}</div>`:''}
       </td>
-      <td style="font-weight:700;">${$c(o.total)}</td>
-      <td style="font-size:12px;">${o.scheduledTime||o.scheduledPeriod||'—'}</td>
-      <td><span style="${payBadgeColor}border-radius:20px;padding:2px 8px;font-size:10px;font-weight:600;">${esc(payment)}</span></td>
+      <td style="font-weight:700;font-size:12px;color:#1E293B;">${$c(o.total)}</td>
+      <td>${timeInputs(o)}</td>
+      <td>${paymentSelect(o)}</td>
       <td>
-        <select data-status-select="${o._id}" style="background:${selBg};color:${selColor};border:none;border-radius:20px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;">
+        <select data-status-select="${o._id}" style="background:${selBg};color:${selColor};border:1px solid ${selBg};border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;outline:none;">
           ${statusOpts}
         </select>
       </td>
-      <td><span style="background:${unitColors[o.unit]||'#6B7280'};color:#fff;border-radius:20px;padding:2px 8px;font-size:10px;font-weight:600;">${esc(unit)}</span></td>
+      <td><span style="background:${unitColors[o.unit]||'#6B7280'};color:#fff;border-radius:20px;padding:2px 10px;font-size:10px;font-weight:600;white-space:nowrap;">${esc(unit)}</span></td>
       <td style="white-space:nowrap;">
-        <button data-edit-order="${o._id}" title="Editar" class="btn btn-ghost btn-xs">✏️</button>
-        <button data-print-comanda="${o._id}" title="Imprimir" class="btn btn-ghost btn-xs">🖨️</button>
-        <button data-confirm="${o._id}" title="Confirmar Entrega" class="btn btn-ghost btn-xs">✅</button>
-        <button data-print-card="${o._id}" title="Ver Cartão" class="btn btn-ghost btn-xs">💌</button>
+        <button data-edit-order="${o._id}" title="Editar" class="btn btn-ghost btn-xs" style="padding:2px 4px;">&#9997;&#65039;</button>
+        <button data-print-comanda="${o._id}" title="Imprimir" class="btn btn-ghost btn-xs" style="padding:2px 4px;">&#128424;&#65039;</button>
+        <button data-confirm="${o._id}" title="Confirmar Entrega" class="btn btn-ghost btn-xs" style="padding:2px 4px;">&#9989;</button>
+        <button data-print-card="${o._id}" title="Ver Cart\u00e3o" class="btn btn-ghost btn-xs" style="padding:2px 4px;">&#128140;</button>
       </td>
     </tr>`;
   }
@@ -141,7 +181,7 @@ export function renderDashboard(){
   shifts.forEach(sh=>{
     if(sh.orders.length===0) return;
     tableContent += `<tr>
-      <td colspan="10" style="background:linear-gradient(90deg,${sh.color}11,${sh.color}05);padding:10px 14px;border-left:3px solid ${sh.color};">
+      <td colspan="11" style="background:linear-gradient(90deg,${sh.color}15,${sh.color}05);padding:10px 14px;border-left:3px solid ${sh.color};border-bottom:1px solid ${sh.color}22;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:16px;">${sh.icon}</span>
           <span style="font-weight:700;font-size:13px;color:${sh.color};">${sh.key}</span>
@@ -153,46 +193,51 @@ export function renderDashboard(){
   });
 
   const hasOrders = filtered.length > 0;
-
-  // Progress helpers
-  const pctAguardando = totalToday ? Math.round((aguardando/totalToday)*100) : 0;
-  const pctPreparo = totalToday ? Math.round((emPreparo/totalToday)*100) : 0;
-  const pctSaiu = totalToday ? Math.round((saiuEntrega/totalToday)*100) : 0;
-  const pctEntregas = totalToday ? Math.round((entregas/totalToday)*100) : 0;
+  const selCount = selectedOrders.length;
 
   return `
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
   <div style="display:flex;align-items:center;gap:10px;">
-    <span style="font-size:20px;">🎯</span>
+    <span style="font-size:20px;">&#127919;</span>
     <div>
-      <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;">Dashboard de Pedidos</div>
-      <div style="font-size:11px;color:#94A3B8;">Atualizado às ${hh}:${mm}</div>
+      <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:#1E293B;">Dashboard de Pedidos</div>
+      <div style="font-size:11px;color:#94A3B8;">Atualizado \u00e0s ${hh}:${mm}</div>
     </div>
   </div>
   <div style="display:flex;gap:6px;">
-    <button class="btn btn-ghost btn-sm" title="Configurações">⚙️</button>
-    <button class="btn btn-ghost btn-sm" id="btn-dash-refresh" title="Atualizar">🔄</button>
-    <button class="btn btn-ghost btn-sm" title="Alertas">🔔</button>
+    <button class="btn btn-ghost btn-sm" title="Configura\u00e7\u00f5es">&#9881;&#65039;</button>
+    <button class="btn btn-ghost btn-sm" id="btn-dash-refresh" title="Atualizar">&#128260;</button>
+    <button class="btn btn-ghost btn-sm" title="Alertas">&#128276;</button>
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:12px;">
-  ${metricCard('Pedidos Recebidos Hoje', totalToday, totalToday===1?'1 pedido':totalToday+' pedidos', '#3B82F6', 100, '#3B82F6')}
-  ${metricCard('Aguardando Produção', aguardando, aguardando+' na fila', '#F59E0B', pctAguardando, '#F59E0B')}
-  ${metricCard('Em Produção', emPreparo, emPreparo+' em andamento', '#7C3AED', pctPreparo, '#7C3AED')}
+<!-- Row 1: 6 metric cards -->
+<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:10px;">
+  ${metricCard('Pedidos Recebidos Hoje', recebidos, recebidos===1?'1 pedido':recebidos+' pedidos', '#3B82F6', pctRecebidos, '#3B82F6')}
+  ${metricCard('Aguardando Impress\u00e3o', aguardandoImpressao, aguardandoImpressao+' sem imprimir', '#F97316', pctAguardImp, '#F97316')}
+  ${metricCard('Aguardando Produ\u00e7\u00e3o', aguardandoProducao, aguardandoProducao+' na fila', '#F59E0B', pctAguardProd, '#F59E0B')}
+  ${metricCard('Em Produ\u00e7\u00e3o', emPreparo, emPreparo+' em andamento', '#7C3AED', pctPreparo, '#7C3AED')}
   ${metricCard('Saiu para Entrega', saiuEntrega, saiuEntrega+' a caminho', '#E11D48', pctSaiu, '#E11D48')}
-  ${metricCard('Entregas', entregas+'/'+totalToday, pctEntregas+'% concluído', '#059669', pctEntregas, '#059669')}
+  ${metricCard('Entregas', entregas+'/'+totalToday, pctEntregas+'% conclu\u00eddo', '#059669', pctEntregas, '#059669')}
+</div>
+
+<!-- Row 2: 4 metric cards -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+  ${metricCard('Produzidos', produzidos, produzidos+' prontos', '#1E40AF', pctProduzidos, '#1E40AF')}
+  ${metricCard('Retirada na Loja', retiradaLoja, retiradaLoja+' para retirada', '#0891B2', pctRetirada, '#0891B2')}
+  ${metricCard('Cancelados', cancelados, cancelados+' cancelados', '#DC2626', pctCancelados, '#DC2626')}
   ${metricCard('Total do Dia', totalToday, 'pedidos registrados', '#1E293B', 100, '#1E293B')}
 </div>
 
-<div class="card" style="margin-bottom:14px;">
-  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
-    <div style="font-weight:700;font-size:15px;">🚚 Entregas Hoje</div>
-    <div class="search-box" style="flex:1;min-width:200px;">
-      <span class="si">🔍</span>
-      <input class="fi" id="dash-search" placeholder="Buscar pedido ou cliente..." style="padding-left:30px;" value="${esc(S._dashSearch||'')}"/>
+<div class="card" style="margin-bottom:14px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:16px;">
+  <!-- Filter bar -->
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+    <div style="font-weight:700;font-size:15px;color:#1E293B;">&#128666; Entregas Hoje</div>
+    <div class="search-box" style="flex:1;min-width:200px;position:relative;">
+      <span class="si" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);">&#128269;</span>
+      <input class="fi" id="dash-search" placeholder="Buscar pedido ou cliente..." style="padding-left:30px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;" value="${esc(S._dashSearch||'')}"/>
     </div>
-    <select class="fi" id="dash-filter-status" style="width:auto;min-width:140px;">
+    <select class="fi" id="dash-filter-status" style="width:auto;min-width:140px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;">
       <option value="">Todos os Status</option>
       <option ${filterStatus==='Aguardando'?'selected':''}>Aguardando</option>
       <option ${filterStatus==='Em preparo'?'selected':''}>Em preparo</option>
@@ -201,15 +246,15 @@ export function renderDashboard(){
       <option ${filterStatus==='Entregue'?'selected':''}>Entregue</option>
       <option ${filterStatus==='Cancelado'?'selected':''}>Cancelado</option>
     </select>
-    <select class="fi" id="dash-filter-payment" style="width:auto;min-width:150px;">
+    <select class="fi" id="dash-filter-payment" style="width:auto;min-width:150px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;">
       <option value="">Todos Pagamentos</option>
       <option ${filterPayment==='Pix'?'selected':''}>Pix</option>
       <option ${filterPayment==='Dinheiro'?'selected':''}>Dinheiro</option>
-      <option ${filterPayment==='Cartão Crédito'?'selected':''}>Cartão Crédito</option>
-      <option ${filterPayment==='Cartão Débito'?'selected':''}>Cartão Débito</option>
+      <option ${filterPayment==='Cart\u00e3o Cr\u00e9dito'?'selected':''}>Cart\u00e3o Cr\u00e9dito</option>
+      <option ${filterPayment==='Cart\u00e3o D\u00e9bito'?'selected':''}>Cart\u00e3o D\u00e9bito</option>
       <option ${filterPayment==='Pagar na Entrega'?'selected':''}>Pagar na Entrega</option>
     </select>
-    <select class="fi" id="dash-filter-unit" style="width:auto;min-width:130px;">
+    <select class="fi" id="dash-filter-unit" style="width:auto;min-width:130px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;">
       <option value="">Todas Unidades</option>
       <option ${filterUnit==='CDLE'?'selected':''}>CDLE</option>
       <option ${filterUnit==='Loja Novo Aleixo'?'selected':''}>Loja Novo Aleixo</option>
@@ -217,20 +262,41 @@ export function renderDashboard(){
     </select>
   </div>
 
+  <!-- Action bar with bulk buttons -->
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <button id="btn-dash-print" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;">
+      &#128424;&#65039; Imprimir
+    </button>
+    <button id="btn-dash-confirm" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;">
+      &#9989; Confirmar Entrega
+    </button>
+    <span id="dash-selected-count" style="font-size:12px;color:#64748B;font-weight:500;">${selCount} selecionados</span>
+  </div>
+
   ${hasOrders ? `
   <div style="overflow-x:auto;">
-    <table>
-      <thead><tr>
-        <th>Code</th><th>Comprador</th><th>Destinatário</th><th>Entrega</th>
-        <th>Preço</th><th>Hora da Entrega</th><th>Pagamento</th><th>Status</th>
-        <th>Unidade</th><th>Ações</th>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">
+        <th style="text-align:center;width:36px;padding:8px 4px;">
+          <input type="checkbox" id="dash-select-all" style="width:15px;height:15px;cursor:pointer;accent-color:#3B82F6;" />
+        </th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Code</th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Comprador</th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Destinat\u00e1rio</th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Entrega</th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Pre\u00e7o</th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Hor\u00e1rio</th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Pagamento</th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Status</th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Unidade</th>
+        <th style="padding:8px 6px;font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">A\u00e7\u00f5es</th>
       </tr></thead>
       <tbody>${tableContent}</tbody>
     </table>
   </div>
   ` : `
   <div style="text-align:center;padding:40px 20px;">
-    <div style="font-size:40px;margin-bottom:12px;">📋</div>
+    <div style="font-size:40px;margin-bottom:12px;">&#128203;</div>
     <div style="color:#94A3B8;font-size:14px;">Nenhum pedido para hoje</div>
   </div>
   `}

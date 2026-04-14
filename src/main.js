@@ -13,7 +13,7 @@ import { startPolling, stopPolling } from './services/polling.js';
 
 // Pages - import render functions
 import { renderLogin, bindLogin } from './pages/login.js';
-import { renderDashboard } from './pages/dashboard.js';
+import { renderDashboard, selectedOrders } from './pages/dashboard.js';
 import { renderPDV, finalizePDV } from './pages/pdv.js';
 import { renderPedidos, showOrderViewModal, showEditOrderModal, advanceOrder } from './pages/pedidos.js';
 import { renderClientes, showClientModal, saveClient, deleteClient, getDatasEspeciais, saveDatasEspeciais, showAddDataEspecialModal, bindClientesEvents } from './pages/clientes.js';
@@ -1337,6 +1337,95 @@ function bindPageActions(){
     document.querySelectorAll('[data-print-comanda]').forEach(b=>b.addEventListener('click',()=>printComanda(b.dataset.printComanda)));
     document.querySelectorAll('[data-confirm]').forEach(b=>b.addEventListener('click',()=>showConfirmDeliveryModal(b.dataset.confirm)));
     document.querySelectorAll('[data-print-card]').forEach(b=>b.addEventListener('click',()=>printCard(b.dataset.printCard)));
+
+    // Checkbox selection
+    const updateSelCount = ()=>{
+      const el = document.getElementById('dash-selected-count');
+      if(el) el.textContent = selectedOrders.length+' selecionados';
+    };
+    document.getElementById('dash-select-all')?.addEventListener('change', e=>{
+      const checked = e.target.checked;
+      selectedOrders.length = 0;
+      document.querySelectorAll('[data-check-order]').forEach(cb=>{
+        cb.checked = checked;
+        if(checked) selectedOrders.push(cb.dataset.checkOrder);
+      });
+      updateSelCount();
+    });
+    document.querySelectorAll('[data-check-order]').forEach(cb=>{
+      cb.addEventListener('change', e=>{
+        const id = cb.dataset.checkOrder;
+        if(e.target.checked){
+          if(!selectedOrders.includes(id)) selectedOrders.push(id);
+        } else {
+          const idx = selectedOrders.indexOf(id);
+          if(idx>-1) selectedOrders.splice(idx,1);
+        }
+        updateSelCount();
+      });
+    });
+
+    // Bulk print
+    document.getElementById('btn-dash-print')?.addEventListener('click', async ()=>{
+      if(!selectedOrders.length){ toast('Selecione pedidos para imprimir'); return; }
+      for(const id of selectedOrders){ await printComanda(id); }
+      toast(selectedOrders.length+' comanda(s) enviada(s) para impress\u00e3o');
+    });
+
+    // Bulk confirm delivery
+    document.getElementById('btn-dash-confirm')?.addEventListener('click', async ()=>{
+      if(!selectedOrders.length){ toast('Selecione pedidos para confirmar'); return; }
+      for(const id of selectedOrders){ showConfirmDeliveryModal(id); }
+    });
+
+    // Payment selects
+    document.querySelectorAll('[data-payment-select]').forEach(sel=>{
+      sel.addEventListener('change', async e=>{
+        const id = sel.dataset.paymentSelect;
+        const val = e.target.value;
+        const colorMap = {
+          'Aprovado':'background:#D1FAE5;color:#065F46;border-color:#A7F3D0;',
+          'Ag. Pagamento':'background:#FEF3C7;color:#92400E;border-color:#FDE68A;',
+          'Pagar na Entrega':'background:#FFEDD5;color:#9A3412;border-color:#FED7AA;'
+        };
+        sel.style.cssText = (colorMap[val]||'')+' border:1px solid;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;outline:none;';
+        try {
+          await PATCH('/orders/'+id, {paymentMethod: val});
+          const order = S.orders.find(o=>o._id===id);
+          if(order) order.paymentMethod = val;
+          invalidateCache('orders');
+          toast('Pagamento atualizado: '+val);
+        } catch(err){
+          toast('Erro ao atualizar pagamento: '+err.message, true);
+        }
+      });
+    });
+
+    // Time inputs
+    document.querySelectorAll('[data-time-start]').forEach(inp=>{
+      inp.addEventListener('change', async e=>{
+        const id = inp.dataset.timeStart;
+        const val = e.target.value;
+        try {
+          await PATCH('/orders/'+id, {scheduledTime: val});
+          const order = S.orders.find(o=>o._id===id);
+          if(order) order.scheduledTime = val;
+          invalidateCache('orders');
+        } catch(err){ toast('Erro ao atualizar hor\u00e1rio: '+err.message, true); }
+      });
+    });
+    document.querySelectorAll('[data-time-end]').forEach(inp=>{
+      inp.addEventListener('change', async e=>{
+        const id = inp.dataset.timeEnd;
+        const val = e.target.value;
+        try {
+          await PATCH('/orders/'+id, {scheduledTimeEnd: val});
+          const order = S.orders.find(o=>o._id===id);
+          if(order) order.scheduledTimeEnd = val;
+          invalidateCache('orders');
+        } catch(err){ toast('Erro ao atualizar hor\u00e1rio: '+err.message, true); }
+      });
+    });
   }
 
   // ── PDV ────────────────────────────────────────────────────────
