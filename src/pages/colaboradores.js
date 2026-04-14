@@ -116,24 +116,18 @@ const CARGOS_COLABS=['Gerente','Atendimento','Producao','Expedicao','Financeiro'
 const UNIDADES_COLABS=['Loja Novo Aleixo','Loja Allegro Mall','CDLE'];
 
 // ── Fetch collaborators from API with localStorage fallback ───
-// Triggers a background merge from /api/collaborators on page render
-let _colabFetchPromise = null;
+// Triggers a ONE-TIME background merge from /api/collaborators
+let _colabFetched = false;
 function triggerColabFetch(){
-  if(!_colabFetchPromise){
-    _colabFetchPromise = fetchAndMergeColabs().then(merged => {
-      _colabFetchPromise = null;
-      if(merged?.length){
-        // Re-render to show updated data
-        render();
-      }
-      return merged;
-    }).catch(e => {
-      _colabFetchPromise = null;
-      console.warn('[colaboradores] API fetch failed:', e.message);
-      return null;
-    });
-  }
-  return _colabFetchPromise;
+  if(_colabFetched) return;
+  _colabFetched = true;
+  fetchAndMergeColabs().then(merged => {
+    if(merged?.length && S.page === 'colaboradores' && !S._modal){
+      render();
+    }
+  }).catch(e => {
+    console.warn('[colaboradores] API fetch failed:', e.message);
+  });
 }
 
 export function renderColaboradores(){

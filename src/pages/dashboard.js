@@ -170,10 +170,13 @@ ${S.user.unit==='Todas'||S.user.role==='Administrador'?`
 <div class="card">
     <div class="card-title">Últimos Pedidos <button class="btn btn-outline btn-sm" onclick="setPage('pedidos')">Ver todos</button></div>
     ${S.orders.length===0?`<div class="empty"><div class="empty-icon">📋</div><p>Sem pedidos ainda</p><button class="btn btn-primary btn-sm" onclick="setPage('pdv')" style="margin-top:8px">Criar pedido</button></div>`:`
-    <table><thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Status</th><th>Entregador</th><th>Data</th></tr></thead>
-    <tbody>${S.orders.slice(0,8).map(o=>`<tr>
-      <td style="color:var(--rose);font-weight:600">${o.orderNumber||'—'}</td>
-      <td style="font-weight:500">${o.client?.name||o.clientName||'—'}</td>
+    <table><thead><tr><th>#</th><th>Cliente</th><th>Bairro</th><th>Total</th><th>Status</th><th>Entregador</th><th>Data</th></tr></thead>
+    <tbody>${S.orders.slice(0,8).map(o=>{
+      const bairro = o.deliveryNeighborhood || o.endereco?.bairro || o.neighborhood || '';
+      return`<tr>
+      <td style="color:var(--rose);font-weight:600">${o.orderNumber||o.numero||'—'}</td>
+      <td style="font-weight:500">${o.client?.name||o.clientName||o.cliente?.nome||'—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${bairro||'—'}</td>
       <td style="font-weight:600">${$c(o.total)}</td>
       <td>${o.status==='Saiu p/ entrega'&&o.driverName
         ?`<div style="display:inline-flex;flex-direction:column;gap:3px;"><span class="tag ${sc(o.status)}">${o.status}</span></div>`
@@ -188,7 +191,7 @@ ${S.user.unit==='Todas'||S.user.role==='Administrador'?`
           :`<span style="font-size:11px;color:var(--muted)">${o.driverName}</span>`)
         :`<span style="color:var(--muted);font-size:11px;">—</span>`}</td>
       <td style="color:var(--muted)">${$d(o.createdAt)}</td>
-    </tr>`).join('')}</tbody></table>`}
+    </tr>`}).join('')}</tbody></table>`}
   </div>
 </div>`;
 }
