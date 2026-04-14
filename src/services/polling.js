@@ -12,14 +12,50 @@ export async function pollData(){
   if(!S.user||!S.token||S.loading||S._modal||S._iaLoading) return;
   _pollCount++;
   try{
-    // A cada ciclo: atualiza pedidos
-    const orders = await GET('/orders').catch(()=>null);
+    // A cada ciclo: atualiza pedidos e atividades (sincroniza entre dispositivos)
+    const [orders, activities] = await Promise.all([
+      GET('/orders').catch(()=>null),
+      GET('/activities').catch(()=>null),
+    ]);
     let changed = false;
     if(orders){
       const merged = mergeDriverAssignments(orders);
       if(JSON.stringify(merged)!==JSON.stringify(S.orders)){
         S.orders=merged; changed=true;
       }
+    }
+    // Mescla atividades remotas com cache local — leitores de fv_activities
+    // (pedidos.js, expedicao.js, etc.) passam a ver atividades de todos os dispositivos.
+    if(Array.isArray(activities)){
+      try{
+        const local = JSON.parse(localStorage.getItem('fv_activities')||'[]');
+        const seen = new Set();
+        const result = [];
+        const remote = activities.map(a => ({
+          id: a.id || a._id || (a.date+'_'+(a.userId||a.user||'')),
+          userId: a.userId,
+          userName: a.user || a.userName || '',
+          userEmail: (a.userEmail||'').toLowerCase(),
+          colabId: a.colabId,
+          type: a.type,
+          orderId: a.orderId,
+          orderNumber: a.orderNumber || '—',
+          items: a.items || [],
+          total: a.total || 0,
+          date: a.date,
+        }));
+        for(const a of [...remote, ...local]){
+          const k = a.id || (a.orderId+'|'+a.type+'|'+a.date);
+          if(seen.has(k)) continue;
+          seen.add(k);
+          result.push(a);
+        }
+        const newStr = JSON.stringify(result);
+        if(newStr !== JSON.stringify(local)){
+          localStorage.setItem('fv_activities', newStr);
+          changed = true;
+        }
+      }catch(e){ /* ignora */ }
     }
 
     // A cada 4 ciclos (~32s): atualiza produtos (ou no ciclo 1 se sem produtos)

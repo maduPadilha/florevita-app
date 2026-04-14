@@ -82,6 +82,56 @@ export function searchOrders(orders, q){
   });
 }
 
+// ── ACTIVITY LOG ─────────────────────────────────────────────
+// Registra atividades (montagem/expedição/entrega) no cache local
+// e sincroniza com o backend `/api/activities` para visibilidade
+// entre dispositivos. Falha silenciosamente se a API estiver offline.
+export function getActivities(){
+  try{ return JSON.parse(localStorage.getItem('fv_activities')||'[]'); }
+  catch(e){ return []; }
+}
+
+export function logActivity(type, order){
+  if(!S.user || !order) return;
+  const activity = {
+    id: Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    userId: S.user._id,
+    userName: S.user.name||S.user.nome||'',
+    userRole: S.user.role,
+    userEmail: (S.user.email||'').toLowerCase(),
+    colabId: S.user.colabId||S.user.id||S.user._id,
+    type,
+    orderId: order._id,
+    orderNumber: order.orderNumber||'—',
+    items: order.items||[],
+    total: order.total||0,
+    date: new Date().toISOString(),
+  };
+  // Cache local (sempre)
+  try{
+    const acts = getActivities();
+    acts.push(activity);
+    localStorage.setItem('fv_activities', JSON.stringify(acts));
+  }catch(e){ /* localStorage cheio — ignora */ }
+
+  // Sincroniza com backend (silencioso se offline)
+  import('../services/api.js').then(m => {
+    if(typeof m.POST !== 'function') return;
+    m.POST('/activities', {
+      type,
+      description: `${type} — ${order.orderNumber||''} ${order.clientName||order.client?.name||''}`.trim(),
+      orderId: order._id,
+      user: activity.userName,
+      userEmail: activity.userEmail,
+      userId: activity.userId,
+      colabId: activity.colabId,
+      total: activity.total,
+      items: activity.items,
+      date: activity.date,
+    }).catch(()=>{ /* fallback: localStorage já tem */ });
+  }).catch(()=>{});
+}
+
 // ── BARRA DE BUSCA DE PEDIDOS (HTML reutilizavel) ────────────
 export function renderOrderSearchBar(placeholder='Buscar por nº pedido, nome ou telefone...'){
   const q = S._orderSearch||'';

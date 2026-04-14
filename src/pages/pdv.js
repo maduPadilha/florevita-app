@@ -2,7 +2,7 @@
 import { S, PDV, DELIVERY_FEES, BAIRROS_MANAUS, resetPDV } from '../state.js';
 import { $c, emoji, esc, ini } from '../utils/formatters.js';
 import { POST, PATCH } from '../services/api.js';
-import { toast, setPage } from '../utils/helpers.js';
+import { toast, setPage, logActivity as _logActivity, getActivities as _getActivities } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
 import { invalidateCache } from '../services/cache.js';
 
@@ -380,6 +380,10 @@ export async function _finalizePDV(){
     block:PDV.block,apt:PDV.apt,
     source:'PDV',
     unit:orderUnit,
+    // Colaborador que lançou o pedido
+    createdByName: S.user?.name || S.user?.nome || '',
+    createdByEmail: S.user?.email || '',
+    createdByColabId: S.user?.colabId || S.user?._id || '',
     paymentOnDelivery: PDV.payment==='Pagar na Entrega' ? PDV.paymentOnDelivery : undefined,
     deliveryFee:PDV.deliveryFee||0,
     deliveryZone:PDV.zone,
@@ -444,22 +448,10 @@ export async function _finalizePDV(){
 
 // ── Helpers locais ───────────────────────────────────────────
 
-function getActivities(){ return JSON.parse(localStorage.getItem('fv_activities')||'[]'); }
-
-function logActivity(type, order){
-  if(!S.user) return;
-  const acts = getActivities();
-  acts.push({
-    id: Date.now()+'_'+Math.random().toString(36).slice(2,7),
-    userId: S.user._id, userName: S.user.name, userRole: S.user.role,
-    userEmail: (S.user.email||'').toLowerCase(),
-    colabId: S.user.colabId||S.user.id||S.user._id,
-    type, orderId: order._id, orderNumber: order.orderNumber||'—',
-    items: order.items||[], total: order.total||0,
-    date: new Date().toISOString(),
-  });
-  localStorage.setItem('fv_activities', JSON.stringify(acts));
-}
+// Delega para helpers.js (fonte única de verdade — sincroniza com backend
+// e cacheia em localStorage). Mantido aqui como wrapper para uso interno.
+function getActivities(){ return _getActivities(); }
+function logActivity(type, order){ return _logActivity(type, order); }
 
 function notifyWhatsApp(order){
   const num = '5592993002433';

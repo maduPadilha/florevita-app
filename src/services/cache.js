@@ -161,13 +161,44 @@ export async function loadData(){
     try{ const { render } = await import('../main.js'); render(); }catch(_){}
 
     // Busca todos os dados simultaneamente
-    const [p, o, c, u, sm] = await Promise.all([
+    const [p, o, c, u, sm, ac] = await Promise.all([
       GET('/products').catch(()=>null),
       GET('/orders').catch(()=>null),
       GET('/clients').catch(()=>null),
       GET('/users').catch(()=>null),
       GET('/stock/moves').catch(()=>null),
+      GET('/activities').catch(()=>null),
     ]);
+
+    // Mescla atividades vindas do backend com cache local (visibilidade entre dispositivos)
+    if(Array.isArray(ac)){
+      try{
+        const local = JSON.parse(localStorage.getItem('fv_activities')||'[]');
+        const seen = new Set();
+        const merged = [];
+        // Normaliza atividades do backend para o mesmo shape do cache local
+        const remote = ac.map(a => ({
+          id: a.id || a._id || (a.date+'_'+(a.userId||a.user||'')),
+          userId: a.userId,
+          userName: a.user || a.userName || '',
+          userEmail: (a.userEmail||'').toLowerCase(),
+          colabId: a.colabId,
+          type: a.type,
+          orderId: a.orderId,
+          orderNumber: a.orderNumber || '—',
+          items: a.items || [],
+          total: a.total || 0,
+          date: a.date,
+        }));
+        for(const a of [...remote, ...local]){
+          const k = a.id || (a.orderId+'|'+a.type+'|'+a.date);
+          if(seen.has(k)) continue;
+          seen.add(k);
+          merged.push(a);
+        }
+        localStorage.setItem('fv_activities', JSON.stringify(merged));
+      }catch(e){ /* ignora */ }
+    }
 
     // Log para diagnóstico
     console.log(`[load] tentativa ${n}: p=${JSON.stringify(p)?.substring(0,50)} o=${o?.length} c=${c?.length} u=${u?.length}`);
