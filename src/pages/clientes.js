@@ -5,6 +5,35 @@ import { toast } from '../utils/helpers.js';
 import { can } from '../services/auth.js';
 import { invalidateCache } from '../services/cache.js';
 
+// ── CSV/JSON Import/Export helpers ────────────────────────────
+function toCSV(rows, columns){
+  const header = columns.join(';');
+  const lines = rows.map(r => columns.map(c => {
+    const val = c.split('.').reduce((o,k)=>o?.[k], r) ?? '';
+    const str = String(val).replace(/"/g,'""');
+    return /[;"\n]/.test(str) ? `"${str}"` : str;
+  }).join(';'));
+  return '\uFEFF' + header + '\n' + lines.join('\n');
+}
+function downloadFile(content, filename, mime='text/csv'){
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+function parseCSV(text){
+  const lines = text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length) return [];
+  const header = lines[0].split(';');
+  return lines.slice(1).map(line => {
+    const values = line.split(';');
+    const obj = {};
+    header.forEach((h,i) => obj[h.trim()] = (values[i]||'').trim());
+    return obj;
+  });
+}
+
 // ── Helper: render() via dynamic import ───────────────────────
 async function render(){
   const { render:r } = await import('../main.js');
@@ -91,6 +120,7 @@ function getDatasEspeciaisSync(clientId){
 export function renderClientes(){
   const q = (S._clientSearch||'').toLowerCase();
   const list = S.clients.filter(c=>!q||c.name?.toLowerCase().includes(q)||c.phone?.includes(q)||c.email?.toLowerCase().includes(q));
+  S._filteredClients = list;
   const sel = S._clientSel;
 
   return`
@@ -99,6 +129,11 @@ export function renderClientes(){
     <span class="si">&#128269;</span>
     <input class="fi" id="cli-search" placeholder="Buscar por nome, telefone ou e-mail..." value="${S._clientSearch||''}"/>
   </div>
+  ${S.user?.role === 'Administrador' ? `
+    <button class="btn btn-blue btn-sm" id="btn-import-cli">&#128229; Importar</button>
+    <button class="btn btn-green btn-sm" id="btn-export-cli">&#128228; Exportar</button>
+    <input type="file" id="file-import-cli" accept=".csv,.json" style="display:none" />
+  ` : ''}
   <button class="btn btn-primary" id="btn-new-cli">&#10133; Novo Cliente</button>
 </div>
 
@@ -445,6 +480,61 @@ export function bindClientesEvents(){
 
   // Novo cliente
   document.getElementById('btn-new-cli')?.addEventListener('click',()=>showClientModal());
+
+  // ── Importar (admin) ──
+  document.getElementById('btn-import-cli')?.addEventListener('click',()=>{
+    document.getElementById('file-import-cli')?.click();
+  });
+  document.getElementById('file-import-cli')?.addEventListener('change', async e=>{
+    const file = e.target.files?.[0]; if(!file) return;
+    try{
+      const text = await file.text();
+      const rows = file.name.toLowerCase().endsWith('.json') ? JSON.parse(text) : parseCSV(text);
+      if(!Array.isArray(rows) || !rows.length) return toast('Arquivo vazio ou invalido');
+      let ok=0, fail=0;
+      for(let i=0;i<rows.length;i++){
+        toast(`Importando ${i+1} de ${rows.length}...`);
+        const r = rows[i];
+        const payload = {
+          name:    r.nome || r.name || '',
+          phone:   r.telefone || r.phone || '',
+          email:   r.email || '',
+          cpf:     r.cpf || '',
+          address: {
+            neighborhood: r['endereco.bairro'] || r.bairro || '',
+            city:         r['endereco.cidade'] || r.cidade || 'Manaus',
+          },
+          unit: S.user?.unit==='Todas' ? 'Loja Novo Aleixo' : (S.user?.unit||'Loja Novo Aleixo'),
+        };
+        if(!payload.name){ fail++; continue; }
+        try{
+          const c = await POST('/clients', payload);
+          if(c?._id) S.clients.unshift(c);
+          ok++;
+        }catch(err){ fail++; }
+      }
+      invalidateCache('clients');
+      render();
+      toast(`Importados: ${ok} · Falhas: ${fail}`);
+    }catch(err){ toast('Erro ao importar: '+(err.message||'')); }
+    e.target.value = '';
+  });
+
+  // ── Exportar (admin) ──
+  document.getElementById('btn-export-cli')?.addEventListener('click',()=>{
+    const cols = ['nome','telefone','email','cpf','endereco.bairro','endereco.cidade'];
+    const src  = Array.isArray(S._filteredClients) ? S._filteredClients : S.clients;
+    const rows = src.map(c=>({
+      nome: c.name||'',
+      telefone: c.phone||'',
+      email: c.email||'',
+      cpf: c.cpf||'',
+      endereco: { bairro: c.address?.neighborhood||'', cidade: c.address?.city||'' },
+    }));
+    const csv = toCSV(rows, cols);
+    downloadFile(csv, 'clientes-'+new Date().toISOString().split('T')[0]+'.csv');
+    toast('Exportados '+rows.length+' clientes');
+  });
 
   // Selecionar cliente na tabela
   document.querySelectorAll('[data-cli]').forEach(row=>{

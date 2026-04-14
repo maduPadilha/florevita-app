@@ -122,6 +122,8 @@ export function renderPedidos(){
   });
   // Busca por numero, nome ou telefone
   filtered = searchOrders(filtered, S._orderSearch);
+  // Expor filtrados para export (admin)
+  S._filteredOrders = filtered;
 
   const hasFilter = fStatus!=='Todos'||fBairro||fTurno||fUnidade||fCanal||fPrior||fDate1||fDate2||(S._orderSearch||'');
 
@@ -190,6 +192,11 @@ export function renderPedidos(){
   <div class="card-title">Pedidos <span class="notif">${filtered.length}</span>
     <div style="display:flex;gap:6px">
       <button class="btn btn-ghost btn-sm" id="btn-rel-orders">🔄</button>
+      ${S.user?.role === 'Administrador' ? `
+        <button class="btn btn-blue btn-sm" id="btn-import-ped">📥 Importar</button>
+        <button class="btn btn-green btn-sm" id="btn-export-ped">📤 Exportar</button>
+        <input type="file" id="file-import-ped" accept=".csv,.json" style="display:none" />
+      ` : ''}
       <button class="btn btn-primary btn-sm" onclick="setPage('pdv')">+ Novo</button>
     </div>
   </div>

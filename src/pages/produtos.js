@@ -1,6 +1,35 @@
 import { S } from '../state.js';
 import { $c, emoji, esc } from '../utils/formatters.js';
-import { POST, PUT, DELETE, PATCH } from '../services/api.js';
+import { GET, POST, PUT, DELETE, PATCH } from '../services/api.js';
+
+// ── CSV/JSON Import/Export helpers ────────────────────────────
+function toCSV(rows, columns){
+  const header = columns.join(';');
+  const lines = rows.map(r => columns.map(c => {
+    const val = c.split('.').reduce((o,k)=>o?.[k], r) ?? '';
+    const str = String(val).replace(/"/g,'""');
+    return /[;"\n]/.test(str) ? `"${str}"` : str;
+  }).join(';'));
+  return '\uFEFF' + header + '\n' + lines.join('\n');
+}
+function downloadFile(content, filename, mime='text/csv'){
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+function parseCSV(text){
+  const lines = text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length) return [];
+  const header = lines[0].split(';');
+  return lines.slice(1).map(line => {
+    const values = line.split(';');
+    const obj = {};
+    header.forEach((h,i) => obj[h.trim()] = (values[i]||'').trim());
+    return obj;
+  });
+}
 import { toast } from '../utils/helpers.js';
 import { can } from '../services/auth.js';
 import { invalidateCache, saveCachedData, recarregarDados } from '../services/cache.js';
@@ -47,6 +76,38 @@ window.showFullImg = showFullImg;
 window.saveStockFromModal = saveStockFromModal;
 window.recarregarDados = recarregarDados;
 
+// ── Multi-category helpers ────────────────────────────────────
+function getProductCategories(p){
+  if(!p) return [];
+  if(Array.isArray(p.categories) && p.categories.length) return p.categories.slice();
+  if(p.category) return [p.category];
+  return [];
+}
+window.toggleProductCategory = function(cat, checked){
+  S._prodCats = Array.isArray(S._prodCats) ? S._prodCats : [];
+  if(checked){
+    if(!S._prodCats.includes(cat)) S._prodCats.push(cat);
+  } else {
+    S._prodCats = S._prodCats.filter(c=>c!==cat);
+  }
+  renderProductCategoryUI();
+};
+window.removeProductCategory = function(cat){
+  S._prodCats = (S._prodCats||[]).filter(c=>c!==cat);
+  const cb = document.querySelector(`input[data-cat-cb="${cat}"]`);
+  if(cb) cb.checked = false;
+  renderProductCategoryUI();
+};
+function renderProductCategoryUI(){
+  const pillsBox = document.getElementById('mp-cat-pills');
+  if(!pillsBox) return;
+  const sel = S._prodCats||[];
+  pillsBox.innerHTML = sel.length
+    ? sel.map(c=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#fff;padding:3px 8px;border-radius:12px;font-size:11px;margin:2px;">${c}<button type="button" onclick="removeProductCategory('${c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.3);border:none;color:#fff;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;padding:0;">×</button></span>`).join('')
+    : `<span style="font-size:11px;color:var(--muted);font-style:italic;">Nenhuma categoria selecionada</span>`;
+}
+window.renderProductCategoryUI = renderProductCategoryUI;
+
 // ── PRODUTOS ─────────────────────────────────────────────────
 export function renderProdutos(){
   return`
@@ -54,6 +115,11 @@ export function renderProdutos(){
   <span style="color:var(--muted);font-size:12px">${S.products.length} produtos</span>
   <div style="display:flex;gap:6px;">
     <button class="btn btn-ghost btn-sm" id="btn-rel-prods">🔄</button>
+    ${S.user?.role === 'Administrador' ? `
+      <button class="btn btn-blue btn-sm" id="btn-import-prod">📥 Importar</button>
+      <button class="btn btn-green btn-sm" id="btn-export-prod">📤 Exportar</button>
+      <input type="file" id="file-import-prod" accept=".csv,.json" style="display:none" />
+    ` : ''}
     <button class="btn btn-primary" id="btn-new-prod">+ Novo Produto</button>
   </div>
 </div>
@@ -70,7 +136,7 @@ export function renderProdutos(){
         ${p.images?.[0]?`<img src="${p.images[0]}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer" title="${p.name}" onclick="showFullImg('${p.images[0]}')">`:`<span style="font-size:20px">${emoji(p.category)}</span>`}
         <span style="font-weight:500">${p.name}</span>
       </div></td>
-      <td><span class="tag t-gray">${p.category||'\u2014'}</span></td>
+      <td>${(()=>{const cs=getProductCategories(p);return cs.length?cs.map(c=>`<span class="tag t-gray" style="margin:1px;display:inline-block;font-size:10px;">${c}</span>`).join(' '):'\u2014';})()}</td>
       <td style="color:var(--muted)">${$c(p.costPrice)}</td>
       <td style="font-weight:600">${$c(p.salePrice)}</td>
       <td><span class="tag ${mg>=50?'t-green':mg>=30?'t-gold':'t-red'}">${mg}%</span></td>
@@ -96,13 +162,16 @@ export async function showNewProductModal(prod=null){
   const d   = prod?.dimensoes||{};
   const draft = S._prodDraft||{};
 
-  S._modal=`<div class="mo" id="mo" onclick="if(event.target===this){S._modal='';S._prodDraft=null;S._prodTab=null;render();}">
+  // Initialize selected categories for multi-select
+  S._prodCats = getProductCategories(prod);
+
+  S._modal=`<div class="mo" id="mo" onclick="if(event.target===this){S._modal='';S._prodDraft=null;S._prodTab=null;S._prodCats=null;render();}">
   <div class="mo-box" style="max-width:820px;width:96vw;max-height:92vh;overflow-y:auto;padding:0;" onclick="event.stopPropagation()">
 
   <!-- Header fixo -->
   <div style="position:sticky;top:0;background:var(--primary);color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;z-index:10;">
     <div style="font-family:'Playfair Display',serif;font-size:18px;">${edit?'✏️ Editar Produto':'🌹 Novo Produto'}</div>
-    <button onclick="S._modal='';S._prodDraft=null;S._prodTab=null;render();" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">\u2715</button>
+    <button onclick="S._modal='';S._prodDraft=null;S._prodTab=null;S._prodCats=null;render();" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">\u2715</button>
   </div>
 
   <div style="padding:22px;">
@@ -114,11 +183,19 @@ export async function showNewProductModal(prod=null){
       <label class="fl">Nome do Produto *</label>
       <input class="fi" id="mp-name" value="${draft.name||prod?.name||''}" placeholder="Nome completo do produto"/>
     </div>
-    <div class="fg">
-      <label class="fl">Categoria</label>
-      <select class="fi" id="mp-cat">
-        ${cats.map(c=>`<option ${(prod?.category||'')=== c?'selected':''}>${c}</option>`).join('')}
-      </select>
+    <div class="fg" style="grid-column:span 2">
+      <label class="fl">Categorias (selecione uma ou mais)</label>
+      <div id="mp-cat-pills" style="min-height:28px;padding:4px;background:var(--cream);border-radius:8px;margin-bottom:6px;">
+        ${(S._prodCats||[]).length
+          ? (S._prodCats||[]).map(c=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#fff;padding:3px 8px;border-radius:12px;font-size:11px;margin:2px;">${c}<button type="button" onclick="removeProductCategory('${c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.3);border:none;color:#fff;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;padding:0;">×</button></span>`).join('')
+          : `<span style="font-size:11px;color:var(--muted);font-style:italic;">Nenhuma categoria selecionada</span>`}
+      </div>
+      <div style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:#fff;">
+        ${cats.map(c=>`<label class="cb" style="display:inline-flex;align-items:center;gap:4px;margin:3px 8px 3px 0;font-size:12px;cursor:pointer;">
+          <input type="checkbox" data-cat-cb="${c}" ${(S._prodCats||[]).includes(c)?'checked':''} onchange="toggleProductCategory('${c.replace(/'/g,"\\'")}', this.checked)"/>
+          <span>${c}</span>
+        </label>`).join('')}
+      </div>
     </div>
     <div class="fg">
       <label class="fl">Codigo do Produto</label>
@@ -259,7 +336,7 @@ export async function showNewProductModal(prod=null){
 
   // ── Cancelar ──────────────────────────────────────────────
   document.getElementById('btn-mp-cancel')?.addEventListener('click',()=>{
-    S._modal=''; S._prodDraft=null; S._prodTab=null; render();
+    S._modal=''; S._prodDraft=null; S._prodTab=null; S._prodCats=null; render();
   });
 
   // ── Upload de imagem ──────────────────────────────────────
@@ -319,9 +396,11 @@ export async function saveProduct(editId=null, prodCode=null){
                    false;
   const insumos = collectInsumos();
 
+  const selectedCats = Array.isArray(S._prodCats) ? S._prodCats.slice() : [];
   const data={
     name, code: prodCode,
-    category:      document.getElementById('mp-cat')?.value,
+    categories:    selectedCats,
+    category:      selectedCats[0] || '',
     costPrice:     parseFloat(document.getElementById('mp-cost')?.value)||0,
     salePrice:     parseFloat(document.getElementById('mp-price')?.value)||0,
     stock:         parseInt(document.getElementById('mp-stock')?.value)||0,
@@ -342,7 +421,7 @@ export async function saveProduct(editId=null, prodCode=null){
   };
   if(S._prodImg) data.images=[S._prodImg];
 
-  S.loading=true; S._modal=''; S._prodImg=null; S._prodTab=null; S._prodDraft=null;
+  S.loading=true; S._modal=''; S._prodImg=null; S._prodTab=null; S._prodDraft=null; S._prodCats=null;
   try{ render(); }catch(e){}
   try{
     let p;

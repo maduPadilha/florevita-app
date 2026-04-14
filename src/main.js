@@ -1587,6 +1587,62 @@ function bindPageActions(){
     {const _el=document.getElementById('btn-clear-ped-filters');if(_el)_el.onclick=clearFilters;}
     {const _el=document.getElementById('btn-clear-ped-filters2');if(_el)_el.onclick=clearFilters;}
     {const _el=document.getElementById('btn-rel-orders');if(_el)_el.onclick=async()=>{S.loading=true;render();S.orders=await GET('/orders').catch(()=>S.orders);S.loading=false;render();};}
+    // ── Import/Export pedidos (admin only) ──
+    {const _bi=document.getElementById('btn-import-ped');if(_bi)_bi.onclick=()=>document.getElementById('file-import-ped')?.click();}
+    {const _fi=document.getElementById('file-import-ped');if(_fi)_fi.onchange=async e=>{
+      const file=e.target.files?.[0]; if(!file) return;
+      try{
+        const text=await file.text();
+        const rows=file.name.toLowerCase().endsWith('.json')?JSON.parse(text):(function(t){const l=t.replace(/^\uFEFF/,'').split(/\r?\n/).filter(x=>x.trim());if(!l.length)return[];const h=l[0].split(';');return l.slice(1).map(ln=>{const v=ln.split(';');const o={};h.forEach((hh,i)=>o[hh.trim()]=(v[i]||'').trim());return o;});})(text);
+        if(!Array.isArray(rows)||!rows.length) return toast('❌ Arquivo vazio ou invalido');
+        let ok=0, fail=0;
+        for(let i=0;i<rows.length;i++){
+          toast(`📥 Importando ${i+1} de ${rows.length}...`);
+          const r=rows[i];
+          const payload={
+            orderNumber: r.orderNumber||'',
+            clientName: r.clientName||'',
+            clientPhone: r.clientPhone||'',
+            total: parseFloat(r.total||0)||0,
+            status: r.status||'Aguardando',
+            scheduledDate: r.scheduledDate||'',
+            scheduledTime: r.scheduledTime||'',
+            recipient: r.recipient||'',
+            deliveryNeighborhood: r.deliveryNeighborhood||'',
+            payment: r.payment||'',
+          };
+          try{ const o=await POST('/orders', payload); if(o?._id) S.orders.unshift(o); ok++; }catch(er){ fail++; }
+        }
+        render();
+        toast(`✅ Importados: ${ok} · Falhas: ${fail}`);
+      }catch(er){ toast('❌ Erro ao importar: '+(er.message||'')); }
+      e.target.value='';
+    };}
+    {const _be=document.getElementById('btn-export-ped');if(_be)_be.onclick=()=>{
+      const cols=['orderNumber','clientName','clientPhone','total','status','scheduledDate','scheduledTime','recipient','deliveryNeighborhood','payment'];
+      const src=Array.isArray(S._filteredOrders)&&S._filteredOrders.length?S._filteredOrders:S.orders;
+      const rows=src.map(o=>({
+        orderNumber:o.orderNumber||'',
+        clientName:o.clientName||o.client?.name||'',
+        clientPhone:o.clientPhone||o.client?.phone||'',
+        total:o.total||0,
+        status:o.status||'',
+        scheduledDate:o.scheduledDate||'',
+        scheduledTime:o.scheduledTime||'',
+        recipient:o.recipient||'',
+        deliveryNeighborhood:o.deliveryNeighborhood||o.deliveryZone||'',
+        payment:o.payment||'',
+      }));
+      const header=cols.join(';');
+      const body=rows.map(r=>cols.map(c=>{const s=String(r[c]??'').replace(/"/g,'""');return /[;"\n]/.test(s)?`"${s}"`:s;}).join(';')).join('\n');
+      const csv='\uFEFF'+header+'\n'+body;
+      const blob=new Blob([csv],{type:'text/csv'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url; a.download='pedidos-'+new Date().toISOString().split('T')[0]+'.csv'; a.click();
+      URL.revokeObjectURL(url);
+      toast('✅ Exportados '+rows.length+' pedidos');
+    };}
     document.querySelectorAll('[data-view-order]').forEach(b=>{b.onclick=()=>showOrderViewModal(b.dataset.viewOrder);});
     document.querySelectorAll('[data-edit-order]').forEach(b=>{b.onclick=()=>showEditOrderModal(b.dataset.editOrder);});
     document.querySelectorAll('[data-print-comanda]').forEach(b=>{b.onclick=()=>printComanda(b.dataset.printComanda);});
@@ -1612,6 +1668,57 @@ function bindPageActions(){
     {const _el=document.getElementById('btn-new-prod');if(_el)_el.onclick=()=>showNewProductModal();}
     {const _el=document.getElementById('btn-new-prod2');if(_el)_el.onclick=()=>showNewProductModal();}
     {const _el=document.getElementById('btn-rel-prods');if(_el)_el.onclick=async()=>{S.loading=true;render();const pr=await GET('/products').catch(()=>null);if(pr?.length){S.products=pr;saveCachedData();}S.loading=false;render();toast('✅ '+S.products.length+' produtos carregados');};}
+    // ── Import/Export (admin only) ──
+    {const _bi=document.getElementById('btn-import-prod');if(_bi)_bi.onclick=()=>document.getElementById('file-import-prod')?.click();}
+    {const _fi=document.getElementById('file-import-prod');if(_fi)_fi.onchange=async e=>{
+      const file=e.target.files?.[0]; if(!file) return;
+      try{
+        const text=await file.text();
+        const rows=file.name.toLowerCase().endsWith('.json')?JSON.parse(text):(function(t){const l=t.replace(/^\uFEFF/,'').split(/\r?\n/).filter(x=>x.trim());if(!l.length)return[];const h=l[0].split(';');return l.slice(1).map(ln=>{const v=ln.split(';');const o={};h.forEach((hh,i)=>o[hh.trim()]=(v[i]||'').trim());return o;});})(text);
+        if(!Array.isArray(rows)||!rows.length) return toast('❌ Arquivo vazio ou invalido');
+        let ok=0, fail=0;
+        for(let i=0;i<rows.length;i++){
+          toast(`📥 Importando ${i+1} de ${rows.length}...`);
+          const r=rows[i];
+          const payload={
+            name: r.nome||r.name||'',
+            category: r.categorias||r.category||'',
+            salePrice: parseFloat(r.preco||r.salePrice||0)||0,
+            costPrice: parseFloat(r.custo||r.costPrice||0)||0,
+            stock: parseInt(r.estoque||r.stock||0)||0,
+            minStock: parseInt(r.estoqueMinimo||r.minStock||5)||5,
+            code: r.sku||r.code||'',
+            description: r.descricao||r.description||'',
+            activeOnSite: String(r.ativo||r.activeOnSite||'').toLowerCase()==='true'||r.ativo===true,
+          };
+          if(!payload.name){ fail++; continue; }
+          try{ const p=await POST('/products', payload); if(p?._id) S.products.unshift(p); ok++; }catch(er){ fail++; }
+        }
+        saveCachedData();
+        render();
+        toast(`✅ Importados: ${ok} · Falhas: ${fail}`);
+      }catch(er){ toast('❌ Erro ao importar: '+(er.message||'')); }
+      e.target.value='';
+    };}
+    {const _be=document.getElementById('btn-export-prod');if(_be)_be.onclick=()=>{
+      const cols=['nome','categorias','preco','custo','estoque','estoqueMinimo','sku','descricao','ativo'];
+      const rows=S.products.map(p=>({
+        nome:p.name||'', categorias:p.category||'',
+        preco:p.salePrice||0, custo:p.costPrice||0,
+        estoque:p.stock||0, estoqueMinimo:p.minStock||0,
+        sku:p.code||'', descricao:p.description||'',
+        ativo:p.activeOnSite?'true':'false',
+      }));
+      const header=cols.join(';');
+      const body=rows.map(r=>cols.map(c=>{const s=String(r[c]??'').replace(/"/g,'""');return /[;"\n]/.test(s)?`"${s}"`:s;}).join(';')).join('\n');
+      const csv='\uFEFF'+header+'\n'+body;
+      const blob=new Blob([csv],{type:'text/csv'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url; a.download='produtos-'+new Date().toISOString().split('T')[0]+'.csv'; a.click();
+      URL.revokeObjectURL(url);
+      toast('✅ Exportados '+rows.length+' produtos');
+    };}
     document.querySelectorAll('[data-edit-prod]').forEach(b=>{b.onclick=()=>{const p=S.products.find(x=>x._id===b.dataset.editProd);if(p)showNewProductModal(p);};});
     document.querySelectorAll('[data-stock-prod]').forEach(b=>{b.onclick=()=>showProductStockModal(b.dataset.stockProd);});
     document.querySelectorAll('[data-del-prod]').forEach(b=>{b.onclick=()=>deleteProduct(b.dataset.delProd);});
