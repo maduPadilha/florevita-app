@@ -30,7 +30,7 @@ ${low.length>0?`<div class="alert al-warn">⚠️ <strong>${low.length} itens co
 </div>
 
 <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
-  ${S.user.role==='Administrador'||S.user.role==='Gerente'?`
+  ${( S.user?.role==='Administrador'||S.user?.cargo==='admin')||S.user.role==='Gerente'?`
   <select class="fi" id="stock-unit-filter" style="width:auto;">
     <option value="">Todas as unidades</option>
     <option value="Loja Novo Aleixo" ${unit==='Loja Novo Aleixo'?'selected':''}>Loja Novo Aleixo</option>

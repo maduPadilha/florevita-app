@@ -302,7 +302,7 @@ export async function _finalizePDV(){
   const validUnitsCheck = ['Loja Novo Aleixo','Loja Allegro Mall','CDLE'];
   if(!validUnitsCheck.includes(S.user.unit)&&!PDV.saleUnit) return toast('\u274C Selecione a unidade de venda');
   // Valida unidade para Admin
-  if((S.user.unit==='Todas'||S.user.role==='Administrador')&&!PDV.saleUnit) return toast('\u274C Selecione a unidade de venda');
+  if((S.user.unit==='Todas'||( S.user?.role==='Administrador'||S.user?.cargo==='admin'))&&!PDV.saleUnit) return toast('\u274C Selecione a unidade de venda');
   if(!PDV.clientId&&!PDV.clientName) return toast('\u274C Informe o nome do cliente');
   if(!PDV.clientId&&!PDV.clientPhone) return toast('\u274C WhatsApp do cliente \u00E9 obrigat\u00F3rio');
   // ── VALIDA\u00C7\u00D5ES OBRIGAT\u00D3RIAS ──────────────────────────────

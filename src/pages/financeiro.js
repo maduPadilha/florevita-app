@@ -121,7 +121,7 @@ function renderComissoesMetas(){
 
 // -- FINANCEIRO --
 export function renderFinanceiro(){
-  const unit = S.user.role==='Administrador'?S._finUnit||'':S.user.unit;
+  const unit = ( S.user?.role==='Administrador'||S.user?.cargo==='admin')?S._finUnit||'':S.user.unit;
   const filteredOrders = unit
     ? unit==='E-commerce'
       ? S.orders.filter(o=>o.source==='E-commerce'||(o.source||'').toLowerCase().includes('ecomm'))
@@ -138,7 +138,7 @@ export function renderFinanceiro(){
 ${vencidas.length>0?`<div class="alert al-err">⚠️ <strong>${vencidas.length} conta(s) vencida(s)!</strong> ${vencidas.map(c=>c.description).join(', ')}</div>`:''}
 
 <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
-  ${S.user.role==='Administrador'?`
+  ${( S.user?.role==='Administrador'||S.user?.cargo==='admin')?`
   <select class="fi" id="fin-unit-filter" style="width:auto;">
     <option value="">Todas as unidades</option>
     <option value="Loja Novo Aleixo">Loja Novo Aleixo</option>

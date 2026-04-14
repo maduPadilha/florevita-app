@@ -474,7 +474,7 @@ export function renderRelatorios(){
       ${[{k:'hoje',l:'Hoje'},{k:'semana',l:'Semana'},{k:'mes',l:'Este Mês'},{k:'mes_ant',l:'Mês Ant.'},{k:'todos',l:'Todos'}].map(p=>`
       <button class="btn btn-sm ${period===p.k?'btn-primary':'btn-ghost'}" data-rel-period="${p.k}">${p.l}</button>`).join('')}
     </div>
-    ${(S.user.role==='Administrador'||S.user.role==='Gerente')?`
+    ${(( S.user?.role==='Administrador'||S.user?.cargo==='admin')||S.user.role==='Gerente')?`
     <select class="fi" id="rel-unit-filter" style="width:auto;">
       <option value="">Todas as unidades</option>
       <option value="Loja Novo Aleixo">Loja Novo Aleixo</option>
@@ -541,7 +541,7 @@ ${tab==='geral'?`
         <span style="font-weight:600">${$c(total)}</span>
       </div>`).join('')||`<div class="empty" style="padding:12px"><p>Sem dados</p></div>`}
     </div>
-    ${(S.user.role==='Administrador'||S.user.role==='Gerente')?`
+    ${(( S.user?.role==='Administrador'||S.user?.cargo==='admin')||S.user.role==='Gerente')?`
     <div class="card">
       <div class="card-title">🏪 Por Unidade</div>
       ${Object.entries(byUnit).map(([u,{qty,total}])=>`

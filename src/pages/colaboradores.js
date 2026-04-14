@@ -131,7 +131,8 @@ function triggerColabFetch(){
 }
 
 export function renderColaboradores(){
-  if(S.user?.role!=='Administrador') return`
+  const isAdmin = S.user?.role==='Administrador' || S.user?.cargo==='admin';
+  if(!isAdmin) return`
   <div class="empty card"><div class="empty-icon">🔒</div>
   <p style="font-weight:600">Acesso restrito</p>
   <p style="font-size:12px;margin-top:4px">Somente o Administrador pode gerenciar colaboradores.</p></div>`;
