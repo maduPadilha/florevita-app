@@ -44,10 +44,30 @@ export function loadSession(){
     // Restaura a página que o usuário estava antes de recarregar
     const savedPage = localStorage.getItem('fv_page');
     if(savedPage) S.page = savedPage;
+    // Revalida sessão no backend para atualizar permissões (modulos, role)
+    refreshUserFromBackend();
     return true;
   }
   if(t) { localStorage.removeItem('fv2_token'); localStorage.removeItem('fv2_user'); }
   return false;
+}
+
+// Revalida user no backend — atualiza S.user com permissões frescas
+async function refreshUserFromBackend(){
+  try{
+    const res = await fetch(API+'/auth/validate', {
+      headers: { 'Authorization': 'Bearer '+S.token },
+      signal: AbortSignal.timeout(10000),
+    });
+    if(!res.ok) return;
+    const d = await res.json().catch(()=>null);
+    if(d?.user){
+      const freshUser = { ...S.user, ...d.user };
+      S.user = freshUser;
+      localStorage.setItem('fv2_user', JSON.stringify(freshUser));
+      import('../main.js').then(m => m.render()).catch(()=>{});
+    }
+  }catch(e){ /* offline — mantém cache local */ }
 }
 
 // Atualiza timestamp de atividade em qualquer interação
