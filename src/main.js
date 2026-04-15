@@ -18,7 +18,7 @@ import { renderPDV, finalizePDV } from './pages/pdv.js';
 import { renderPedidos, showOrderViewModal, showEditOrderModal, advanceOrder } from './pages/pedidos.js';
 import { renderClientes, showClientModal, saveClient, deleteClient, getDatasEspeciais, saveDatasEspeciais, showAddDataEspecialModal, bindClientesEvents } from './pages/clientes.js';
 import { renderProdutos, showNewProductModal, deleteProduct, showProductStockModal, saveProduct } from './pages/produtos.js';
-import { renderEstoque, showStockModal, showTransferModal, previewPriceAdjust, applyPriceAdjust, updateProductFieldInline } from './pages/estoque.js';
+import { renderEstoque, showStockModal, showTransferModal, previewPriceAdjust, applyPriceAdjust, updateProductFieldInline, updateStockByUnit, exportStockCSV, importStockCSV } from './pages/estoque.js';
 import { renderProducao } from './pages/producao.js';
 import { renderExpedicao, showConfirmDeliveryModal, getEntregadores, bindExpedicaoEvents } from './pages/expedicao.js';
 import { renderPonto, bindPontoEvents } from './pages/ponto.js';
@@ -1809,6 +1809,17 @@ function bindPageActions(){
   // ── Categorias ────────────────────────────────────────────────
   if(S.page==='categorias'){
     // Window assignments handled by categorias module
+    {
+      const _el = document.getElementById('cat-search');
+      if(_el){
+        _el.addEventListener('input', e => { S._catSearch = e.target.value; render(); });
+        // Preserva foco e posição do cursor após re-render
+        if(S._catSearch){
+          _el.focus();
+          try { const v = _el.value; _el.setSelectionRange(v.length, v.length); } catch(_){}
+        }
+      }
+    }
   }
 
   // ── Orçamentos ────────────────────────────────────────────────
@@ -1854,6 +1865,19 @@ function bindPageActions(){
   // ── Estoque ───────────────────────────────────────────────────
   if(S.page==='estoque'){
     document.getElementById('stock-unit-filter')?.addEventListener('change',e=>{S._stockUnit=e.target.value;render();});
+    document.getElementById('stock-unit')?.addEventListener('change', e => { S._stockUnit = e.target.value; render(); });
+    // Export / Import CSV estoque por unidade
+    document.getElementById('btn-stock-export')?.addEventListener('click', exportStockCSV);
+    document.getElementById('btn-stock-import')?.addEventListener('click', ()=>document.getElementById('stock-import-file')?.click());
+    document.getElementById('stock-import-file')?.addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) importStockCSV(f); e.target.value=''; });
+    // Edição inline de estoque por unidade
+    document.querySelectorAll('.stock-unit-inline').forEach(inp=>{
+      inp.addEventListener('change', e=>{
+        const pid = e.target.dataset.pid;
+        const unit = e.target.dataset.unit;
+        updateStockByUnit(pid, unit, e.target.value);
+      });
+    });
     {const _el=document.getElementById('btn-stock-entry');if(_el)_el.onclick=()=>showStockModal('','','Entrada');}
     {const _el=document.getElementById('btn-stock-exit');if(_el)_el.onclick=()=>showStockModal('','','Saída');}
     {const _el=document.getElementById('btn-new-transfer');if(_el)_el.onclick=showTransferModal;}

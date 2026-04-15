@@ -12,12 +12,63 @@ async function render(){
   r();
 }
 
+// ── Unidades de estoque ──────────────────────────────────────
+export const STOCK_UNITS = ['CDLE','Loja Novo Aleixo','Loja Allegro Mall'];
+const UNIT_LABEL = { 'CDLE':'CDLE', 'Loja Novo Aleixo':'Novo Aleixo', 'Loja Allegro Mall':'Allegro' };
+
+// Helper: normaliza stockByUnit
+export function getStockByUnit(p){
+  const sbu = p && p.stockByUnit && typeof p.stockByUnit==='object' ? {...p.stockByUnit} : {};
+  STOCK_UNITS.forEach(u=>{ if(sbu[u]==null) sbu[u]=0; else sbu[u]=Number(sbu[u])||0; });
+  // Se não houver nenhum registrado por unidade e houver estoque total, aloca em CDLE (legado)
+  const sum = STOCK_UNITS.reduce((s,u)=>s+(Number(sbu[u])||0),0);
+  if(sum===0 && (Number(p?.stock)||Number(p?.estoque)||0) > 0){
+    sbu['CDLE'] = Number(p.stock)||Number(p.estoque)||0;
+  }
+  return sbu;
+}
+
+function _totalFromSbu(sbu){
+  return STOCK_UNITS.reduce((s,u)=>s+(Number(sbu[u])||0),0);
+}
+
 // ── Helper: renderiza uma linha de produto ───────────────────
 function _renderStockRow(p){
-  const color=(p.stock||0)<=(p.minStock||5)?'var(--red)':(p.stock||0)<=(p.minStock||5)*1.5?'var(--gold)':'var(--leaf)';
-  const status=(p.stock||0)<=(p.minStock||5)?'⚠️ Crítico':(p.stock||0)<=(p.minStock||5)*1.5?'⚡ Baixo':'✅ OK';
+  const sbu = getStockByUnit(p);
+  const total = _totalFromSbu(sbu);
+  const color=total<=(p.minStock||5)?'var(--red)':total<=(p.minStock||5)*1.5?'var(--gold)':'var(--leaf)';
+  const status=total<=(p.minStock||5)?'⚠️ Crítico':total<=(p.minStock||5)*1.5?'⚡ Baixo':'✅ OK';
   const checked = (S._stockSelected||[]).includes(p._id) ? 'checked' : '';
   const ativo = p.active!==false;
+  const selectedUnit = S._stockUnit || '';
+
+  // Render dos inputs por unidade
+  let stockBlock = '';
+  if(selectedUnit && STOCK_UNITS.includes(selectedUnit)){
+    // Filtro por unidade específica: mostra só aquela unidade + total info
+    stockBlock = `
+      <div style="text-align:center;min-width:120px;">
+        <div style="font-size:9px;color:var(--muted)">${esc(UNIT_LABEL[selectedUnit]||selectedUnit)}</div>
+        <input type="number" class="fi stock-unit-inline" data-unit="${esc(selectedUnit)}" data-pid="${p._id}" value="${sbu[selectedUnit]||0}" style="width:90px;padding:2px 4px;font-size:12px;text-align:right;color:${color};font-weight:700;"/>
+        <div style="font-size:9px;color:var(--muted)">Total: <strong>${total}</strong> · mín ${p.minStock||5}</div>
+      </div>`;
+  } else {
+    // Todas as unidades: 3 inputs pequenos + total
+    stockBlock = `
+      <div style="display:flex;gap:4px;align-items:flex-start;">
+        ${STOCK_UNITS.map(u=>`
+          <div style="text-align:center;min-width:58px;">
+            <div style="font-size:9px;color:var(--muted)">${esc(UNIT_LABEL[u]||u)}</div>
+            <input type="number" class="fi stock-unit-inline" data-unit="${esc(u)}" data-pid="${p._id}" value="${sbu[u]||0}" style="width:52px;padding:2px 4px;font-size:11px;text-align:right;font-weight:600;"/>
+          </div>`).join('')}
+        <div style="text-align:center;min-width:50px;padding-top:12px;">
+          <div style="font-size:9px;color:var(--muted)">Total</div>
+          <div style="font-size:13px;color:${color};font-weight:700;" data-total-pid="${p._id}">${total}</div>
+          <div style="font-size:9px;color:var(--muted)">mín ${p.minStock||5}</div>
+        </div>
+      </div>`;
+  }
+
   return`<div style="margin-bottom:10px;padding:10px;border:1px solid var(--border);border-radius:var(--r);background:#fff;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <input type="checkbox" class="stock-row-chk" data-stock-sel="${p._id}" ${checked}/>
@@ -35,11 +86,7 @@ function _renderStockRow(p){
         <div style="font-size:9px;color:var(--muted)">Custo</div>
         <input type="number" step="0.01" class="fi stock-inline-price" data-field="costPrice" data-pid="${p._id}" value="${p.costPrice||0}" style="width:70px;padding:2px 4px;font-size:11px;text-align:right;"/>
       </div>
-      <div style="text-align:center;min-width:70px;">
-        <div style="font-size:9px;color:var(--muted)">Estoque</div>
-        <input type="number" class="fi stock-inline-price" data-field="stock" data-pid="${p._id}" value="${p.stock||0}" style="width:60px;padding:2px 4px;font-size:11px;text-align:right;color:${color};font-weight:700;"/>
-        <div style="font-size:9px;color:var(--muted)">mín: ${p.minStock||5}</div>
-      </div>
+      ${stockBlock}
       <span class="tag ${ativo?'t-green':'t-red'}" style="font-size:10px;">${ativo?'Ativo':'Inativo'}</span>
       <div style="display:flex;gap:4px;">
         <button class="btn btn-ghost btn-xs" data-stock-edit="${p._id}" title="Editar detalhes">✏️</button>
@@ -53,11 +100,43 @@ function _renderStockRow(p){
   </div>`;
 }
 
+// ── Atualiza estoque por unidade (chamado pelo main.js) ──────
+export async function updateStockByUnit(productId, unit, newValue){
+  const product = S.products.find(p => p._id === productId);
+  if(!product) return;
+  if(!STOCK_UNITS.includes(unit)) return toast('❌ Unidade inválida', true);
+
+  const stockByUnit = { ...getStockByUnit(product) };
+  stockByUnit[unit] = Math.max(0, parseInt(newValue)||0);
+  const newTotal = _totalFromSbu(stockByUnit);
+
+  try{
+    await PUT('/products/'+productId, {
+      stockByUnit,
+      estoque: newTotal,
+      stock: newTotal
+    });
+    product.stockByUnit = stockByUnit;
+    product.estoque = newTotal;
+    product.stock = newTotal;
+    // Atualizar display de total inline, sem re-render completo
+    const totalEl = document.querySelector(`[data-total-pid="${productId}"]`);
+    if(totalEl) totalEl.textContent = newTotal;
+    try{ invalidateCache && invalidateCache('products'); }catch(e){}
+    toast('✅ Estoque atualizado');
+  }catch(e){
+    toast('Erro: '+(e.message||'falha'), true);
+  }
+}
+
 // ── ESTOQUE ──────────────────────────────────────────────────
 export function renderEstoque(){
-  const low = S.products.filter(p=>(p.stock||0)<=(p.minStock||5));
+  // Helper local para total real a partir de stockByUnit (com fallback para stock)
+  const _prodTotal = (p)=> _totalFromSbu(getStockByUnit(p));
+  const low = S.products.filter(p=>_prodTotal(p)<=(p.minStock||5));
   const unit = S._stockUnit || (S.user.unit==='Todas'?'':S.user.unit);
-  let filtered = unit ? S.products.filter(p=>!p.unit||p.unit===unit||p.unit==='Todas') : S.products.slice();
+  // Mostrar todos os produtos, destacando unidade selecionada (opção UX escolhida)
+  let filtered = S.products.slice();
 
   // Filtros de busca
   const q = (S._stockSearch||'').trim().toLowerCase();
@@ -76,11 +155,11 @@ export function renderEstoque(){
   const byName = (a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR');
   if(sort==='nome-asc') filtered.sort(byName);
   else if(sort==='nome-desc') filtered.sort((a,b)=>byName(b,a));
-  else if(sort==='estoque-asc') filtered.sort((a,b)=>(a.stock||0)-(b.stock||0));
-  else if(sort==='estoque-desc') filtered.sort((a,b)=>(b.stock||0)-(a.stock||0));
+  else if(sort==='estoque-asc') filtered.sort((a,b)=>_prodTotal(a)-_prodTotal(b));
+  else if(sort==='estoque-desc') filtered.sort((a,b)=>_prodTotal(b)-_prodTotal(a));
   else if(sort==='cat-asc') filtered.sort((a,b)=>((a.category||'').localeCompare(b.category||'','pt-BR'))||byName(a,b));
 
-  const totalVal = filtered.reduce((s,p)=>s+(p.costPrice||0)*(p.stock||0),0);
+  const totalVal = filtered.reduce((s,p)=>s+(p.costPrice||0)*_prodTotal(p),0);
 
   // Categorias únicas (para o select)
   const cats = Array.from(new Set(S.products.map(p=>p.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'pt-BR'));
@@ -116,22 +195,24 @@ ${low.length>0?`<div class="alert al-warn">⚠️ <strong>${low.length} itens co
 
 <div class="g4" style="margin-bottom:16px;">
   <div class="mc rose"><div class="mc-label">Total Produtos</div><div class="mc-val">${filtered.length}</div></div>
-  <div class="mc leaf"><div class="mc-label">Estoque Normal</div><div class="mc-val">${filtered.filter(p=>(p.stock||0)>(p.minStock||5)).length}</div></div>
+  <div class="mc leaf"><div class="mc-label">Estoque Normal</div><div class="mc-val">${filtered.filter(p=>_prodTotal(p)>(p.minStock||5)).length}</div></div>
   <div class="mc gold"><div class="mc-label">Estoque Crítico</div><div class="mc-val">${low.length}</div></div>
   <div class="mc purple"><div class="mc-label">Valor em Estoque</div><div class="mc-val">${$c(totalVal)}</div></div>
 </div>
 
 <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
-  ${(isAdmin||S.user.role==='Gerente')?`
-  <select class="fi" id="stock-unit-filter" style="width:auto;">
-    <option value="">Todas as unidades</option>
+  <select class="fi" id="stock-unit" style="width:auto;">
+    <option value="">Todas as Unidades</option>
+    <option value="CDLE" ${unit==='CDLE'?'selected':''}>CDLE</option>
     <option value="Loja Novo Aleixo" ${unit==='Loja Novo Aleixo'?'selected':''}>Loja Novo Aleixo</option>
     <option value="Loja Allegro Mall" ${unit==='Loja Allegro Mall'?'selected':''}>Loja Allegro Mall</option>
-    <option value="CDLE" ${unit==='CDLE'?'selected':''}>CDLE</option>
-  </select>`:''}
+  </select>
   <button class="btn btn-green btn-sm" id="btn-stock-entry">📦 Entrada de Estoque</button>
   <button class="btn btn-outline btn-sm" id="btn-stock-exit">📤 Saída Manual</button>
   <button class="btn btn-blue btn-sm" id="btn-new-transfer">🔄 Transferência</button>
+  <button class="btn btn-ghost btn-sm" id="btn-stock-export">⬇️ Exportar CSV</button>
+  <button class="btn btn-ghost btn-sm" id="btn-stock-import">⬆️ Importar CSV</button>
+  <input type="file" id="stock-import-file" accept=".csv" style="display:none;"/>
   <button class="btn btn-ghost btn-sm" id="btn-rel-prods">🔄 Atualizar</button>
 </div>
 
@@ -466,6 +547,91 @@ export async function updateProductFieldInline(pid, field, value){
     toast('❌ Erro ao atualizar');
     render();
   }
+}
+
+// ── EXPORT CSV (estoque por unidade) ─────────────────────────
+function _csvCell(v){
+  const s = String(v==null?'':v);
+  if(/[",\n;]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
+  return s;
+}
+export function exportStockCSV(){
+  const header = ['nome','sku','CDLE','Loja Novo Aleixo','Loja Allegro Mall','total'];
+  const rows = S.products.map(p=>{
+    const sbu = getStockByUnit(p);
+    const total = _totalFromSbu(sbu);
+    return [
+      p.name||'',
+      p.code||p.sku||'',
+      sbu['CDLE']||0,
+      sbu['Loja Novo Aleixo']||0,
+      sbu['Loja Allegro Mall']||0,
+      total
+    ];
+  });
+  const csv = [header.join(','), ...rows.map(r=>r.map(_csvCell).join(','))].join('\n');
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `estoque-por-unidade-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('✅ CSV exportado');
+}
+
+export async function importStockCSV(file){
+  if(!file) return;
+  const text = await file.text();
+  const lines = text.replace(/^\ufeff/,'').split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2) return toast('❌ CSV vazio', true);
+  const parseLine = (line)=>{
+    const out = []; let cur=''; let inQ=false;
+    for(let i=0;i<line.length;i++){
+      const c=line[i];
+      if(inQ){
+        if(c==='"' && line[i+1]==='"'){ cur+='"'; i++; }
+        else if(c==='"') inQ=false;
+        else cur+=c;
+      } else {
+        if(c==='"') inQ=true;
+        else if(c===','){ out.push(cur); cur=''; }
+        else cur+=c;
+      }
+    }
+    out.push(cur);
+    return out;
+  };
+  const header = parseLine(lines[0]).map(h=>h.trim());
+  const idx = {
+    sku: header.findIndex(h=>/^sku$/i.test(h) || /codigo/i.test(h)),
+    cdle: header.findIndex(h=>/^cdle$/i.test(h)),
+    na: header.findIndex(h=>/novo\s*aleixo/i.test(h)),
+    am: header.findIndex(h=>/allegro/i.test(h))
+  };
+  if(idx.sku<0) return toast('❌ Coluna sku não encontrada', true);
+  let ok=0, err=0;
+  for(let i=1;i<lines.length;i++){
+    const cols = parseLine(lines[i]);
+    const sku = (cols[idx.sku]||'').trim();
+    if(!sku) continue;
+    const p = S.products.find(x=>(x.code||x.sku||'')===sku);
+    if(!p){ err++; continue; }
+    const sbu = {
+      'CDLE': idx.cdle>=0 ? Number(cols[idx.cdle])||0 : (p.stockByUnit?.CDLE||0),
+      'Loja Novo Aleixo': idx.na>=0 ? Number(cols[idx.na])||0 : (p.stockByUnit?.['Loja Novo Aleixo']||0),
+      'Loja Allegro Mall': idx.am>=0 ? Number(cols[idx.am])||0 : (p.stockByUnit?.['Loja Allegro Mall']||0)
+    };
+    const total = _totalFromSbu(sbu);
+    try{
+      await PUT('/products/'+p._id, { stockByUnit: sbu, estoque: total, stock: total });
+      p.stockByUnit = sbu; p.estoque = total; p.stock = total;
+      ok++;
+    }catch(e){ err++; }
+  }
+  try{ invalidateCache && invalidateCache('products'); }catch(e){}
+  render();
+  toast(`✅ Importação: ${ok} ok${err?`, ${err} erros`:''}`);
 }
 
 // ── SALVAR ESTOQUE DO MODAL DE PRODUTO ───────────────────────

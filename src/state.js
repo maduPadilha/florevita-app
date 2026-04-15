@@ -44,6 +44,7 @@ export let S = {
   _orderSearch:'',
   _clientSel:null, _clientSearch:'', _prodSearch:'', _prodCat:'', _prodStatus:'',
   _colabSearch:'',
+  _catSearch:'',
   _userSearch:'',
   _orcView:'list', _orcDraft:null, _orcDetail:null, _orcEditId:null,
   _catExpanded:null, _ecTab:'geral',

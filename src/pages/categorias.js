@@ -26,6 +26,49 @@ export async function getCategorias(){
   return s || CAT_DEFAULT;
 }
 
+// ── Sync lazy: busca no backend e faz merge com localStorage ──
+export async function getCategoriasFromAPI(){
+  try {
+    const data = await GET('/categories');
+    if(Array.isArray(data) && data.length > 0){
+      // Normaliza itens: backend pode devolver objetos { _id, name } ou strings
+      const apiList = data.map(function(item){
+        if(typeof item === 'string') return { name: item };
+        return item || {};
+      }).filter(function(it){ return it && it.name; });
+
+      const local = getCategoriasSync();
+      // local pode ser array de strings (default) ou array de objetos
+      const localNorm = local.map(function(item){
+        if(typeof item === 'string') return { name: item };
+        return item || {};
+      }).filter(function(it){ return it && it.name; });
+
+      const merged = apiList.map(function(apiCat){
+        const localCat = localNorm.find(function(l){ return l.name === apiCat.name; });
+        return Object.assign({}, apiCat, (localCat || {}), { _id: apiCat._id, name: apiCat.name });
+      });
+      // Adiciona categorias locais que não estão no backend
+      localNorm.forEach(function(lc){
+        if(!apiList.find(function(d){ return d.name === lc.name; })) merged.push(lc);
+      });
+      localStorage.setItem(CAT_KEY, JSON.stringify(merged));
+      return merged;
+    }
+  } catch(e){ /* silent */ }
+  return getCategoriasSync();
+}
+
+// ── Trigger lazy fetch on page open ────────────────────────────
+let _catFetched = false;
+function triggerCatFetch(){
+  if(_catFetched) return;
+  _catFetched = true;
+  getCategoriasFromAPI().then(function(){
+    if(S.page === 'categorias') render();
+  }).catch(function(){});
+}
+
 export async function saveCategorias(list){
   localStorage.setItem(CAT_KEY, JSON.stringify(list));
   try { await POST('/categories', { categories: list }); } catch(e){ /* silent */ }
@@ -49,6 +92,8 @@ export async function saveCatCfg(cfg){
 
 // ── Sync helpers (para uso inline onde async n\u00e3o \u00e9 poss\u00edvel) ──
 function getCategoriasSync(){ const s=JSON.parse(localStorage.getItem(CAT_KEY)||'null'); return s||CAT_DEFAULT; }
+// Nome da categoria (aceita string ou objeto { name })
+function catName(c){ return (c && typeof c === 'object') ? (c.name || '') : (c || ''); }
 function getCatCfgSync(){ return JSON.parse(localStorage.getItem(CAT_CFG_KEY)||'{}'); }
 
 export function isCatAtiva(nome){ const cfg=getCatCfgSync(); return cfg[nome]?.activeOnSite!==false; }
@@ -57,7 +102,7 @@ export function isCatAtiva(nome){ const cfg=getCatCfgSync(); return cfg[nome]?.a
 export function showCatModal(idx){
   var cats   = getCategoriasSync();
   var isEdit = idx !== undefined && idx !== null;
-  var val    = isEdit ? cats[parseInt(idx)] : '';
+  var val    = isEdit ? catName(cats[parseInt(idx)]) : '';
   var title  = isEdit ? '\u270f\ufe0f Editar Categoria' : '\ud83c\udff7\ufe0f Nova Categoria';
   var btnTxt = isEdit ? '\ud83d\udcbe Salvar Altera\u00e7\u00e3o' : '\u2705 Criar Categoria';
   var idxVal = isEdit ? parseInt(idx) : 'null';
@@ -88,14 +133,15 @@ export function saveCatFromModal(idx){
   var cats = getCategoriasSync();
   var cfg  = getCatCfgSync();
   if(idx === null || idx === 'null' || idx === undefined){
-    if(cats.indexOf(name) >= 0){ toast('\u26a0\ufe0f Categoria j\u00e1 existe', true); return; }
+    if(cats.some(function(c){ return catName(c) === name; })){ toast('\u26a0\ufe0f Categoria j\u00e1 existe', true); return; }
     cats.push(name);
     cfg[name] = {activeOnSystem: true, activeOnEcommerce: true};
     toast('\u2705 Categoria criada: ' + name);
   } else {
     var i   = parseInt(idx);
-    var old = cats[i];
-    cats[i] = name;
+    var old = catName(cats[i]);
+    if(cats[i] && typeof cats[i] === 'object') cats[i] = Object.assign({}, cats[i], { name: name });
+    else cats[i] = name;
     if(old !== name){
       cfg[name] = cfg[old] || {activeOnSystem: true, activeOnEcommerce: true};
       delete cfg[old];
@@ -115,7 +161,7 @@ export function saveCatFromModal(idx){
 // ── DELETAR ───────────────────────────────────────────────────
 export function deleteCat(idx){
   var cats  = getCategoriasSync();
-  var cat   = cats[parseInt(idx)];
+  var cat   = catName(cats[parseInt(idx)]);
   var total = S.products.filter(function(p){
     return Array.isArray(p.categories) ? p.categories.indexOf(cat)>=0 : p.category===cat;
   }).length;
@@ -163,9 +209,15 @@ window.toggleCatEcommerce = toggleCatEcommerce;
 
 // ── RENDER ────────────────────────────────────────────────────
 export function renderCategorias(){
-  var cats   = getCategoriasSync();
-  var catCfg = getCatCfgSync();
-  var html   = '';
+  triggerCatFetch();
+  var allCats = getCategoriasSync();
+  var catCfg  = getCatCfgSync();
+  var search  = (S._catSearch || '').toLowerCase();
+  // Aplica filtro por nome (case-insensitive), mantendo índice original
+  var cats = allCats
+    .map(function(c, i){ return { c: c, i: i }; })
+    .filter(function(x){ return catName(x.c).toLowerCase().indexOf(search) >= 0; });
+  var html = '';
 
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">';
   html += '<div>';
@@ -179,12 +231,21 @@ export function renderCategorias(){
   html += '\ud83d\udca1 <strong>Dica:</strong> No m\u00f3dulo Produtos voc\u00ea pode atribuir m\u00faltiplas categorias a cada produto. Aqui voc\u00ea controla a visibilidade de cada categoria.';
   html += '</div>';
 
-  if(cats.length === 0){
+  // Campo de busca
+  html += '<div style="position:relative;margin-bottom:14px;max-width:420px;">';
+  html += '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none;">\ud83d\udd0d</span>';
+  html += '<input type="text" id="cat-search" class="fi" placeholder="Buscar categoria..." value="'+(S._catSearch||'').replace(/"/g,'&quot;')+'" style="padding-left:34px;width:100%;"/>';
+  html += '</div>';
+
+  if(allCats.length === 0){
     html += '<div class="empty card"><div class="empty-icon">\ud83c\udff7\ufe0f</div><p>Nenhuma categoria cadastrada. Clique em + Nova Categoria.</p></div>';
+  } else if(cats.length === 0){
+    html += '<div class="empty card"><div class="empty-icon">\ud83d\udd0d</div><p>Nenhuma categoria encontrada para "'+(S._catSearch||'')+'".</p></div>';
   } else {
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">';
-    for(var i=0; i<cats.length; i++){
-      var cat     = cats[i];
+    for(var idxF=0; idxF<cats.length; idxF++){
+      var i       = cats[idxF].i;
+      var cat     = catName(cats[idxF].c);
       var cfg     = catCfg[cat] || {};
       var ativoS  = cfg.activeOnSystem !== false;
       var ativoE  = cfg.activeOnEcommerce !== false;
@@ -207,7 +268,7 @@ export function renderCategorias(){
       html += '</div></div>';
       html += '<div style="display:flex;gap:4px;flex-shrink:0;">';
       if(i>0) html += '<button type="button" class="btn btn-ghost btn-xs" onclick="moveCat('+i+',-1)" title="Subir">\u2191</button>';
-      if(i<cats.length-1) html += '<button type="button" class="btn btn-ghost btn-xs" onclick="moveCat('+i+',1)" title="Descer">\u2193</button>';
+      if(i<allCats.length-1) html += '<button type="button" class="btn btn-ghost btn-xs" onclick="moveCat('+i+',1)" title="Descer">\u2193</button>';
       html += '<button type="button" class="btn btn-ghost btn-xs" onclick="showCatModal('+i+')" title="Editar">\u270f\ufe0f Editar</button>';
       html += '<button type="button" class="btn btn-ghost btn-xs" onclick="deleteCat('+i+')" style="color:var(--red);" title="Excluir">\ud83d\uddd1\ufe0f</button>';
       html += '</div></div></div>';
