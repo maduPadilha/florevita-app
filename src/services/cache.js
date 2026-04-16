@@ -3,6 +3,7 @@ import { S } from '../state.js';
 import { GET } from './api.js';
 import { toast } from '../utils/helpers.js';
 import { getHiddenUsers, mergeUserExtra, fetchAndMergeColabs } from './auth.js';
+import { filtrarPedidosPorUnidade } from '../utils/unidadeRules.js';
 
 // ── DRIVER ASSIGNMENTS CACHE ──────────────────────────────────
 // Persiste atribuições de entregador localmente — o backend pode não salvar todos os campos
@@ -109,7 +110,8 @@ export function loadCachedData(){
 
     // Pedidos: apenas se cache recente (≤2min)
     if(ageMin <= CACHE_ORDERS && cache.orders?.length > 0){
-      S.orders = mergeDriverAssignments(cache.orders);
+      const filteredCached = filtrarPedidosPorUnidade(S.user, cache.orders);
+      S.orders = mergeDriverAssignments(filteredCached);
       loaded = true;
     }
 
@@ -183,7 +185,10 @@ export async function loadData(){
   }
 
   // Aplica dados críticos e renderiza imediatamente
-  if(Array.isArray(orders))  S.orders  = mergeDriverAssignments(orders);
+  if(Array.isArray(orders))  {
+    const filteredOrders = filtrarPedidosPorUnidade(S.user, orders);
+    S.orders = mergeDriverAssignments(filteredOrders);
+  }
   if(Array.isArray(clients)) S.clients = clients;
   if(Array.isArray(users)){
     const hid = getHiddenUsers();

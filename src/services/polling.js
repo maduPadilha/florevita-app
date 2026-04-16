@@ -4,6 +4,7 @@ import { GET } from './api.js';
 import { getHiddenUsers, mergeUserExtra } from './auth.js';
 import { mergeDriverAssignments, saveCachedData } from './cache.js';
 import { toast } from '../utils/helpers.js';
+import { filtrarPedidosPorUnidade } from '../utils/unidadeRules.js';
 
 let _pollTimer = null, _pollCount = 0;
 const POLL_PAGES = ['producao','expedicao','entregador','rota','pedidos','dashboard','caixa','financeiro','colaboradores','relatorios'];
@@ -19,7 +20,8 @@ export async function pollData(){
     ]);
     let changed = false;
     if(orders){
-      const merged = mergeDriverAssignments(orders);
+      const filteredOrders = filtrarPedidosPorUnidade(S.user, orders);
+      const merged = mergeDriverAssignments(filteredOrders);
       if(JSON.stringify(merged)!==JSON.stringify(S.orders)){
         S.orders=merged; changed=true;
       }

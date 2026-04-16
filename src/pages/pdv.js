@@ -5,11 +5,28 @@ import { POST, PATCH } from '../services/api.js';
 import { toast, setPage, logActivity as _logActivity, getActivities as _getActivities } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
 import { invalidateCache } from '../services/cache.js';
+import { opcoesPermitidas, isAdmin, normalizeUnidade, labelUnidade, podeCriarPedido } from '../utils/unidadeRules.js';
 
 let _pdvLock = false;
 
 export function renderPDV(){
   if(!can('pdv')) return `<div class="empty card"><div class="empty-icon">&#x1F6AB;</div><p>Sem permiss\u00e3o</p></div>`;
+  // ── Regras de unidade (multi-unit) ───────────────────────────
+  const opcoes = opcoesPermitidas(S.user);
+  const admin = isAdmin(S.user);
+  const tiposPermitidos = opcoes.tipos || [];
+  // Mapeia slug → rótulo interno do PDV (PDV.type usa strings em PT-BR)
+  const tipoSlugToKey = { balcao: 'Balc\u00E3o', retirada: 'Retirada', delivery: 'Delivery' };
+  const tipoKeyLabel  = { 'Balc\u00E3o': '\uD83C\uDFEA Balc\u00E3o', 'Retirada': '\uD83D\uDCE6 Retirada na Loja', 'Delivery': '\uD83D\uDE9A Delivery' };
+  // Garante que PDV.type seja um tipo permitido
+  if(tiposPermitidos.length > 0){
+    const allowedKeys = tiposPermitidos.map(t => tipoSlugToKey[t]);
+    if(!allowedKeys.includes(PDV.type)) PDV.type = allowedKeys[0];
+  }
+  // Destinos permitidos por tipo (para Retirada/Balcão)
+  const destinosRetirada = (opcoes.combinacoes || []).filter(c => c.tipo === 'retirada').map(c => c.destino);
+  const destinosBalcao   = (opcoes.combinacoes || []).filter(c => c.tipo === 'balcao').map(c => c.destino);
+
   const sub=PDV.cart.reduce((s,i)=>s+i.price*i.qty,0);
   const deliveryFee=PDV.type==='Delivery'?(PDV.deliveryFee||0):0;
   const total=sub-(PDV.discount||0)+deliveryFee;
@@ -207,19 +224,26 @@ export function renderPDV(){
   <!-- TIPO DE ENTREGA -->
   <div class="fg"><label class="fl">Tipo de Entrega</label>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <button class="btn btn-sm ${PDV.type==='Delivery'?'btn-primary':'btn-ghost'}" data-type="Delivery">\uD83D\uDE9A Delivery</button>
-      <button class="btn btn-sm ${PDV.type==='Retirada'?'btn-primary':'btn-ghost'}" data-type="Retirada">\uD83C\uDFEA Retirada na Loja</button>
-      <button class="btn btn-sm ${PDV.type==='Balc\u00E3o'?'btn-primary':'btn-ghost'}" data-type="Balc\u00E3o">\uD83D\uDECD\uFE0F Balc\u00E3o</button>
+      ${tiposPermitidos.map(t => {
+        const key = tipoSlugToKey[t];
+        return `<button class="btn btn-sm ${PDV.type===key?'btn-primary':'btn-ghost'}" data-type="${key}">${tipoKeyLabel[key]}</button>`;
+      }).join('')}
     </div>
   </div>
 
-  ${PDV.type==='Retirada'?`
-  <div class="fg"><label class="fl">Unidade de Retirada <span style="color:var(--red)">*</span></label>
+  ${PDV.type==='Retirada' && destinosRetirada.length > 0 ? `
+  <div class="fg"><label class="fl">Retirada em <span style="color:var(--red)">*</span></label>
+    <select class="fi" id="pdv-pickup-unit">
+      ${destinosRetirada.length > 1 ? `<option value="">Selecionar loja...</option>` : ''}
+      ${destinosRetirada.map(d => `<option value="${d}" ${normalizeUnidade(PDV.pickupUnit)===d?'selected':''}>\uD83C\uDF3A ${labelUnidade(d)}</option>`).join('')}
+    </select>
+  </div>`:''}
+
+  ${PDV.type==='Balc\u00E3o' && destinosBalcao.length > 1 ? `
+  <div class="fg"><label class="fl">Balc\u00E3o em <span style="color:var(--red)">*</span></label>
     <select class="fi" id="pdv-pickup-unit">
       <option value="">Selecionar loja...</option>
-      <option value="Loja Novo Aleixo" ${PDV.pickupUnit==='Loja Novo Aleixo'?'selected':''}>🌺 Loja Novo Aleixo</option>
-      <option value="Loja Allegro Mall" ${PDV.pickupUnit==='Loja Allegro Mall'?'selected':''}>🌺 Loja Allegro Mall</option>
-      <option value="CDLE" ${PDV.pickupUnit==='CDLE'?'selected':''}>📦 CDLE</option>
+      ${destinosBalcao.map(d => `<option value="${d}" ${normalizeUnidade(PDV.pickupUnit)===d?'selected':''}>\uD83C\uDF3A ${labelUnidade(d)}</option>`).join('')}
     </select>
   </div>`:''}
 
@@ -360,6 +384,16 @@ export async function finalizePDV(){
 
 export async function _finalizePDV(){
   if(!PDV.cart.length) return toast('\u274C Adicione produtos');
+  // ── Valida regras multi-unit (frontend) ─────────────────────
+  const tipoSlug = PDV.type === 'Balc\u00E3o' ? 'balcao'
+                 : PDV.type === 'Retirada' ? 'retirada'
+                 : 'delivery';
+  const destinoSlug = normalizeUnidade(PDV.pickupUnit || S.user?.unidade || S.user?.unit);
+  const checkUnidade = podeCriarPedido(S.user, tipoSlug, destinoSlug);
+  if(!checkUnidade.ok){
+    toast('\u274C ' + checkUnidade.reason, true);
+    return;
+  }
   const validUnitsCheck = ['Loja Novo Aleixo','Loja Allegro Mall','CDLE'];
   if(!validUnitsCheck.includes(S.user.unit)&&!PDV.saleUnit) return toast('\u274C Selecione a unidade de venda');
   // Valida unidade para Admin
@@ -442,6 +476,9 @@ export async function _finalizePDV(){
     block:PDV.block,apt:PDV.apt,
     source:'PDV',
     unit:orderUnit,
+    unidade: destinoSlug,
+    tipo: tipoSlug,
+    destino: destinoSlug,
     // Colaborador que lançou o pedido
     createdByName: S.user?.name || S.user?.nome || '',
     createdByEmail: S.user?.email || '',
