@@ -30,156 +30,151 @@ export function renderPDV(){
     </div>
   </div>`;
 
-  return `<div class="pdv-grid">
-<div>
-  <!-- Carrinho visualizado em destaque na coluna esquerda -->
-  <div class="card" style="margin-bottom:16px;min-height:300px;">
+  // HTML do Cliente (incluindo busca + cadastro rápido)
+  const clienteCardHTML = `
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-title">\uD83D\uDC64 Cliente</div>
+
+    ${(()=>{
+      const isAdmin = S.user?.role==='Administrador' || S.user?.cargo==='admin';
+      const userUnit = S.user?.unit;
+      const specificUnits = ['Loja Novo Aleixo','Loja Allegro Mall','CDLE'];
+      if(isAdmin || userUnit==='Todas' || !specificUnits.includes(userUnit)){
+        return `<div class="fg"><label class="fl">Unidade de Venda *</label>
+          <select class="fi" id="pdv-sale-unit">
+            <option value="">Selecione...</option>
+            <option value="Loja Novo Aleixo" ${PDV.saleUnit==='Loja Novo Aleixo'?'selected':''}>\uD83C\uDF3A Loja Novo Aleixo</option>
+            <option value="Loja Allegro Mall" ${PDV.saleUnit==='Loja Allegro Mall'?'selected':''}>\uD83C\uDF3A Loja Allegro Mall</option>
+            <option value="CDLE" ${PDV.saleUnit==='CDLE'?'selected':''}>\uD83D\uDCE6 CDLE</option>
+          </select>
+        </div>`;
+      }
+      if(PDV.saleUnit!==userUnit) PDV.saleUnit = userUnit;
+      const icon = userUnit==='CDLE' ? '\uD83D\uDCE6' : '\uD83C\uDF3A';
+      return `<div class="fg"><label class="fl">Unidade de Venda</label>
+        <div style="display:inline-flex;align-items:center;gap:8px;background:var(--petal,#fce7f0);border:1px solid var(--rose-l,#f5c2d4);color:var(--rose,#b83260);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;">
+          <span>${icon}</span><span>${userUnit}</span>
+          <span style="font-size:10px;opacity:.7;font-weight:500;">(fixada)</span>
+        </div>
+      </div>`;
+    })()}
+
+    <!-- BUSCA CLIENTE -->
+    <div class="fg">
+      <label class="fl">Cliente \u2014 6 \u00FAltimos d\u00EDgitos ou nome <span style="color:var(--red)">*</span></label>
+      <div style="position:relative;">
+        <input class="fi" id="pdv-phone-search"
+          placeholder="Ex: 234567 ou 'Maria Silva'..."
+          value="${PDV.clientSearch}"
+          autocomplete="off"
+          style="padding-right:36px;"/>
+        ${PDV.clientSearch?`<button id="pdv-search-clear" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;">\u2715</button>`:''}
+      </div>
+      <div id="pdv-search-results"></div>
+
+      ${PDV.clientId?`
+      <div style="background:var(--leaf-l);border-radius:8px;padding:10px 14px;margin-top:6px;display:flex;align-items:center;gap:10px;border:1px solid rgba(31,92,46,.2);">
+        <div class="av" style="width:34px;height:34px;font-size:12px;background:var(--leaf)">${ini(S.clients.find(c=>c._id===PDV.clientId)?.name||PDV.clientName)}</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:13px">${S.clients.find(c=>c._id===PDV.clientId)?.name||PDV.clientName}</div>
+          <div style="font-size:11px;color:var(--muted)">${S.clients.find(c=>c._id===PDV.clientId)?.phone||PDV.clientPhone}</div>
+        </div>
+        <button class="btn btn-ghost btn-xs" id="pdv-clear-cli">\u2715 Trocar</button>
+      </div>`:(!PDV.clientId&&PDV.clientName?`
+      <div style="background:var(--cream);border-radius:8px;padding:8px 12px;margin-top:6px;font-size:12px;display:flex;align-items:center;justify-content:space-between;">
+        <span><strong>${PDV.clientName}</strong> ${PDV.clientPhone?'\u00B7 '+PDV.clientPhone:''} <span class="tag t-blue" style="margin-left:4px">Novo</span></span>
+        <button class="btn btn-ghost btn-xs" id="pdv-clear-cli">\u2715</button>
+      </div>`:'')}
+    </div>
+
+    <!-- CADASTRO R\u00C1PIDO -->
+    ${PDV._showQuickReg?`
+    <div style="background:var(--petal);border-radius:var(--r);padding:14px;border:1px solid var(--rose-l);margin-bottom:10px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:10px;color:var(--rose)">\u2795 Cadastro R\u00E1pido</div>
+      <div class="fr2">
+        <div class="fg"><label class="fl">Nome *</label><input class="fi" id="qr-name" placeholder="Nome completo"/></div>
+        <div class="fg"><label class="fl">WhatsApp *</label><input class="fi" id="qr-phone" placeholder="(92) 9xxxx-xxxx"/></div>
+      </div>
+      <div id="qr-phone-warn" style="display:none;background:var(--red-l);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--red);margin-bottom:8px;"></div>
+      <div class="fr2">
+        <div class="fg" style="grid-column:span 2"><label class="fl">Rua / Avenida</label><input class="fi" id="qr-street" placeholder="Rua das Flores"/></div>
+        <div class="fg"><label class="fl">N\u00FAmero</label><input class="fi" id="qr-number" placeholder="123"/></div>
+        <div class="fg"><label class="fl">Bairro</label>
+          <input class="fi" id="qr-neigh" placeholder="Selecione ou digite..." list="bairros-manaus"/>
+        </div>
+        <div class="fg"><label class="fl">CEP</label><input class="fi" id="qr-cep" placeholder="69000-000"/></div>
+        <div class="fg"><label class="fl">Anivers\u00E1rio</label><input class="fi" id="qr-bday" type="date"/></div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-primary btn-sm" id="btn-qr-save">\u2705 Salvar e usar</button>
+        <button class="btn btn-ghost btn-sm" id="btn-qr-cancel">Cancelar</button>
+      </div>
+    </div>`:''}
+    <datalist id="bairros-manaus">
+      ${BAIRROS_MANAUS.map(b=>`<option value="${b}">`).join('')}
+    </datalist>
+  </div>`;
+
+  // HTML do Carrinho
+  const carrinhoHTML = `
+  <div class="card" style="margin-bottom:14px;">
     <div class="card-title">\uD83D\uDED2 Carrinho (${PDV.cart.length} ${PDV.cart.length===1?'item':'itens'})</div>
+
+    <!-- BUSCA DE PRODUTO -->
+    ${addProductHTML}
+
     ${PDV.cart.length===0 ? `
-      <div style="text-align:center;padding:40px 20px;color:var(--muted);">
-        <div style="font-size:48px;margin-bottom:12px;opacity:.5;">\uD83D\uDECD\uFE0F</div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Carrinho vazio</div>
-        <div style="font-size:12px;">Use o campo de busca abaixo do cliente para adicionar produtos</div>
+      <div style="text-align:center;padding:30px 16px;color:var(--muted);margin-top:10px;">
+        <div style="font-size:36px;margin-bottom:8px;opacity:.5;">\uD83D\uDECD\uFE0F</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Carrinho vazio</div>
+        <div style="font-size:11px;">Busque produtos acima para adicionar</div>
       </div>
     ` : `
-      <div style="max-height:500px;overflow-y:auto;">
+      <div style="max-height:340px;overflow-y:auto;margin-top:8px;">
         ${PDV.cart.map(it=>`
-          <div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border);">
             <div style="flex:1;min-width:0;">
               <div style="font-weight:600;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${it.name}</div>
-              <div style="font-size:11px;color:var(--muted);margin-top:2px;">R$ ${(it.price||0).toFixed(2).replace('.',',')} \u00B7 un</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px;">R$ ${(it.price||0).toFixed(2).replace('.',',')} \u00B7 un</div>
             </div>
-            <div style="display:flex;align-items:center;gap:4px;">
-              <button class="btn btn-ghost btn-xs" data-dec="${it.id}" style="width:28px;height:28px;padding:0;font-size:14px;">\u2212</button>
-              <span style="min-width:28px;text-align:center;font-weight:700;font-size:14px;">${it.qty}</span>
-              <button class="btn btn-ghost btn-xs" data-inc="${it.id}" style="width:28px;height:28px;padding:0;font-size:14px;">+</button>
+            <div style="display:flex;align-items:center;gap:2px;">
+              <button class="btn btn-ghost btn-xs" data-dec="${it.id}" style="width:26px;height:26px;padding:0;font-size:13px;">\u2212</button>
+              <span style="min-width:24px;text-align:center;font-weight:700;font-size:13px;">${it.qty}</span>
+              <button class="btn btn-ghost btn-xs" data-inc="${it.id}" style="width:26px;height:26px;padding:0;font-size:13px;">+</button>
             </div>
-            <div style="font-weight:700;color:var(--rose);font-size:14px;min-width:70px;text-align:right;">R$ ${((it.price||0)*(it.qty||0)).toFixed(2).replace('.',',')}</div>
+            <div style="font-weight:700;color:var(--rose);font-size:13px;min-width:64px;text-align:right;">R$ ${((it.price||0)*(it.qty||0)).toFixed(2).replace('.',',')}</div>
           </div>
         `).join('')}
       </div>
-      <div style="padding:14px;background:var(--cream);border-radius:8px;margin-top:12px;">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
+      <div style="padding:12px 14px;background:var(--cream);border-radius:8px;margin-top:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:3px;">
           <span>Subtotal:</span><span>R$ ${sub.toFixed(2).replace('.',',')}</span>
         </div>
-        ${(PDV.discount||0)>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
+        ${(PDV.discount||0)>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:3px;">
           <span>Desconto:</span><span>- R$ ${(PDV.discount||0).toFixed(2).replace('.',',')}</span>
         </div>`:''}
-        ${deliveryFee>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
-          <span>Taxa de entrega:</span><span>R$ ${deliveryFee.toFixed(2).replace('.',',')}</span>
+        ${deliveryFee>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:3px;">
+          <span>Taxa:</span><span>R$ ${deliveryFee.toFixed(2).replace('.',',')}</span>
         </div>`:''}
-        <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;color:var(--ink);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:var(--ink);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">
           <span>Total:</span><span style="color:var(--rose);">R$ ${total.toFixed(2).replace('.',',')}</span>
         </div>
       </div>
     `}
-  </div>
+  </div>`;
+
+  return `<div class="pdv-grid">
+<!-- COLUNA ESQUERDA: Cliente + Carrinho -->
+<div>
+  ${clienteCardHTML}
+  ${carrinhoHTML}
 </div>
 
+<!-- COLUNA DIREITA: Pedido (destinatário, entrega, pagamento) -->
 <div>
 <div class="card">
-  <div class="card-title">\uD83D\uDED2 Pedido</div>
+  <div class="card-title">\uD83D\uDCDD Detalhes do Pedido</div>
 
-  ${(()=>{
-    const isAdmin = S.user?.role==='Administrador' || S.user?.cargo==='admin';
-    const userUnit = S.user?.unit;
-    const specificUnits = ['Loja Novo Aleixo','Loja Allegro Mall','CDLE'];
-    // Admin ou unidade 'Todas': seleciona
-    if(isAdmin || userUnit==='Todas' || !specificUnits.includes(userUnit)){
-      return `<div class="fg"><label class="fl">Unidade de Venda *</label>
-        <select class="fi" id="pdv-sale-unit">
-          <option value="">Selecione...</option>
-          <option value="Loja Novo Aleixo" ${PDV.saleUnit==='Loja Novo Aleixo'?'selected':''}>\uD83C\uDF3A Loja Novo Aleixo</option>
-          <option value="Loja Allegro Mall" ${PDV.saleUnit==='Loja Allegro Mall'?'selected':''}>\uD83C\uDF3A Loja Allegro Mall</option>
-          <option value="CDLE" ${PDV.saleUnit==='CDLE'?'selected':''}>\uD83D\uDCE6 CDLE</option>
-        </select>
-      </div>`;
-    }
-    // Colaborador com unidade espec\u00EDfica: badge read-only
-    if(PDV.saleUnit!==userUnit) PDV.saleUnit = userUnit;
-    const icon = userUnit==='CDLE' ? '\uD83D\uDCE6' : '\uD83C\uDF3A';
-    return `<div class="fg"><label class="fl">Unidade de Venda</label>
-      <div style="display:inline-flex;align-items:center;gap:8px;background:var(--petal,#fce7f0);border:1px solid var(--rose-l,#f5c2d4);color:var(--rose,#b83260);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;">
-        <span>${icon}</span><span>${userUnit}</span>
-        <span style="font-size:10px;opacity:.7;font-weight:500;">(fixada)</span>
-      </div>
-    </div>`;
-  })()}
-
-  <!-- BUSCA CLIENTE - \u00FAltimos 6 d\u00EDgitos do celular -->
-  <div class="fg">
-    <label class="fl">Cliente \u2014 \u00FAltimos 6 d\u00EDgitos do celular ou nome <span style="color:var(--red)">*</span></label>
-    <div style="position:relative;">
-      <input class="fi" id="pdv-phone-search"
-        placeholder="Ex: 234567 ou 'Maria Silva'..."
-        value="${PDV.clientSearch}"
-        autocomplete="off"
-        style="padding-right:36px;"/>
-      ${PDV.clientSearch?`<button id="pdv-search-clear" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;">\u2715</button>`:''}
-    </div>
-    <div id="pdv-search-results"></div>
-
-    ${PDV.clientId?`
-    <div style="background:var(--leaf-l);border-radius:8px;padding:10px 14px;margin-top:6px;display:flex;align-items:center;gap:10px;border:1px solid rgba(31,92,46,.2);">
-      <div class="av" style="width:34px;height:34px;font-size:12px;background:var(--leaf)">${ini(S.clients.find(c=>c._id===PDV.clientId)?.name||PDV.clientName)}</div>
-      <div style="flex:1;">
-        <div style="font-weight:700;font-size:13px">${S.clients.find(c=>c._id===PDV.clientId)?.name||PDV.clientName}</div>
-        <div style="font-size:11px;color:var(--muted)">${S.clients.find(c=>c._id===PDV.clientId)?.phone||PDV.clientPhone}</div>
-      </div>
-      <button class="btn btn-ghost btn-xs" id="pdv-clear-cli">\u2715 Trocar</button>
-    </div>`:(!PDV.clientId&&PDV.clientName?`
-    <div style="background:var(--cream);border-radius:8px;padding:8px 12px;margin-top:6px;font-size:12px;display:flex;align-items:center;justify-content:space-between;">
-      <span><strong>${PDV.clientName}</strong> ${PDV.clientPhone?'\u00B7 '+PDV.clientPhone:''} <span class="tag t-blue" style="margin-left:4px">Novo</span></span>
-      <button class="btn btn-ghost btn-xs" id="pdv-clear-cli">\u2715</button>
-    </div>`:'')
-    }
-  </div>
-
-  <!-- CADASTRO R\u00C1PIDO -->
-  ${PDV._showQuickReg?`
-  <div style="background:var(--petal);border-radius:var(--r);padding:14px;border:1px solid var(--rose-l);margin-bottom:10px;">
-    <div style="font-weight:600;font-size:13px;margin-bottom:10px;color:var(--rose)">\u2795 Cadastro R\u00E1pido de Cliente</div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Nome completo *</label><input class="fi" id="qr-name" placeholder="Nome completo"/></div>
-      <div class="fg"><label class="fl">WhatsApp *</label><input class="fi" id="qr-phone" placeholder="(92) 9xxxx-xxxx"/></div>
-      <div class="fg"><label class="fl">E-mail</label><input class="fi" id="qr-email" type="email" placeholder="email@..."/></div>
-      <div class="fg"><label class="fl">Anivers\u00E1rio</label><input class="fi" id="qr-bday" type="date"/></div>
-      <div class="fg"><label class="fl">CPF</label><input class="fi" id="qr-cpf" placeholder="000.000.000-00"/></div>
-      <div class="fg"><label class="fl">Segmento</label>
-        <select class="fi" id="qr-segment"><option value="Novo">Novo</option><option value="Recorrente">Recorrente</option><option value="VIP">VIP</option></select>
-      </div>
-    </div>
-    <div id="qr-phone-warn" style="display:none;background:var(--red-l);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--red);margin-bottom:8px;"></div>
-    <div class="fr2">
-      <div class="fg" style="grid-column:span 2"><label class="fl">Rua / Avenida</label><input class="fi" id="qr-street" placeholder="Rua das Flores"/></div>
-      <div class="fg"><label class="fl">N\u00FAmero</label><input class="fi" id="qr-number" placeholder="123"/></div>
-      <div class="fg"><label class="fl">Bairro</label>
-        <input class="fi" id="qr-neigh" placeholder="Selecione ou digite..." list="bairros-manaus"/>
-      </div>
-      <div class="fg"><label class="fl">Cidade</label><input class="fi" id="qr-city" value="Manaus" readonly style="background:var(--cream);color:var(--muted)"/></div>
-      <div class="fg"><label class="fl">CEP</label><input class="fi" id="qr-cep" placeholder="69000-000"/></div>
-    </div>
-    <div class="fg"><label class="fl">Observa\u00E7\u00F5es</label><textarea class="fi" id="qr-notes" rows="2"></textarea></div>
-    <div style="display:flex;gap:6px;">
-      <button class="btn btn-primary btn-sm" id="btn-qr-save">\u2705 Salvar e usar</button>
-      <button class="btn btn-ghost btn-sm" id="btn-qr-cancel">Cancelar</button>
-    </div>
-  </div>`:''}
-  <datalist id="bairros-manaus">
-    ${BAIRROS_MANAUS.map(b=>`<option value="${b}">`).join('')}
-  </datalist>
-
-  <!-- BUSCA DE PRODUTO — aparece logo após o cliente -->
-  ${addProductHTML}
-
-  <!-- MINI-RESUMO DO CARRINHO (lista completa fica na coluna esquerda) -->
-  ${PDV.cart.length>0?`
-  <div style="background:var(--cream);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;justify-content:space-between;">
-    <span style="color:var(--muted);">${PDV.cart.length} ${PDV.cart.length===1?'item':'itens'} no carrinho</span>
-    <span style="font-weight:700;color:var(--rose);">${$c(sub)}</span>
-  </div>`:''}
-
-  <hr/>
   <!-- DESTINAT\u00C1RIO E CART\u00C3O -->
   <div class="fg"><label class="fl">Destinat\u00E1rio</label><input class="fi" id="pdv-recipient" placeholder="Nome de quem vai receber" value="${PDV.recipient}"/></div>
   <div class="fg"><label class="fl">WhatsApp / Telefone do destinat\u00E1rio</label><input class="fi" id="pdv-recip-phone" type="tel" placeholder="(92) 9xxxx-xxxx" value="${PDV.recipientPhone||''}"/></div>

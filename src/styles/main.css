@@ -178,7 +178,8 @@ hr{border:none;border-top:1px solid var(--border);margin:12px 0;}
 .alert-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
 
 /* PDV */
-.pdv-grid{display:grid;grid-template-columns:1fr 360px;gap:16px;}
+.pdv-grid{display:grid;grid-template-columns:420px 1fr;gap:16px;}
+@media (max-width:1024px){ .pdv-grid{grid-template-columns:1fr;} }
 .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;}
 .prod-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:10px;cursor:pointer;transition:all .2s;text-align:center;}
 .prod-card:hover,.prod-card.sel{border-color:var(--rose);box-shadow:0 4px 16px rgba(200,67,106,.12);}
