@@ -1,6 +1,7 @@
 import { S } from '../state.js';
 import { $c, emoji, esc } from '../utils/formatters.js';
 import { GET, POST, PUT, DELETE, PATCH } from '../services/api.js';
+import { normalizeName } from '../utils/normalizeName.js';
 
 // ── CSV/JSON Import/Export helpers ────────────────────────────
 function toCSV(rows, columns){
@@ -449,7 +450,8 @@ export async function showNewProductModal(prod=null){
 
 // ── saveProduct ──────────────────────────────────────────────
 export async function saveProduct(editId=null, prodCode=null){
-  const name=document.getElementById('mp-name')?.value?.trim();
+  const nameRaw=document.getElementById('mp-name')?.value?.trim();
+  const name=normalizeName(nameRaw);
   if(!name) return toast('❌ Nome obrigatorio');
 
   // Le CFOP (select ou manual)
@@ -480,7 +482,7 @@ export async function saveProduct(editId=null, prodCode=null){
 
   const selectedCats = Array.isArray(S._prodCats) ? S._prodCats.slice() : [];
   const data={
-    name, code: prodCode,
+    name, nome: name, code: prodCode, sku: prodCode,
     categories:    selectedCats,
     category:      selectedCats[0] || '',
     costPrice:     parseFloat(document.getElementById('mp-cost')?.value)||0,
