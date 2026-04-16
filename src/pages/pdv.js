@@ -14,20 +14,65 @@ export function renderPDV(){
   const deliveryFee=PDV.type==='Delivery'?(PDV.deliveryFee||0):0;
   const total=sub-(PDV.discount||0)+deliveryFee;
 
-  return `<div class="pdv-grid">
-<div>
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-title">Adicionar Produto</div>
+  // HTML do card de busca de produto — usado abaixo do cliente
+  const addProductHTML = `
+  <div class="fg" style="margin-top:10px;margin-bottom:6px;">
+    <label class="fl">\uD83D\uDCE6 Adicionar Produto ao Carrinho</label>
     <div style="position:relative;">
       <input
         class="fi"
         id="pdv-prod-search"
         placeholder="\uD83D\uDD0D Buscar produto por nome..."
         autocomplete="off"
-        style="padding:12px 14px;font-size:14px;border:2px solid var(--border);border-radius:10px;"
+        style="padding:12px 14px;font-size:14px;border:2px solid var(--rose-l);border-radius:10px;"
       />
-      <div id="pdv-prod-suggestions" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:10px;margin-top:4px;max-height:400px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.1);z-index:100;display:none;"></div>
+      <div id="pdv-prod-suggestions" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:10px;margin-top:4px;max-height:400px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:100;display:none;"></div>
     </div>
+  </div>`;
+
+  return `<div class="pdv-grid">
+<div>
+  <!-- Carrinho visualizado em destaque na coluna esquerda -->
+  <div class="card" style="margin-bottom:16px;min-height:300px;">
+    <div class="card-title">\uD83D\uDED2 Carrinho (${PDV.cart.length} ${PDV.cart.length===1?'item':'itens'})</div>
+    ${PDV.cart.length===0 ? `
+      <div style="text-align:center;padding:40px 20px;color:var(--muted);">
+        <div style="font-size:48px;margin-bottom:12px;opacity:.5;">\uD83D\uDECD\uFE0F</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Carrinho vazio</div>
+        <div style="font-size:12px;">Use o campo de busca abaixo do cliente para adicionar produtos</div>
+      </div>
+    ` : `
+      <div style="max-height:500px;overflow-y:auto;">
+        ${PDV.cart.map(it=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);">
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${it.name}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;">R$ ${(it.price||0).toFixed(2).replace('.',',')} \u00B7 un</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button class="btn btn-ghost btn-xs" data-dec="${it.id}" style="width:28px;height:28px;padding:0;font-size:14px;">\u2212</button>
+              <span style="min-width:28px;text-align:center;font-weight:700;font-size:14px;">${it.qty}</span>
+              <button class="btn btn-ghost btn-xs" data-inc="${it.id}" style="width:28px;height:28px;padding:0;font-size:14px;">+</button>
+            </div>
+            <div style="font-weight:700;color:var(--rose);font-size:14px;min-width:70px;text-align:right;">R$ ${((it.price||0)*(it.qty||0)).toFixed(2).replace('.',',')}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div style="padding:14px;background:var(--cream);border-radius:8px;margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
+          <span>Subtotal:</span><span>R$ ${sub.toFixed(2).replace('.',',')}</span>
+        </div>
+        ${(PDV.discount||0)>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
+          <span>Desconto:</span><span>- R$ ${(PDV.discount||0).toFixed(2).replace('.',',')}</span>
+        </div>`:''}
+        ${deliveryFee>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
+          <span>Taxa de entrega:</span><span>R$ ${deliveryFee.toFixed(2).replace('.',',')}</span>
+        </div>`:''}
+        <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;color:var(--ink);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+          <span>Total:</span><span style="color:var(--rose);">R$ ${total.toFixed(2).replace('.',',')}</span>
+        </div>
+      </div>
+    `}
   </div>
 </div>
 
@@ -123,20 +168,16 @@ export function renderPDV(){
   <datalist id="bairros-manaus">
     ${BAIRROS_MANAUS.map(b=>`<option value="${b}">`).join('')}
   </datalist>
-  <!-- CARRINHO -->
+
+  <!-- BUSCA DE PRODUTO — aparece logo após o cliente -->
+  ${addProductHTML}
+
+  <!-- MINI-RESUMO DO CARRINHO (lista completa fica na coluna esquerda) -->
   ${PDV.cart.length>0?`
-  <div style="max-height:180px;overflow-y:auto;margin-bottom:8px;">
-    ${PDV.cart.map(i=>`
-    <div class="cart-item">
-      <div style="flex:1"><div style="font-size:12px;font-weight:500">${i.name}</div><div style="font-size:10px;color:var(--muted)">${$c(i.price)}</div></div>
-      <div style="display:flex;align-items:center;gap:5px;">
-        <button class="qb" data-dec="${i.id}">\u2212</button>
-        <span style="font-size:12px;min-width:16px;text-align:center">${i.qty}</span>
-        <button class="qb" data-inc="${i.id}">+</button>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--rose);min-width:52px;text-align:right">${$c(i.price*i.qty)}</div>
-    </div>`).join('')}
-  </div>`:`<div style="text-align:center;color:var(--muted);padding:10px;font-size:12px">Clique nos produtos para adicionar</div>`}
+  <div style="background:var(--cream);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;justify-content:space-between;">
+    <span style="color:var(--muted);">${PDV.cart.length} ${PDV.cart.length===1?'item':'itens'} no carrinho</span>
+    <span style="font-weight:700;color:var(--rose);">${$c(sub)}</span>
+  </div>`:''}
 
   <hr/>
   <!-- DESTINAT\u00C1RIO E CART\u00C3O -->
