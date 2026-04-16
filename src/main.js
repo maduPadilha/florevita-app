@@ -2246,15 +2246,14 @@ async function init(){
     // Ler página da URL (ex: /pedidos → page='pedidos')
     const urlPage = getPageFromURL();
     if(urlPage) S.page = urlPage;
-    render();
-    // 2. Busca dados frescos em background
-    await loadData();
-    S.loading = false;
     if(_isEntregador()) S.page='entregador';
     // Atualizar URL para refletir a página atual
     const slug = S.page === 'config' ? 'configuracoes' : S.page;
     history.replaceState({page:S.page}, '', '/'+slug);
-    render();
+    S.loading = false;
+    render();              // user sees UI immediately (com cache)
+    // 2. Busca dados frescos em background — NÃO espera
+    loadData();            // não-bloqueante: fase crítica + background interno
     startPolling(8000);
     startAutoBackup();
 

@@ -209,7 +209,7 @@ export function renderProdutos(){
     const low=(p.stock||0)<=(p.minStock||5);
     return`<tr>
       <td><div style="display:flex;align-items:center;gap:8px;">
-        ${p.images?.[0]?`<img src="${p.images[0]}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer" title="${p.name}" onclick="showFullImg('${p.images[0]}')">`:`<span style="font-size:20px">${emoji(p.category)}</span>`}
+        ${p.images?.[0]?`<img src="${p.images[0]}" loading="lazy" decoding="async" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer" title="${p.name}" onclick="showFullImg('${p.images[0]}')">`:`<span style="font-size:20px">${emoji(p.category)}</span>`}
         <span style="font-weight:500">${p.name}</span>
       </div></td>
       <td>${(()=>{const cs=getProductCategories(p);return cs.length?cs.map(c=>`<span class="tag t-gray" style="margin:1px;display:inline-block;font-size:10px;">${c}</span>`).join(' '):'\u2014';})()}</td>
@@ -398,7 +398,7 @@ export async function showNewProductModal(prod=null){
   <!-- FOTO -->
   <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">📷 Foto do Produto</div>
   <div style="margin-bottom:20px;">
-    ${prod?.images?.[0]||S._prodImg?`<img src="${S._prodImg||prod.images[0]}" style="width:100px;height:100px;object-fit:cover;border-radius:10px;margin-bottom:8px;border:2px solid var(--border);" id="prod-img-preview"/>`:
+    ${prod?.images?.[0]||S._prodImg?`<img src="${S._prodImg||prod.images[0]}" loading="lazy" decoding="async" style="width:100px;height:100px;object-fit:cover;border-radius:10px;margin-bottom:8px;border:2px solid var(--border);" id="prod-img-preview"/>`:
     `<div style="width:100px;height:100px;background:var(--cream);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:8px;">🌸</div>`}
     <input type="file" id="mp-img-file" accept="image/*" class="fi" style="padding:6px;max-width:300px;"/>
     <div style="font-size:11px;color:var(--muted);margin-top:4px;">JPG ou PNG. Recomendado: 400x400px</div>

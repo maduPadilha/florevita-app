@@ -50,9 +50,9 @@ export function cleanOldAssignments(){
 export function saveCachedData(){
   try{
     const snapshot = {
-      products: S.products,
-      orders:   S.orders.slice(0,300),
-      clients:  S.clients.slice(0,500),
+      products: S.products.slice(0, 300), // limit cached products
+      orders:   S.orders.slice(0, 200),
+      clients:  S.clients.slice(0, 300),
       users:    S.users,
       savedAt:  Date.now(),
     };
@@ -149,35 +149,81 @@ export function invalidateCache(type='all'){
   }catch(e){}
 }
 
-// ── LOAD DATA COM RETRY AUTOMÁTICO ───────────────────────────
-// O Render free tier "dorme" após 15min e demora ~35s para acordar.
-// Esta função tenta até 4 vezes antes de cair no cache.
+// ── LOAD DATA — PROGRESSIVE LOADING ──────────────────────────
+// Estratégia: carrega CRÍTICOS (orders/clients/users) primeiro e renderiza imediatamente,
+// depois carrega NÃO-CRÍTICOS (products/stock/categories/collabs/activities) em background.
+// Em caso de cold-start (Render free tier ~35s), usa retry só na fase crítica.
 export async function loadData(){
   const _was = S.loading;
   S.loading   = true;
+
+  // ── FASE CRÍTICA: orders + clients + users ────────────────────
+  // Tenta até 8 vezes (cold-start Render pode levar ~35s)
+  let orders=null, clients=null, users=null;
+  let carregouCritico = false;
 
   for(let n=1; n<=8; n++){
     S._loginMsg = n===1 ? '🌸 Carregando dados...' : `⏳ Aguardando servidor... (${n}/8)`;
     try{ const { render } = await import('../main.js'); render(); }catch(_){}
 
-    // Busca todos os dados simultaneamente
-    const [p, o, c, u, sm, ac] = await Promise.all([
-      GET('/products').catch(()=>null),
-      GET('/orders').catch(()=>null),
-      GET('/clients').catch(()=>null),
+    [orders, clients, users] = await Promise.all([
+      GET('/orders?limit=300').catch(()=>null),
+      GET('/clients?limit=500').catch(()=>null),
       GET('/users').catch(()=>null),
-      GET('/stock/moves').catch(()=>null),
-      GET('/activities').catch(()=>null),
     ]);
 
-    // Mescla atividades vindas do backend com cache local (visibilidade entre dispositivos)
-    if(Array.isArray(ac)){
+    const algumOk = [orders, clients, users].some(x => Array.isArray(x));
+    if(algumOk){ carregouCritico = true; break; }
+
+    if(n < 8){
+      S._loginMsg = `🌸 Servidor aquecendo... (${n}/8)`;
+      try{ const { render } = await import('../main.js'); render(); }catch(_){}
+      await new Promise(r=>setTimeout(r, 10000));
+    }
+  }
+
+  // Aplica dados críticos e renderiza imediatamente
+  if(Array.isArray(orders))  S.orders  = mergeDriverAssignments(orders);
+  if(Array.isArray(clients)) S.clients = clients;
+  if(Array.isArray(users)){
+    const hid = getHiddenUsers();
+    S.users = users.filter(x => !hid.includes(x._id)).map(mergeUserExtra);
+  }
+
+  S._loginMsg = null;
+  S.loading   = _was;
+  try{ const { render } = await import('../main.js'); render(); }catch(_){}
+
+  if(carregouCritico){
+    console.log(`[load] ✅ crítico: ${S.orders.length}o | ${S.clients.length}c | ${S.users.length}u`);
+  } else {
+    if(S.products.length||S.orders.length||S.clients.length)
+      toast('⚠️ Usando cache. Clique 🔄 para atualizar.', true);
+    else
+      toast('❌ Servidor sem resposta. Clique 🔄 para tentar novamente.', true);
+    return false;
+  }
+
+  // ── FASE NÃO-CRÍTICA: products + stock + categories + collabs + activities ──
+  // Roda em background, NÃO bloqueia o retorno
+  Promise.all([
+    GET('/products?limit=1000').catch(()=>null),
+    GET('/stock/moves?limit=500').catch(()=>null),
+    GET('/categories').catch(()=>null),
+    GET('/collaborators').catch(()=>null),
+    GET('/activities?limit=200').catch(()=>null),
+  ]).then(([products, stock, categories, collabs, activities]) => {
+    if(Array.isArray(products) && products.length > 0) S.products   = products;
+    if(Array.isArray(stock)    && stock.length    > 0) S.stockMoves = stock;
+    // categories/collabs: opcionais — outros módulos cuidam do merge com localStorage
+
+    // Mescla atividades remotas com cache local (visibilidade entre dispositivos)
+    if(Array.isArray(activities)){
       try{
         const local = JSON.parse(localStorage.getItem('fv_activities')||'[]');
         const seen = new Set();
         const merged = [];
-        // Normaliza atividades do backend para o mesmo shape do cache local
-        const remote = ac.map(a => ({
+        const remote = activities.map(a => ({
           id: a.id || a._id || (a.date+'_'+(a.userId||a.user||'')),
           userId: a.userId,
           userName: a.user || a.userName || '',
@@ -200,67 +246,18 @@ export async function loadData(){
       }catch(e){ /* ignora */ }
     }
 
-    // Log para diagnóstico
-    console.log(`[load] tentativa ${n}: p=${JSON.stringify(p)?.substring(0,50)} o=${o?.length} c=${c?.length} u=${u?.length}`);
-
-    // Aplica dados que vieram
-    let carregou = false;
-    if(Array.isArray(p) && p.length > 0){ S.products = p; carregou = true; }
-    if(Array.isArray(o) && o.length > 0){ S.orders   = mergeDriverAssignments(o); carregou = true; }
-    if(Array.isArray(c) && c.length > 0){ S.clients  = c; carregou = true; }
-    if(Array.isArray(u) && u.length > 0){
-      const hid = getHiddenUsers();
-      S.users = u.filter(x=>!hid.includes(x._id)).map(mergeUserExtra);
-    }
-    if(Array.isArray(sm) && sm.length > 0) S.stockMoves = sm;
     S.financialEntries = JSON.parse(localStorage.getItem('fv_financial')||'[]');
+    saveCachedData();
+    console.log(`[load] ✅ background: ${S.products.length}p | stock=${S.stockMoves?.length||0}`);
+    try{ import('../main.js').then(m => m.render()); }catch(_){}
 
-    // Servidor respondeu mas produtos vieram vazios — tenta mais vezes
-    const servidorRespondeu = [p,o,c,u].some(x => x !== null);
-    if(servidorRespondeu && !Array.isArray(p)){
-      // Produtos retornaram null (erro) — continua tentando
-      console.warn('[load] /products retornou null — tentando novamente');
-    } else if(servidorRespondeu && Array.isArray(p) && p.length === 0 && n < 8){
-      // Produtos retornaram vazio — aguarda e tenta de novo
-      console.warn('[load] /products retornou [] vazio — aguardando e tentando novamente');
-      S._loginMsg = `🌸 Aguardando produtos do servidor... (${n}/8)`;
-      try{ const { render } = await import('../main.js'); render(); }catch(_){}
-      await new Promise(r=>setTimeout(r, 8000));
-      continue;
-    }
+    // Fetch and merge collaborators from /api/collaborators (non-blocking)
+    fetchAndMergeColabs().then(merged => {
+      if(merged?.length) console.log('[load] Colabs synced from API: ' + merged.length);
+    }).catch(e => console.warn('[load] Colabs sync skipped:', e.message));
+  }).catch(e => console.warn('[load] background falhou:', e));
 
-    if(carregou){
-      S._loginMsg = null;
-      S.loading   = _was;
-      saveCachedData();
-      try{ const { render } = await import('../main.js'); render(); }catch(_){}
-      console.log(`[load] ✅ ${n}ª: ${S.products.length}p | ${S.orders.length}o | ${S.clients.length}c | ${S.users.length}u`);
-
-      // Fetch and merge collaborators from /api/collaborators (non-blocking)
-      fetchAndMergeColabs().then(merged => {
-        if(merged?.length){
-          console.log('[load] Colabs synced from API: ' + merged.length);
-        }
-      }).catch(e => console.warn('[load] Colabs sync skipped:', e.message));
-
-      return true;
-    }
-
-    // Servidor não respondeu
-    if(n < 8){
-      S._loginMsg = `🌸 Servidor aquecendo... (${n}/8)`;
-      try{ const { render } = await import('../main.js'); render(); }catch(_){}
-      await new Promise(r=>setTimeout(r, 10000));
-    }
-  }
-
-  S._loginMsg = null;
-  S.loading   = _was;
-  if(S.products.length||S.orders.length||S.clients.length)
-    toast('⚠️ Usando cache. Clique 🔄 para atualizar.', true);
-  else
-    toast('❌ Servidor sem resposta. Clique 🔄 para tentar novamente.', true);
-  return false;
+  return true;
 }
 
 // ── RECARREGAR DADOS MANUALMENTE ────────────────────────────

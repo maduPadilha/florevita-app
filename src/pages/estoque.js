@@ -72,7 +72,7 @@ function _renderStockRow(p){
   return`<div style="margin-bottom:10px;padding:10px;border:1px solid var(--border);border-radius:var(--r);background:#fff;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <input type="checkbox" class="stock-row-chk" data-stock-sel="${p._id}" ${checked}/>
-      ${p.images?.[0]?`<img src="${p.images[0]}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;">`:`<span style="font-size:24px;width:40px;text-align:center">${emoji(p.category)}</span>`}
+      ${p.images?.[0]?`<img src="${p.images[0]}" loading="lazy" decoding="async" style="width:40px;height:40px;border-radius:6px;object-fit:cover;">`:`<span style="font-size:24px;width:40px;text-align:center">${emoji(p.category)}</span>`}
       <div style="flex:1;min-width:140px;">
         <div style="font-size:12px;font-weight:600">${esc(p.name||'')}</div>
         <div style="font-size:10px;color:var(--muted)">SKU: ${esc(p.code||p.sku||'—')}</div>
