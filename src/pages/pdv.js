@@ -256,7 +256,14 @@ export function renderPDV(){
     <div class="fg"><label class="fl">Cidade</label>
       <input class="fi" id="pdv-city" value="Manaus" readonly style="background:var(--cream);color:var(--muted);"/>
     </div>
-    <div class="fg"><label class="fl">CEP</label><input class="fi" id="pdv-cep" placeholder="69000-000" value="${PDV.cep}"/></div>
+    <div class="fg">
+      <label class="fl">CEP <span style="font-size:10px;color:var(--muted);font-weight:400;">(preenche rua e bairro automaticamente)</span></label>
+      <div style="position:relative;">
+        <input class="fi" id="pdv-cep" placeholder="69000-000" value="${PDV.cep}" maxlength="9" inputmode="numeric" autocomplete="postal-code"/>
+        <div id="pdv-cep-status" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;pointer-events:none;"></div>
+      </div>
+      <div id="pdv-cep-msg" style="font-size:11px;margin-top:3px;display:none;"></div>
+    </div>
   </div>
   <div class="fg"><label class="fl">Ponto de refer\u00EAncia</label><input class="fi" id="pdv-ref" placeholder="Pr\u00F3ximo ao mercado..." value="${PDV.reference}"/></div>
   <label class="cb" style="margin-bottom:10px;"><input type="checkbox" id="pdv-condo" ${PDV.isCondominium?'checked':''}/><span style="font-size:12px">\u00C9 condom\u00EDnio?</span></label>

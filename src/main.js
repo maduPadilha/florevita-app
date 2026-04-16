@@ -1692,6 +1692,128 @@ function bindPageActions(){
       el.addEventListener('input',e=>{PDV[key]=key==='discount'?parseFloat(e.target.value)||0:e.target.value});
     });
     {const _el=document.getElementById('btn-fin');if(_el)_el.onclick=finalizePDV;}
+
+    // ── ViaCEP: preenchimento automático de rua/bairro ────────────
+    (function setupCepLookup(){
+      const cepInput = document.getElementById('pdv-cep');
+      if(!cepInput) return;
+
+      const statusEl = document.getElementById('pdv-cep-status');
+      const msgEl = document.getElementById('pdv-cep-msg');
+      let lastCep = '';
+
+      // Formatar visualmente: 69000-000
+      const formatCep = (v) => {
+        const d = (v||'').replace(/\D/g,'').slice(0,8);
+        if(d.length>5) return d.slice(0,5)+'-'+d.slice(5);
+        return d;
+      };
+
+      const showMsg = (text, type='info') => {
+        if(!msgEl) return;
+        const colors = {
+          info:  {bg:'#DBEAFE', color:'#1E40AF', border:'#93C5FD'},
+          ok:    {bg:'#D1FAE5', color:'#065F46', border:'#6EE7B7'},
+          warn:  {bg:'#FEF3C7', color:'#92400E', border:'#FCD34D'},
+          error: {bg:'#FEE2E2', color:'#991B1B', border:'#FCA5A5'},
+        }[type] || {};
+        msgEl.style.display = 'block';
+        msgEl.style.background = colors.bg;
+        msgEl.style.color = colors.color;
+        msgEl.style.border = '1px solid '+colors.border;
+        msgEl.style.borderRadius = '6px';
+        msgEl.style.padding = '5px 8px';
+        msgEl.innerHTML = text;
+      };
+
+      const hideMsg = () => { if(msgEl) msgEl.style.display='none'; };
+
+      cepInput.addEventListener('input', async (e) => {
+        // Formatar em tempo real
+        const formatted = formatCep(e.target.value);
+        if(formatted !== e.target.value){
+          const pos = e.target.selectionStart;
+          e.target.value = formatted;
+          PDV.cep = formatted;
+          try { e.target.setSelectionRange(pos+1, pos+1); } catch(_){}
+        } else {
+          PDV.cep = formatted;
+        }
+
+        const digits = formatted.replace(/\D/g,'');
+
+        // Esconde msg se ainda não completou 8 dígitos
+        if(digits.length < 8){
+          hideMsg();
+          if(statusEl) statusEl.textContent = '';
+          lastCep = '';
+          return;
+        }
+
+        // Evita re-consultar mesmo CEP
+        if(digits === lastCep) return;
+        lastCep = digits;
+
+        // Valida faixa de Manaus-AM: 69000-000 a 69099-999
+        const num = parseInt(digits, 10);
+        const inManausRange = num >= 69000000 && num <= 69099999;
+
+        // Loading
+        if(statusEl) statusEl.innerHTML = '<span style="color:#94A3B8;">⏳</span>';
+        showMsg('🔍 Buscando endereço...', 'info');
+
+        try {
+          const res = await fetch('https://viacep.com.br/ws/'+digits+'/json/', {
+            signal: AbortSignal.timeout(8000)
+          });
+          const data = await res.json();
+
+          if(data.erro){
+            if(statusEl) statusEl.innerHTML = '<span style="color:#DC2626;">⚠️</span>';
+            showMsg('❌ CEP não encontrado. Preencha manualmente.', 'error');
+            return;
+          }
+
+          // Alerta se fora de Manaus
+          if(!inManausRange){
+            if(statusEl) statusEl.innerHTML = '<span style="color:#D97706;">⚠️</span>';
+            const cidadeDetectada = data.localidade || '—';
+            if(!confirm(`⚠️ CEP fora da área cadastrada (Manaus-AM).\n\nCEP pertence a: ${cidadeDetectada}/${data.uf||''}\n\nDeseja preencher o endereço mesmo assim?`)){
+              showMsg('🚫 CEP fora de Manaus — preencha manualmente', 'warn');
+              return;
+            }
+          }
+
+          // Preenche rua e bairro (não preenche número nem complemento)
+          const rua = data.logradouro || '';
+          const bairro = data.bairro || '';
+
+          const streetEl = document.getElementById('pdv-street');
+          const neighEl = document.getElementById('pdv-neighborhood');
+
+          if(rua){
+            if(streetEl) streetEl.value = rua;
+            PDV.street = rua;
+          }
+          if(bairro){
+            if(neighEl) neighEl.value = bairro;
+            PDV.neighborhood = bairro;
+          }
+
+          if(statusEl) statusEl.innerHTML = '<span style="color:#059669;">✓</span>';
+          if(rua || bairro){
+            showMsg(`✅ Endereço preenchido: <strong>${rua||'(sem rua)'}</strong>${bairro?' — '+bairro:''}`, 'ok');
+            // Foca no campo número pra agilizar preenchimento
+            setTimeout(()=>document.getElementById('pdv-number')?.focus(), 100);
+          } else {
+            showMsg('⚠️ CEP válido mas sem rua/bairro cadastrados. Preencha manualmente.', 'warn');
+          }
+        } catch(err){
+          if(statusEl) statusEl.innerHTML = '<span style="color:#DC2626;">⚠️</span>';
+          showMsg('❌ Erro ao consultar CEP. Preencha manualmente.', 'error');
+        }
+      });
+    })();
   }
 
   // ── Relatórios ────────────────────────────────────────────────
