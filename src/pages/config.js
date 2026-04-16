@@ -557,26 +557,34 @@ export function bindConfigActions(){
   }});
 
   // Nova zona numa cidade especifica
-  document.querySelectorAll('.btn-add-zone-city').forEach(b=>{b.onclick=()=>{
+  document.querySelectorAll('.btn-add-zone-city').forEach(b=>{b.onclick=async()=>{
     const city = b.dataset.city;
-    S._modal=`<div class="mo" id="mo"><div class="mo-box" style="max-width:380px;" onclick="event.stopPropagation()">
+    S._modal=`<div class="mo" id="mo" onclick="if(event.target===this){S._modal='';render();}"><div class="mo-box" style="max-width:380px;" onclick="event.stopPropagation()">
     <div class="mo-title">Nova Zona em ${city}</div>
-    <div class="fg"><label class="fl">Nome da zona *</label><input class="fi" id="zone-name" placeholder="Ex: Ponta Negra"/></div>
-    <div class="fg"><label class="fl">Taxa (R$) *</label><input class="fi" type="number" id="zone-fee" step="0.50" placeholder="0.00"/></div>
+    <div class="fg"><label class="fl">Nome da zona *</label><input class="fi" id="zone-name" placeholder="Ex: Ponta Negra" autofocus/></div>
+    <div class="fg"><label class="fl">Taxa (R$) *</label><input class="fi" type="number" id="zone-fee" step="0.50" min="0" placeholder="0.00"/></div>
     <div class="mo-foot">
       <button class="btn btn-primary" id="btn-zone-save">Adicionar</button>
       <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
     </div></div></div>`;
-    render();
-    {const _el=document.getElementById('btn-mo-close');if(_el)_el.onclick=()=>{S._modal='';render();};}
-    {const _el=document.getElementById('btn-zone-save');if(_el)_el.onclick=()=>{
+    await render();
+    document.getElementById('btn-mo-close')?.addEventListener('click',()=>{S._modal='';render();});
+    document.getElementById('btn-zone-save')?.addEventListener('click',()=>{
       const zone=document.getElementById('zone-name')?.value?.trim();
       const fee=parseFloat(document.getElementById('zone-fee')?.value)||0;
-      if(!zone) return toast('Informe o nome da zona');
+      if(!zone) return toast('Informe o nome da zona',true);
       if(!DELIVERY_FEES[city]) DELIVERY_FEES[city]={};
       DELIVERY_FEES[city][zone]=fee;
-      saveDeliveryFees(); S._modal=''; render(); toast(`Zona "${zone}" adicionada em ${city}`);
-    };}
+      saveDeliveryFees();
+      S._modal='';
+      render();
+      toast(`Zona "${zone}" adicionada em ${city}`);
+    });
+    // Enter no campo de taxa salva
+    document.getElementById('zone-fee')?.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btn-zone-save')?.click(); }
+    });
+    document.getElementById('zone-name')?.focus();
   }});
 
   // Limpar todas as taxas
@@ -588,11 +596,11 @@ export function bindConfigActions(){
 
   // Nova cidade
   {const _el=document.getElementById('btn-add-city');if(_el)_el.onclick=async()=>{
-    S._modal=`<div class="mo" id="mo"><div class="mo-box" style="max-width:380px;" onclick="event.stopPropagation()">
+    S._modal=`<div class="mo" id="mo" onclick="if(event.target===this){S._modal='';render();}"><div class="mo-box" style="max-width:380px;" onclick="event.stopPropagation()">
     <div class="mo-title">Nova Cidade</div>
-    <div class="fg"><label class="fl">Nome da cidade *</label><input class="fi" id="city-name" placeholder="Ex: Manacapuru"/></div>
-    <div class="fg"><label class="fl">Primeira zona</label><input class="fi" id="city-zone" placeholder="Ex: Centro"/></div>
-    <div class="fg"><label class="fl">Taxa (R$)</label><input class="fi" type="number" id="city-fee" step="0.50" placeholder="0.00"/></div>
+    <div class="fg"><label class="fl">Nome da cidade *</label><input class="fi" id="city-name" placeholder="Ex: Manacapuru" autofocus/></div>
+    <div class="fg"><label class="fl">Primeira zona (opcional)</label><input class="fi" id="city-zone" placeholder="Ex: Centro"/></div>
+    <div class="fg"><label class="fl">Taxa (R$)</label><input class="fi" type="number" id="city-fee" step="0.50" min="0" placeholder="0.00"/></div>
     <div class="mo-foot">
       <button class="btn btn-primary" id="btn-city-save">Adicionar</button>
       <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
@@ -601,12 +609,20 @@ export function bindConfigActions(){
     document.getElementById('btn-mo-close')?.addEventListener('click',()=>{S._modal='';render();});
     document.getElementById('btn-city-save')?.addEventListener('click',()=>{
       const city=document.getElementById('city-name')?.value?.trim();
-      const zone=document.getElementById('city-zone')?.value?.trim()||'Centro';
+      const zone=document.getElementById('city-zone')?.value?.trim();
       const fee=parseFloat(document.getElementById('city-fee')?.value)||0;
-      if(!city) return toast('Informe o nome da cidade');
-      DELIVERY_FEES[city]={[zone]:fee};
-      saveDeliveryFees(); S._modal=''; render(); toast(`Cidade "${city}" adicionada`);
+      if(!city) return toast('Informe o nome da cidade',true);
+      if(!DELIVERY_FEES[city]) DELIVERY_FEES[city]={};
+      if(zone) DELIVERY_FEES[city][zone]=fee;
+      saveDeliveryFees();
+      S._modal='';
+      render();
+      toast(`Cidade "${city}" adicionada`);
     });
+    document.getElementById('city-fee')?.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btn-city-save')?.click(); }
+    });
+    document.getElementById('city-name')?.focus();
   };}
 
   // Save config (migrated to API)
