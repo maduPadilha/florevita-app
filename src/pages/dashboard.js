@@ -1,5 +1,5 @@
 import { S } from '../state.js';
-import { $c, $d, sc, ini, esc } from '../utils/formatters.js';
+import { $c, $d, sc, ini, esc, PAY_STATUS_COLORS, PAY_STATUS_OPTIONS, paymentStatusBadge } from '../utils/formatters.js';
 import { toast, searchOrders } from '../utils/helpers.js';
 import { PATCH, PUT } from '../services/api.js';
 import { can, getColabs, findColab } from '../services/auth.js';
@@ -129,26 +129,23 @@ export function renderDashboard(){
   // Payment select helper — controla o STATUS de aprovação do pagamento
   function paymentSelect(o){
     const payment = o.paymentStatus || 'Ag. Pagamento';
-    const opts = ['Aprovado','Ag. Pagamento','Pagar na Entrega'];
-    const colorMap = {
-      'Aprovado':'background:#D1FAE5;color:#065F46;border-color:#A7F3D0;',
-      'Ag. Pagamento':'background:#FEF3C7;color:#92400E;border-color:#FDE68A;',
-      'Pagar na Entrega':'background:#FFEDD5;color:#9A3412;border-color:#FED7AA;'
-    };
-    const style = colorMap[payment]||colorMap['Ag. Pagamento'];
+    const opts = [
+      'Comprov. Enviado','Ag. Comprovante','Ag. Pagamento','Aprovado',
+      'Cancelado','Extornado','Negado','Ag. Pagamento na Entrega','Pago na Entrega'
+    ];
+    const style = PAY_STATUS_COLORS[payment] || PAY_STATUS_COLORS['Ag. Pagamento'];
     const options = opts.map(op=>`<option value="${op}" ${op===payment?'selected':''}>${op}</option>`).join('');
-    return `<select data-payment-select="${o._id}" style="${style}border:1px solid;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;outline:none;">
+    return `<select data-payment-select="${o._id}" style="${style}border:1px solid;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;outline:none;min-width:140px;">
       ${options}
     </select>`;
   }
 
-  // Time inputs — limpo, sem ícone de relógio
-  // Sem horário específico → exibe "00:00 - 00:00" em tom neutro
+  // Time inputs — amarelo quando sem horário específico, verde quando definido
   function timeInputs(o){
     const t1 = o.scheduledTime || '00:00';
     const t2 = o.scheduledTimeEnd || '00:00';
     const isSpecific = (t1 && t1!=='00:00') || (t2 && t2!=='00:00');
-    const clr = isSpecific ? '#059669' : '#9CA3AF';
+    const clr = isSpecific ? '#059669' : '#D97706';
     const inputStyle = `width:58px;padding:3px 0;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;color:${clr};background:transparent;outline:none;text-align:center;-webkit-appearance:none;`;
     return `<div style="display:inline-flex;gap:2px;align-items:center;">
       <input type="time" data-time-start="${o._id}" value="${t1}" style="${inputStyle}" />

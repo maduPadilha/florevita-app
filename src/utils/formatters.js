@@ -25,6 +25,32 @@ export const sc = s => ({
   'Pagar na Entrega':'tag-status tag-rota',
 }[s]||'tag-status tag-aguardando');
 
+// ── STATUS DE PAGAMENTO: mapa de cores (inline style) ────────
+// Usado em Dashboard, Pedidos, Financeiro — qualquer tela que mostre paymentStatus
+export const PAY_STATUS_COLORS = {
+  'Comprov. Enviado':        'background:#FEF08A;color:#713F12;border-color:#EAB308;',  // amarelo
+  'Ag. Comprovante':         'background:#FECACA;color:#7F1D1D;border-color:#DC2626;',  // vermelho
+  'Ag. Pagamento':           'background:#FDE68A;color:#78350F;border-color:#B45309;',  // âmbar/marrom
+  'Aprovado':                'background:#BBF7D0;color:#064E3B;border-color:#16A34A;',  // verde
+  'Cancelado':               'background:#1F2937;color:#F9FAFB;border-color:#111827;',  // preto
+  'Extornado':               'background:#5B21B6;color:#EDE9FE;border-color:#4C1D95;',  // roxo
+  'Negado':                  'background:#991B1B;color:#FEE2E2;border-color:#7F1D1D;',  // vermelho escuro
+  'Ag. Pagamento na Entrega':'background:#FCA5A5;color:#7F1D1D;border-color:#EF4444;',  // rosa-vermelho
+  'Pago na Entrega':         'background:#FED7AA;color:#7C2D12;border-color:#F97316;',  // laranja
+  // Aliases/compat
+  'Pago':                    'background:#BBF7D0;color:#064E3B;border-color:#16A34A;',
+  'Pendente':                'background:#FDE68A;color:#78350F;border-color:#B45309;',
+};
+export const PAY_STATUS_OPTIONS = [
+  'Comprov. Enviado','Ag. Comprovante','Ag. Pagamento','Aprovado',
+  'Cancelado','Extornado','Negado','Ag. Pagamento na Entrega','Pago na Entrega'
+];
+export function paymentStatusBadge(status){
+  const s = status || 'Ag. Pagamento';
+  const style = PAY_STATUS_COLORS[s] || PAY_STATUS_COLORS['Ag. Pagamento'];
+  return `<span style="${style}display:inline-block;border:1px solid;border-radius:20px;padding:2px 10px;font-size:10px;font-weight:700;white-space:nowrap;">${s}</span>`;
+}
+
 export const segc = s => ({'VIP':'t-rose','Recorrente':'t-green','Novo':'t-blue'}[s]||'t-gray');
 export const rolec = r => ({'Administrador':'t-rose','Gerente':'t-purple','Atendimento':'t-blue','Producao':'t-green','Expedicao':'t-gold','Financeiro':'t-gray','Entregador':'t-blue'}[r]||'t-gray');
 export const emoji = c => ({'Rosa':'🌹','Buquê':'💐','Orquídea':'🌸','Planta':'🌱','Kit':'🎁','Vaso':'🌿','Flor':'🌺','Coroa':'👑','Cesta':'🧺','Embalagem':'📦','Adicional':'✨'}[c]||'🌸');

@@ -1,5 +1,5 @@
 import { S } from '../state.js';
-import { $c, $d, sc, ini, esc } from '../utils/formatters.js';
+import { $c, $d, sc, ini, esc, paymentStatusBadge } from '../utils/formatters.js';
 import { PATCH } from '../services/api.js';
 import { toast } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
@@ -117,13 +117,17 @@ export function renderProducao(){
 </div>` : '';
 
   // Filter orders for selected date
-  // Regra de negócio: só entram em produção pedidos com paymentStatus === 'Aprovado'
-  // OU com payment (método) === 'Pagar na Entrega' (exceção: vai p/ produção imediato)
+  // Regra: vai para produção se pagamento aprovado/pago OU se é pagar-na-entrega
+  // Bloqueia: Cancelado, Negado, Extornado
+  const BLOQUEADOS_PROD = ['Cancelado','Negado','Extornado'];
+  const APROVADOS_PAG = ['Aprovado','Pago','Pago na Entrega'];
+
   const allQueue = S.orders.filter(o=>{
     if(!['Aguardando','Em preparo','Pronto'].includes(o.status)) return false;
     const payStatus = o.paymentStatus || 'Ag. Pagamento';
     const payMethod = o.payment || o.pagamento?.metodo || '';
-    if(payStatus === 'Aprovado') return true;
+    if(BLOQUEADOS_PROD.includes(payStatus)) return false;
+    if(APROVADOS_PAG.includes(payStatus)) return true;
     if(payMethod === 'Pagar na Entrega') return true;
     return false;
   });
@@ -133,7 +137,8 @@ export function renderProducao(){
     if(!['Aguardando','Em preparo','Pronto'].includes(o.status)) return false;
     const payStatus = o.paymentStatus || 'Ag. Pagamento';
     const payMethod = o.payment || o.pagamento?.metodo || '';
-    if(payStatus === 'Aprovado') return false;
+    if(APROVADOS_PAG.includes(payStatus)) return false;
+    if(BLOQUEADOS_PROD.includes(payStatus)) return false;
     if(payMethod === 'Pagar na Entrega') return false;
     return true;
   });
@@ -277,7 +282,7 @@ ${aguardandoPgtoDate.length>0 ? `
       <div style="background:#fff;border:1px solid #FCD34D;border-radius:var(--r);padding:10px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <span style="font-weight:700;color:var(--rose);font-size:13px">${o.orderNumber||'—'}</span>
-          <span class="tag t-gold" style="font-size:10px;">${o.paymentStatus||'Ag. Pagamento'}</span>
+          ${paymentStatusBadge(o.paymentStatus)}
         </div>
         <div style="font-size:12px;color:var(--ink2);margin-bottom:4px;">${esc(o.clientName||o.cliente?.nome||'—')}</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">💳 ${esc(o.payment||'—')} · ${$c(o.total)}</div>

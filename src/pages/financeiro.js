@@ -1,5 +1,5 @@
 import { S } from '../state.js';
-import { $c, $d, sc, rolec } from '../utils/formatters.js';
+import { $c, $d, sc, rolec, paymentStatusBadge } from '../utils/formatters.js';
 import { GET, POST, DELETE } from '../services/api.js';
 import { toast } from '../utils/helpers.js';
 import { can, findColab, getColabs } from '../services/auth.js';
@@ -127,8 +127,9 @@ export function renderFinanceiro(){
       ? S.orders.filter(o=>o.source==='E-commerce'||(o.source||'').toLowerCase().includes('ecomm'))
       : S.orders.filter(o=>o.unit===unit&&o.source!=='E-commerce')
     : S.orders;
-  const receitas = filteredOrders.filter(o=>o.paymentStatus==='Pago').reduce((s,o)=>s+(o.total||0),0);
-  const pendente = filteredOrders.filter(o=>o.paymentStatus!=='Pago'&&o.status!=='Cancelado').reduce((s,o)=>s+(o.total||0),0);
+  const PAGOS = ['Pago','Aprovado','Pago na Entrega'];
+  const receitas = filteredOrders.filter(o=>PAGOS.includes(o.paymentStatus)).reduce((s,o)=>s+(o.total||0),0);
+  const pendente = filteredOrders.filter(o=>!PAGOS.includes(o.paymentStatus)&&o.status!=='Cancelado'&&o.paymentStatus!=='Cancelado'&&o.paymentStatus!=='Negado'&&o.paymentStatus!=='Extornado').reduce((s,o)=>s+(o.total||0),0);
   const contas = S.financialEntries||[];
   const contasPagar = contas.filter(c=>c.type==='Despesa');
   const contasReceber = contas.filter(c=>c.type==='Receita');
@@ -168,7 +169,7 @@ ${vencidas.length>0?`<div class="alert al-err">⚠️ <strong>${vencidas.length}
       <td>${o.client?.name||o.clientName||'—'}</td>
       <td style="font-weight:600">${$c(o.total)}</td>
       <td><span class="tag t-gray">${o.payment||'—'}</span></td>
-      <td><span class="tag ${sc(o.paymentStatus||'Pendente')}">${o.paymentStatus||'Pendente'}</span></td>
+      <td>${paymentStatusBadge(o.paymentStatus||'Ag. Pagamento')}</td>
       <td style="color:var(--muted);font-size:11px">${$d(o.createdAt)}</td>
       <td>${o.paymentStatus!=='Pago'?`<button class="btn btn-green btn-xs" data-mark-paid="${o._id}">✅ Pago</button>`:''}</td>
     </tr>`).join('')}</tbody></table></div>`}
