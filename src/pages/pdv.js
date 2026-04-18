@@ -523,7 +523,10 @@ export async function _finalizePDV(){
     S._newOrderId = o._id;
     PDV.cart=[];PDV.discount=0;PDV.payment='Pix';PDV.clientId='';PDV.clientName='';PDV.clientPhone='';PDV.clientEmail='';PDV.recipient='';PDV.recipientPhone='';PDV.cardMessage='';PDV.notes='';PDV.deliveryDate='';PDV.deliveryPeriod='Manh\u00E3';PDV.deliveryTime='';PDV.street='';PDV.neighborhood='';PDV.number='';PDV.city='';PDV.cep='';PDV.reference='';PDV.isCondominium=false;PDV.condName='';PDV.block='';PDV.apt='';PDV.type='Delivery';PDV.deliveryFee=0;PDV.zone='';PDV.clientSearch='';PDV.pickupUnit='';PDV.saleUnit='';PDV.notifyClient=true;PDV.identifyClient=true;PDV._showQuickReg=false;
     S.loading=false;S.page='pedidos';
-    import('../main.js').then(m=>m.render()).catch(()=>{});
+    // Render da página de pedidos ANTES de montar o popup,
+    // para garantir que o modal-root não seja limpo depois.
+    const _mmod = await import('../main.js');
+    await _mmod.render();
     toast('\u2705 Pedido '+o.orderNumber+' criado!');
     // Popup resumo do pedido (código + entrega) + ações
     if(o?.orderNumber){
@@ -591,7 +594,7 @@ export async function _finalizePDV(){
           <button class="btn btn-ghost btn-sm" onclick="window._poFechar&&window._poFechar()">Fechar</button>
         </div>
       </div></div>`;
-      const mmod = await import('../main.js'); mmod.render();
+      await _mmod.render();
     }
   }catch(e){
     S.loading=false;

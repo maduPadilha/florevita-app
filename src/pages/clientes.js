@@ -163,12 +163,13 @@ export function tierBadgeHTML(totalOrdersOrClient, opts = {}){
   const totalOrders = (totalOrdersOrClient && typeof totalOrdersOrClient === 'object')
     ? (totalOrdersOrClient.totalOrders || 0)
     : totalOrdersOrClient;
-  const size = opts.size || 'md'; // sm|md|lg
-  const padding = size==='sm' ? '3px 9px' : size==='lg' ? '6px 14px' : '4px 11px';
-  const fontSize = size==='sm' ? '11px' : size==='lg' ? '14px' : '12px';
-  const iconSize = size==='sm' ? '13px' : size==='lg' ? '18px' : '15px';
+  const size = opts.size || 'md'; // xs|sm|md|lg
+  const padding = size==='xs' ? '2px 7px' : size==='sm' ? '3px 9px' : size==='lg' ? '6px 14px' : '4px 11px';
+  const fontSize = size==='xs' ? '10px' : size==='sm' ? '11px' : size==='lg' ? '14px' : '12px';
+  const iconSize = size==='xs' ? '11px' : size==='sm' ? '13px' : size==='lg' ? '18px' : '15px';
+  const gap = size==='xs' ? '3px' : '5px';
   const showCount = opts.showCount !== false;
-  return `<span title="Nível ${t.label}" style="display:inline-flex;align-items:center;gap:5px;background:${t.bg};color:${t.color};border:1px solid ${t.border};border-radius:20px;padding:${padding};font-size:${fontSize};font-weight:700;white-space:nowrap;line-height:1.2;">
+  return `<span title="Nível ${t.label}" style="display:inline-flex;align-items:center;gap:${gap};background:${t.bg};color:${t.color};border:1px solid ${t.border};border-radius:20px;padding:${padding};font-size:${fontSize};font-weight:700;white-space:nowrap;line-height:1.2;">
     <span style="font-size:${iconSize};line-height:1;">${t.icon}</span><span>${t.label}</span>${showCount ? `<span style="opacity:.75;font-weight:500;">· ${totalOrders} ped.</span>` : ''}
   </span>`;
 }
@@ -285,9 +286,9 @@ export function renderClientes(){
         <td style="color:var(--muted);font-size:12px">${c.phone||'\u2014'}</td>
         <td><span class="tag ${segc(c.segment||'Novo')}">${c.segment||'Novo'}</span></td>
         <td>
-          <div style="display:flex;flex-direction:column;gap:3px;">
-            <span style="font-weight:700;color:var(--rose);font-size:13px;">${c.totalOrders||0}</span>
-            ${tierBadgeHTML(c, {size:'sm', showCount:false})}
+          <div style="display:flex;flex-direction:row;align-items:center;gap:6px;white-space:nowrap;">
+            <span style="font-weight:800;color:var(--rose);font-size:16px;line-height:1;">${c.totalOrders||0}</span>
+            ${tierBadgeHTML(c, {size:'xs', showCount:false})}
           </div>
         </td>
         <td style="white-space:nowrap;">
