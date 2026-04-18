@@ -14,6 +14,7 @@ import { startPolling, stopPolling } from './services/polling.js';
 
 // Pages - import render functions
 import { renderLogin, bindLogin } from './pages/login.js';
+import { renderPedidoPublico, getPublicOrderIdFromURL } from './pages/pedido-publico.js';
 import { renderDashboard, selectedOrders } from './pages/dashboard.js';
 import { renderPDV, finalizePDV } from './pages/pdv.js';
 import { renderPedidos, showOrderViewModal, showEditOrderModal, advanceOrder } from './pages/pedidos.js';
@@ -1134,6 +1135,17 @@ export function render(){
   try{
     const root = document.getElementById('root');
     if(!root){ console.error('Elemento #root não encontrado'); return; }
+
+    // ── PÁGINA PÚBLICA /entrega/:id ──────────────────────────
+    // Acessada pelo QR code da comanda. Funciona sem login.
+    const publicOrderId = getPublicOrderIdFromURL();
+    if(publicOrderId){
+      root.innerHTML = renderPedidoPublico();
+      // Modal-root também é limpo (não queremos modais do sistema aqui)
+      const mrootP = document.getElementById('modal-root');
+      if(mrootP) mrootP.innerHTML = '';
+      return;
+    }
 
     if(!S.user){
       // URL sempre /login quando deslogado

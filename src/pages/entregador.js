@@ -155,9 +155,21 @@ export function renderAppEntregador(){
       </div>
       <div style="background:#FDF8F6;border-radius:10px;padding:10px;">
         <div style="font-size:9px;font-weight:700;color:#9E8070;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">Horario</div>
-        <div style="font-size:14px;font-weight:700">${o.scheduledPeriod||'—'}</div>
+        <div style="font-size:14px;font-weight:700">${o.scheduledTime||o.scheduledPeriod||'—'}</div>
       </div>
     </div>
+    ${(()=>{
+      const rawPhone = (o.clientPhone || o.client?.phone || o.client?.telefone || '').replace(/\D/g,'');
+      if(!rawPhone) return '';
+      const last6 = rawPhone.slice(-6);
+      return `<div style="background:#EEF2FF;border:1.5px dashed #6366F1;border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div>
+          <div style="font-size:9px;font-weight:700;color:#4338CA;text-transform:uppercase;letter-spacing:.5px;">📱 Contato do comprador</div>
+          <div style="font-size:14px;font-weight:800;color:#1E1B4B;margin-top:2px;">Final: <span style="font-family:monospace;letter-spacing:1px;">${last6}</span></div>
+          <div style="font-size:10px;color:#6366F1;margin-top:2px;">Use ao pedir ajuda ou para conferência</div>
+        </div>
+      </div>`;
+    })()}
     <div style="background:#EEF2FF;border-radius:10px;padding:12px;margin-bottom:12px;border:1px solid #C7D2FE;">
       <div style="font-size:9px;font-weight:700;color:#4338CA;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">📍 Endereco</div>
       <div style="font-size:13px;font-weight:600;color:#1E1B4B;margin-bottom:3px;">${o.deliveryAddress||'Nao informado'}</div>
@@ -303,15 +315,20 @@ export function pedirAjudaEntrega(orderId){
     .filter(Boolean).join(', ') || 'Não informado';
 
   const destinatario = o.recipient || o.client?.name || o.clientName || '—';
-  const recipPhone = o.recipientPhone || o.clientPhone || '';
+  const recipPhone = o.recipientPhone || '';
   const entregador = S.user?.name || 'Entregador';
   const orderNum = o.orderNumber || o.numero || String(o._id||'').slice(-5);
+
+  // Últimos 6 dígitos do telefone do comprador (não o destinatário)
+  const rawBuyerPhone = (o.clientPhone || o.client?.phone || o.client?.telefone || '').replace(/\D/g,'');
+  const buyerLast6 = rawBuyerPhone ? rawBuyerPhone.slice(-6) : '';
 
   const msg = [
     `🆘 *Preciso de ajuda com uma entrega*`,
     ``,
     `👤 *Entregador:* ${entregador}`,
     `📦 *Pedido:* #${orderNum}`,
+    buyerLast6 ? `📱 *Tel. comprador (final):* ${buyerLast6}` : '',
     `🎁 *Destinatário:* ${destinatario}${recipPhone?` (${recipPhone})`:''}`,
     `📍 *Endereço:* ${endereco}`,
     o.condName ? `🏢 *Complemento:* ${o.condName}${o.block?' Bl.'+o.block:''}${o.apt?' Ap.'+o.apt:''}` : '',

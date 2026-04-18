@@ -243,10 +243,10 @@ export function printComanda(orderId){
     </div>`;
   }).join('');
 
-  // ── QR CODE para dar baixa automatica ─────────────────────
-  const appBase = window.location.href.split('?')[0];
-  const qrUrl   = `${appBase}?deliver=${orderId}`;
-  const qrSrc   = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrUrl)}&margin=4&bgcolor=ffffff&color=1a1a1a`;
+  // ── QR CODE: leva para a página pública do pedido (sem login) ──
+  const appOrigin = window.location.origin; // ex: https://sistema.floriculturalacoseternos.com.br
+  const qrUrl   = `${appOrigin}/entrega/${orderId}`;
+  const qrSrc   = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrUrl)}&margin=4&bgcolor=ffffff&color=1a1a1a`;
 
   // ── BLOCO ENDERECO (reutilizado nas 2 vias) ────────────────
   const enderecoBlock = (accentColor) => `
