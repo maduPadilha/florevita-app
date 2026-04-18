@@ -40,15 +40,44 @@ const PAGE_SLUGS = {
 };
 const SLUG_TO_PAGE = Object.fromEntries(Object.entries(PAGE_SLUGS).map(([k,v])=>[v,k]));
 
+// Mapeamento de página → módulo de permissão
+const PAGE_TO_MOD = {
+  dashboard:'dashboard', pdv:'pdv', caixa:'caixa', pedidos:'orders',
+  clientes:'clients', produtos:'products', categorias:'products',
+  estoque:'stock', producao:'production', expedicao:'delivery',
+  ponto:'ponto', financeiro:'financial', relatorios:'reports',
+  alertas:'alertas', whatsapp:'whatsapp', usuarios:'users',
+  colaboradores:'users', impressao:'impressao', backup:'backup',
+  config:'config', ecommerce:'ecommerce', orcamento:'orcamentos',
+  entregador:'delivery',
+};
+
 export function setPage(p, pushHistory=true){
   if(_isEntregador()){ toast('❌ Acesso restrito'); return; }
+
+  // Valida permissão da página destino
+  const mod = PAGE_TO_MOD[p];
+  if(mod){
+    // Import dinâmico do can() para evitar circular dep
+    import('../services/auth.js').then(({ can }) => {
+      if(!can(mod)){
+        toast('🔒 Você não tem permissão para acessar este módulo', true);
+        return;
+      }
+      _doSetPage(p, pushHistory);
+    });
+    return;
+  }
+  _doSetPage(p, pushHistory);
+}
+
+function _doSetPage(p, pushHistory){
   if(p==='producao') S._prodDate = new Date().toISOString().split('T')[0];
   if(p==='orcamento'){ S._orcView='list'; S._orcDraft=null; S._orcDetail=null; }
   if(p==='relatorios'){ S._repView='list'; S._repDraft=null; }
   if(p==='categorias'){ S._catExpanded=null; }
   S.page=p; S.sidebarOpen=false;
   localStorage.setItem('fv_page', p);
-  // Atualizar URL sem recarregar
   const slug = PAGE_SLUGS[p] || p;
   if(pushHistory) history.pushState({page:p}, '', '/'+slug);
   import('../main.js').then(m => m.render()).catch(()=>{});

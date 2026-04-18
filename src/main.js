@@ -1257,6 +1257,46 @@ function renderApp(){
     {k:'orcamento',l:'Orçamentos',i:'📋',m:'orcamentos',s:'E-commerce'},
   ].filter(n=>can(n.m) && !(n.hide||[]).includes(_isEntregador()?'Entregador':S.user?.role));
 
+  // ── GUARDA DE ACESSO POR PÁGINA ─────────────────────────────
+  // Valida se o usuário tem permissão para acessar a página atual.
+  // Se não tem, redireciona para o primeiro módulo permitido no menu.
+  const pageToMod = {
+    dashboard:'dashboard', pdv:'pdv', caixa:'caixa', pedidos:'orders',
+    clientes:'clients', produtos:'products', categorias:'products',
+    estoque:'stock', producao:'production', expedicao:'delivery',
+    ponto:'ponto', financeiro:'financial', relatorios:'reports',
+    alertas:'alertas', whatsapp:'whatsapp', usuarios:'users',
+    colaboradores:'users', impressao:'impressao', backup:'backup',
+    config:'config', ecommerce:'ecommerce', orcamento:'orcamentos',
+    entregador:'delivery',
+  };
+  const currentMod = pageToMod[S.page];
+  if(currentMod && !can(currentMod)){
+    // Página atual não permitida — vai para a primeira do menu ou mostra vazio
+    if(nav.length > 0){
+      S.page = nav[0].k;
+      try{ localStorage.setItem('fv_page', S.page); }catch(_){}
+    } else {
+      // Nenhum módulo permitido — mostra tela de sem acesso
+      return `
+${renderSidebar(nav, 0, 0)}
+<div class="main">
+  ${renderTopbar()}
+  <div class="content">
+    <div class="card" style="text-align:center;padding:60px 30px;max-width:500px;margin:40px auto;">
+      <div style="font-size:60px;margin-bottom:20px;">🔒</div>
+      <h2 style="font-size:20px;color:var(--ink);margin-bottom:12px;">Acesso restrito</h2>
+      <p style="color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:20px;">
+        Seu usuário ainda não tem permissão para acessar nenhum módulo.<br>
+        Peça ao <strong>Administrador</strong> para liberar os módulos necessários em <strong>Colaboradores</strong>.
+      </p>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">Sair</button>
+    </div>
+  </div>
+</div>`;
+    }
+  }
+
   const pages={dashboard:renderDashboard,pdv:renderPDV,pedidos:renderPedidos,clientes:renderClientes,produtos:renderProdutos,estoque:renderEstoque,producao:renderProducao,expedicao:renderExpedicao,entregador:renderAppEntregador,financeiro:renderFinanceiro,relatorios:renderRelatorios,alertas:renderAlertas,usuarios:renderUsuarios,colaboradores:renderColaboradores,impressao:renderImpressao,config:renderConfig,ponto:renderPonto,caixa:renderCaixa,backup:renderBackup,whatsapp:renderWhatsApp,ecommerce:renderEcommerce,orcamento:renderOrcamento,categorias:renderCategorias};
   const content = (()=>{ try{ return pages[S.page] ? pages[S.page]() : `<div class="empty card"><div class="empty-icon">🌸</div><p>Em desenvolvimento</p></div>`; }catch(e){ console.error('[render '+S.page+']',e); return `<div class="card" style="color:var(--red);padding:20px;">⚠️ Erro ao carregar o módulo. <button onclick="setPage('dashboard')" class="btn btn-ghost btn-sm" style="margin-top:8px;">← Dashboard</button><br/><small style="color:var(--muted)">${e.message}</small></div>`; } })();
   const pendingAlerts = renderAlertas ? (() => { try { const a=renderAlertas(); return (a.match(/<div class="alert-item/g)||[]).length; } catch(e){ return 0; } })() : 0;

@@ -157,9 +157,30 @@ export function renderPonto() {
     return null;
   })();
 
-  // Determine which big buttons to show: Entrada (chegada) when not started, Saída (saida) when started but not closed
-  const canEntrada = !today || !today.chegada;
-  const canSaida = today && today.chegada && !today.saida;
+  // ── LÓGICA DOS 4 MOMENTOS DO PONTO ────────────────────────
+  // Sequência: Entrada → Saída Almoço → Volta Almoço → Saída Final
+  const hasCheg  = !!(today && today.chegada);
+  const hasSaidA = !!(today && today.saidaAlmoco);
+  const hasVoltA = !!(today && today.voltaAlmoco);
+  const hasSaida = !!(today && today.saida);
+
+  // Botão VERDE (registra "entrada-like"):
+  //   1. Sem chegada → registra chegada (Entrada)
+  //   2. Com saidaAlmoco mas sem voltaAlmoco → registra voltaAlmoco (Volta do almoço)
+  const canEntrada = (!hasCheg) || (hasSaidA && !hasVoltA);
+
+  // Botão LARANJA (registra "saida-like"):
+  //   1. Com chegada mas sem saidaAlmoco → registra saidaAlmoco (Saída p/ almoço)
+  //   2. Com voltaAlmoco mas sem saida → registra saida (Saída final)
+  const canSaida = (hasCheg && !hasSaidA) || (hasVoltA && !hasSaida);
+
+  // Labels dinâmicos dos botões conforme o momento atual
+  const entradaLabel = !hasCheg ? '\u2600\uFE0F Registrar Entrada'
+    : (hasSaidA && !hasVoltA) ? '\uD83D\uDD19 Volta do Almoço'
+    : '\u2600\uFE0F Entrada';
+  const saidaLabel = (hasCheg && !hasSaidA) ? '\uD83C\uDF7D\uFE0F Saída p/ Almoço'
+    : (hasVoltA && !hasSaida) ? '\uD83C\uDF19 Registrar Saída'
+    : '\uD83C\uDF19 Saída';
 
   const myCard = `
 <div class="card" style="max-width:640px;margin:0 auto 16px;">
@@ -194,19 +215,19 @@ export function renderPonto() {
   </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-    <button id="btn-ponto-entrada" ${!canEntrada && !canSaida ? 'disabled' : ''}
+    <button id="btn-ponto-entrada" ${!canEntrada ? 'disabled' : ''}
       style="padding:18px 14px;font-size:16px;font-weight:700;background:${canEntrada ? '#2D6A4F' : '#cbd5d1'};color:#fff;border:none;border-radius:var(--r);cursor:${canEntrada ? 'pointer' : 'not-allowed'};opacity:${canEntrada ? 1 : .55};transition:all .2s;">
-      \u2600\uFE0F Registrar Entrada
+      ${entradaLabel}
     </button>
     <button id="btn-ponto-saida" ${!canSaida ? 'disabled' : ''}
       style="padding:18px 14px;font-size:16px;font-weight:700;background:${canSaida ? '#E07B00' : '#cbd5d1'};color:#fff;border:none;border-radius:var(--r);cursor:${canSaida ? 'pointer' : 'not-allowed'};opacity:${canSaida ? 1 : .55};transition:all .2s;">
-      \uD83C\uDF19 Registrar Saída
+      ${saidaLabel}
     </button>
   </div>
 
-  ${today && today.chegada && !today.saida ? `
+  ${hasCheg && !hasSaida ? `
     <div style="margin-top:10px;text-align:center;font-size:11px;color:var(--muted)">
-      Os pontos intermediários (almoço) serão lançados pelo botão de Entrada/Saída na sequência
+      ${!hasSaidA ? '\u2728 Pr\u00F3ximo: Sa\u00EDda para almo\u00E7o' : !hasVoltA ? '\u2728 Pr\u00F3ximo: Volta do almo\u00E7o' : '\u2728 Pr\u00F3ximo: Sa\u00EDda final'}
     </div>` : ''}
 
   ${today && today.saida ? `
