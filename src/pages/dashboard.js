@@ -143,11 +143,12 @@ export function renderDashboard(){
   }
 
   // Time inputs — limpo, sem ícone de relógio
+  // Sem horário específico → exibe "00:00 - 00:00" em tom neutro
   function timeInputs(o){
-    const t1 = o.scheduledTime || '';
-    const t2 = o.scheduledTimeEnd || '';
+    const t1 = o.scheduledTime || '00:00';
+    const t2 = o.scheduledTimeEnd || '00:00';
     const isSpecific = (t1 && t1!=='00:00') || (t2 && t2!=='00:00');
-    const clr = isSpecific ? '#059669' : '#D97706';
+    const clr = isSpecific ? '#059669' : '#9CA3AF';
     const inputStyle = `width:58px;padding:3px 0;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;color:${clr};background:transparent;outline:none;text-align:center;-webkit-appearance:none;`;
     return `<div style="display:inline-flex;gap:2px;align-items:center;">
       <input type="time" data-time-start="${o._id}" value="${t1}" style="${inputStyle}" />
