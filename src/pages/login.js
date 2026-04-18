@@ -104,7 +104,7 @@ export function renderLogin(){
 <div class="auth-card">
   <div class="auth-logo">
     ${logoUrl
-      ? `<img src="${logoUrl}" alt="Logo" style="max-width:180px;max-height:90px;object-fit:contain;"/>`
+      ? `<img src="${logoUrl}" alt="Logo" style="max-width:260px;max-height:160px;object-fit:contain;"/>`
       : `<div style="font-family:'Playfair Display',serif;font-size:26px;color:var(--rose);font-weight:600;">Laços Eternos 🌸</div>`}
     <span class="sub" style="margin-top:4px;">Sistema de Gestão</span>
   </div>
