@@ -1,5 +1,5 @@
 import { S } from '../state.js';
-import { $c, $d, sc, ini, esc } from '../utils/formatters.js';
+import { $c, $d, sc, ini, esc, fmtOrderNum } from '../utils/formatters.js';
 import { PATCH } from '../services/api.js';
 import { toast } from '../utils/helpers.js';
 import { findColab, _isEntregador } from '../services/auth.js';
@@ -125,7 +125,7 @@ export function renderAppEntregador(){
     <div style="display:flex;align-items:center;gap:10px;">
       <div style="background:${isUrg?'#EF4444':'#C8736A'};color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${idx+1}</div>
       <div>
-        <div style="font-weight:800;font-size:15px;color:${isUrg?'#991B1B':'#C8736A'}">${o.orderNumber}</div>
+        <div style="font-weight:800;font-size:15px;color:${isUrg?'#991B1B':'#C8736A'}">${fmtOrderNum(o)}</div>
         <div style="font-size:10px;color:#9E8070">${o.scheduledPeriod||''} ${o.scheduledDate?'· '+$d(o.scheduledDate):''}</div>
       </div>
     </div>

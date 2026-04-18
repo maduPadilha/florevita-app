@@ -7,6 +7,7 @@ import { can, findColab } from '../services/auth.js';
 import { invalidateCache } from '../services/cache.js';
 import { opcoesPermitidas, isAdmin, normalizeUnidade, labelUnidade, podeCriarPedido } from '../utils/unidadeRules.js';
 import { tierBadgeHTML, getClientWithStats } from './clientes.js';
+import { fmtOrderNum } from '../utils/formatters.js';
 
 let _pdvLock = false;
 
@@ -52,7 +53,7 @@ function showPostOrderPopup(o){
         <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
           <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;margin-bottom:10px;border-bottom:1px dashed #E5E7EB;">
             <span style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Código</span>
-            <span style="font-size:22px;font-weight:900;color:#8B2252;font-family:'Playfair Display',serif;">${o.orderNumber}</span>
+            <span style="font-size:22px;font-weight:900;color:#8B2252;font-family:'Playfair Display',serif;">${fmtOrderNum(o)}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;margin-bottom:10px;border-bottom:1px dashed #E5E7EB;">
             <span style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Entrega</span>
@@ -665,7 +666,7 @@ export async function _finalizePDV(){
     // Garante que o objeto exibido no popup tem orderNumber
     o.orderNumber = orderNum;
     console.log('[PDV popup] Pedido criado:', orderNum, '| objeto:', o);
-    toast('\u2705 Pedido '+orderNum+' criado!');
+    toast('\u2705 Pedido '+fmtOrderNum(o)+' criado!');
 
     // Render do PDV (limpo, já resetado) — popup é criado fora do render
     if(typeof window.render === 'function') window.render();

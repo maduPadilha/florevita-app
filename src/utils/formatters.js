@@ -11,6 +11,13 @@ export const $d = d => {
 };
 export const ini = n => n ? n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase() : '?';
 
+// Formata código do pedido: sempre #XXXXX (sem prefixo PED-)
+export const fmtOrderNum = (o) => {
+  const raw = (o?.orderNumber || o?.numero || o || '').toString();
+  const clean = raw.replace(/^#/,'').replace(/^PED-?/i,'').trim();
+  return clean ? '#' + clean : '—';
+};
+
 export const sc = s => ({
   'Entregue':        'tag-status tag-entregue',
   'Em preparo':      'tag-status tag-preparo',

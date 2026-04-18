@@ -1,5 +1,5 @@
 import { S } from '../state.js';
-import { $c, $d, sc, ini, esc } from '../utils/formatters.js';
+import { $c, $d, sc, ini, esc, fmtOrderNum } from '../utils/formatters.js';
 import { PATCH, PUT } from '../services/api.js';
 import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab, getColabs } from '../services/auth.js';
@@ -277,7 +277,7 @@ ${forDate.length===0?`
 ${emProducao.length>0?`
 <div class="alert al-warn" style="margin-bottom:14px;">
   ⚠️ <strong>${emProducao.length} pedido(s) ainda em produção</strong> para ${isToday?'hoje':$d(selectedDate)}:
-  ${emProducao.map(o=>`<span style="margin-left:8px;font-weight:600">${o.orderNumber}</span>`).join('')}
+  ${emProducao.map(o=>`<span style="margin-left:8px;font-weight:600">${fmtOrderNum(o)}</span>`).join('')}
 </div>`:''}
 
 <div class="g2">
@@ -291,7 +291,7 @@ ${emProducao.length>0?`
       <div style="background:var(--leaf-l);border-radius:var(--r);padding:14px;margin-bottom:10px;border:1px solid rgba(45,106,79,.2);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-weight:700;color:var(--rose);font-size:15px">${o.orderNumber}</span>
+            <span style="font-weight:700;color:var(--rose);font-size:15px">${fmtOrderNum(o)}</span>
             ${o.isPriority?`<span class="tag t-red">🔴 PRIORIDADE</span>`:''}
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -362,7 +362,7 @@ ${emProducao.length>0?`
       ${emRota.map(o=>`
       <div style="background:var(--purple-l);border-radius:var(--r);padding:12px;margin-bottom:8px;border:1px solid rgba(124,58,237,.2);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
-          <span style="font-weight:700;color:var(--rose)">${o.orderNumber}</span>
+          <span style="font-weight:700;color:var(--rose)">${fmtOrderNum(o)}</span>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             ${o.driverName?`<span style="background:var(--blue);color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600;">🚚 ${o.driverName}</span>`:''}
             ${(o.assignedDeliveryFee||o.deliveryFee)?`<span style="background:var(--leaf-l);color:var(--leaf);border:1px solid rgba(34,197,94,.3);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">\uD83D\uDCB0 Taxa ${$c(o.assignedDeliveryFee||o.deliveryFee)}</span>`:''}
@@ -398,7 +398,7 @@ export async function showConfirmDeliveryModal(orderId){
     : '';
 
   S._modal=`<div class="mo" id="mo"><div class="mo-box" style="max-width:480px;" onclick="event.stopPropagation()">
-  <div class="mo-title">✅ Confirmar Entrega — ${o.orderNumber}</div>
+  <div class="mo-title">✅ Confirmar Entrega — ${fmtOrderNum(o)}</div>
 
   <div style="background:var(--cream);border-radius:var(--r);padding:12px;margin-bottom:14px;font-size:12px;">
     <div style="font-weight:600;margin-bottom:4px;">📦 ${(o.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}</div>

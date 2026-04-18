@@ -1,6 +1,6 @@
 // ── CAIXA ─────────────────────────────────────────────────────
 import { S } from '../state.js';
-import { $c, $d } from '../utils/formatters.js';
+import { $c, $d, fmtOrderNum } from '../utils/formatters.js';
 import { GET, POST } from '../services/api.js';
 import { toast } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
@@ -137,7 +137,7 @@ ${Object.keys(dinheiroPorEntregador).length > 0 ? `
       <div style="font-weight:800;font-size:16px;color:#F97316;">${$c(info.total)}</div>
     </div>
     <div style="font-size:11px;color:var(--muted);">
-      ${info.pedidos.length} entrega(s): ${info.pedidos.map(p => p.orderNumber).join(', ')}
+      ${info.pedidos.length} entrega(s): ${info.pedidos.map(p => fmtOrderNum(p)).join(', ')}
     </div>
   </div>`).join('')}
 </div>` : ''}
@@ -157,7 +157,7 @@ ${Object.keys(dinheiroPorEntregador).length > 0 ? `
     ${pedidosHoje.map(o => `<tr>
       <td>${new Date(o.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
       <td><span class="tag t-rose">Venda</span></td>
-      <td>${o.orderNumber} \u2014 ${o.client?.name || o.clientName || '\u2014'} (${o.payment})</td>
+      <td>${fmtOrderNum(o)} \u2014 ${o.client?.name || o.clientName || '\u2014'} (${o.payment})</td>
       <td style="font-weight:600;color:var(--rose)">+ ${$c(o.total)}</td>
     </tr>`).join('')}
     ${caixaHoje.fechamento ? `<tr style="background:var(--cream)">

@@ -1136,9 +1136,18 @@ export function render(){
     if(!root){ console.error('Elemento #root não encontrado'); return; }
 
     if(!S.user){
+      // URL sempre /login quando deslogado
+      if(window.location.pathname !== '/login'){
+        history.replaceState({page:'login'}, '', '/login');
+      }
       root.innerHTML = renderLogin();
       try{bindLogin();}catch(e){console.error('bindLogin',e);}
     } else {
+      // Se logado e URL é /login, redireciona para dashboard (ou página anterior)
+      if(window.location.pathname === '/login'){
+        const targetSlug = (S.page && S.page !== 'login') ? S.page : 'dashboard';
+        history.replaceState({page:targetSlug}, '', '/'+targetSlug);
+      }
       root.innerHTML = renderApp();
       try{ bindApp(); }catch(e){ console.error('bindApp erro:',e); }
     }

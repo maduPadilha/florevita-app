@@ -1,5 +1,5 @@
 import { S } from '../state.js';
-import { $c, $d, sc, ini, esc, paymentStatusBadge } from '../utils/formatters.js';
+import { $c, $d, sc, ini, esc, paymentStatusBadge, fmtOrderNum } from '../utils/formatters.js';
 import { PATCH } from '../services/api.js';
 import { toast } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
@@ -217,7 +217,7 @@ ${shiftFiltered.map(o=>{
     ${isLate?`<div class="tag t-red" style="margin-bottom:8px">🔴 ATRASADO</div>`:isUrgent?`<div class="tag t-gold" style="margin-bottom:8px">⚡ URGENTE</div>`:''}
     ${o.payment==='Pagar na Entrega'?`<div class="tag t-gold" style="margin-bottom:6px;">💰 Cobrar na Entrega: ${$c(o.total)}</div>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <span style="font-weight:700;color:var(--rose);font-size:16px">${o.orderNumber}</span>
+      <span style="font-weight:700;color:var(--rose);font-size:16px">${fmtOrderNum(o)}</span>
       <span class="tag ${sc(o.status)}">${o.status}</span>
     </div>
 

@@ -1,5 +1,5 @@
 import { S } from '../state.js';
-import { $c, $d, sc } from '../utils/formatters.js';
+import { $c, $d, sc, fmtOrderNum } from '../utils/formatters.js';
 import { toast } from '../utils/helpers.js';
 import { checkDatasEspeciaisAlertas } from './clientes.js';
 
@@ -19,9 +19,9 @@ export function renderAlertas(){
     if(!o.scheduledDate) return;
     const diff = new Date(o.scheduledDate).getTime() - now;
     if(diff<0){
-      alertas.push({icon:'\u{1F6A8}',tipo:'Pedido Atrasado',msg:`${o.orderNumber} \u2014 ${o.client?.name||o.clientName||'\u2014'}`,cor:'var(--red)',lido:false,ts:new Date(o.scheduledDate)});
+      alertas.push({icon:'\u{1F6A8}',tipo:'Pedido Atrasado',msg:`${fmtOrderNum(o)} \u2014 ${o.client?.name||o.clientName||'\u2014'}`,cor:'var(--red)',lido:false,ts:new Date(o.scheduledDate)});
     } else if(diff < 2*60*60*1000){
-      alertas.push({icon:'\u23F0',tipo:'Entrega em 2h',msg:`${o.orderNumber} \u2014 ${o.client?.name||o.clientName||'\u2014'}`,cor:'var(--gold)',lido:false,ts:new Date(o.scheduledDate)});
+      alertas.push({icon:'\u23F0',tipo:'Entrega em 2h',msg:`${fmtOrderNum(o)} \u2014 ${o.client?.name||o.clientName||'\u2014'}`,cor:'var(--gold)',lido:false,ts:new Date(o.scheduledDate)});
     }
   });
 
@@ -35,13 +35,13 @@ export function renderAlertas(){
 
   // Pedidos recentes (ultimos 30 min)
   S.orders.filter(o=>{const d=new Date(o.createdAt);return now-d.getTime()<30*60*1000;}).slice(0,3).forEach(o=>{
-    alertas.push({icon:'\u{1F6CD}\uFE0F',tipo:'Novo Pedido',msg:`${o.orderNumber} \u2014 ${o.client?.name||o.clientName||'\u2014'} \u00B7 ${$c(o.total)}`,cor:'var(--blue)',lido:false,ts:new Date(o.createdAt)});
+    alertas.push({icon:'\u{1F6CD}\uFE0F',tipo:'Novo Pedido',msg:`${fmtOrderNum(o)} \u2014 ${o.client?.name||o.clientName||'\u2014'} \u00B7 ${$c(o.total)}`,cor:'var(--blue)',lido:false,ts:new Date(o.createdAt)});
   });
 
   // Pedidos entregues hoje
   const hoje=new Date().toDateString();
   S.orders.filter(o=>o.status==='Entregue'&&new Date(o.updatedAt||o.createdAt).toDateString()===hoje).slice(0,3).forEach(o=>{
-    alertas.push({icon:'\u2705',tipo:'Entrega Confirmada',msg:`${o.orderNumber} \u2014 ${o.driverName?'por '+o.driverName:''}`,cor:'var(--leaf)',lido:true,ts:new Date(o.updatedAt||o.createdAt)});
+    alertas.push({icon:'\u2705',tipo:'Entrega Confirmada',msg:`${fmtOrderNum(o)} \u2014 ${o.driverName?'por '+o.driverName:''}`,cor:'var(--leaf)',lido:true,ts:new Date(o.updatedAt||o.createdAt)});
   });
 
   // Datas Especiais — alertas 1 dia antes (ou no dia)

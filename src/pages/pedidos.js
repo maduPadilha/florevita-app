@@ -1,5 +1,5 @@
 import { S, BAIRROS_MANAUS } from '../state.js';
-import { $c, $d, sc, ini, esc } from '../utils/formatters.js';
+import { $c, $d, sc, ini, esc, fmtOrderNum } from '../utils/formatters.js';
 import { PUT, PATCH, DELETE } from '../services/api.js';
 import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
@@ -297,7 +297,7 @@ export function showOrderViewModal(orderId){
   <!-- Header -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">
     <div>
-      <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--rose)">Pedido ${o.orderNumber}</div>
+      <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--rose)">Pedido ${fmtOrderNum(o)}</div>
       <div style="font-size:11px;color:var(--muted);margin-top:2px">${$d(o.createdAt)} — ${o.unit||'—'}</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
@@ -449,7 +449,7 @@ export function showEditOrderModal(orderId){
   <!-- Titulo -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">
     <div>
-      <div style="font-family:'Playfair Display',serif;font-size:18px;">✏️ Editar Pedido — ${o.orderNumber}</div>
+      <div style="font-family:'Playfair Display',serif;font-size:18px;">✏️ Editar Pedido — ${fmtOrderNum(o)}</div>
       <div style="font-size:11px;color:var(--muted);margin-top:2px">${o.client?.name||o.clientName||'—'}</div>
     </div>
     <button onclick="S._modal='';render();" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">×</button>
