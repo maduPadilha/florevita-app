@@ -1,5 +1,5 @@
 // ── CONFIGURACOES ────────────────────────────────────────────
-import { S, API } from '../state.js';
+import { S, API, DELIVERY_FEES as _DELIVERY_FEES_STATE, saveDeliveryFees as _saveDeliveryFees_STATE, setDeliveryFees } from '../state.js';
 import { $c, $d } from '../utils/formatters.js';
 import { toast, setPage } from '../utils/helpers.js';
 import { api } from '../services/api.js';
@@ -14,10 +14,11 @@ async function render(){
   r();
 }
 
-// ── DELIVERY FEES (kept in localStorage) ─────────────────────
-// Taxas de entrega — totalmente vazias por padrão, admin configura
-let DELIVERY_FEES = JSON.parse(localStorage.getItem('fv_delivery_fees')||'{}');
-function saveDeliveryFees(){ localStorage.setItem('fv_delivery_fees',JSON.stringify(DELIVERY_FEES)); }
+// ── DELIVERY FEES — fonte única: state.js ─────────────────────
+// Usa a mesma referência que o PDV (importada de state.js) para garantir
+// que edições no admin refletem imediatamente no cálculo de frete.
+const DELIVERY_FEES = _DELIVERY_FEES_STATE;
+const saveDeliveryFees = _saveDeliveryFees_STATE;
 export { DELIVERY_FEES, saveDeliveryFees };
 
 // ── CONFIG LOAD/SAVE (migrated to API with localStorage fallback) ──

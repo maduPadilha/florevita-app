@@ -57,10 +57,11 @@ export let S = {
   _dashDate: 'today',
 };
 
-// PDV state
-export let DELIVERY_FEES = JSON.parse(localStorage.getItem('fv_delivery_fees')||'{"Manaus":{"Zona Centro":15,"Zona Norte":20,"Zona Sul":18,"Zona Leste":20,"Zona Oeste":18,"Outros":25}}');
+// PDV state — taxas de entrega são definidas pelo admin nas Configurações
+// (sem defaults hardcoded; começa vazio e o admin cadastra cidades/zonas)
+export let DELIVERY_FEES = JSON.parse(localStorage.getItem('fv_delivery_fees')||'{}');
 export function saveDeliveryFees(){ localStorage.setItem('fv_delivery_fees',JSON.stringify(DELIVERY_FEES)); }
-export function setDeliveryFees(fees){ DELIVERY_FEES = fees; }
+export function setDeliveryFees(fees){ DELIVERY_FEES = fees; saveDeliveryFees(); }
 
 export let PDV = {
   cart:[], discount:0, payment:'Pix',
