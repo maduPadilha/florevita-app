@@ -60,21 +60,72 @@ export function loadSession(){
 }
 
 // Revalida user no backend — atualiza S.user com permissões frescas
-async function refreshUserFromBackend(){
+// Exportado para permitir chamada manual após mudanças de permissão.
+export async function refreshUserFromBackend(silent = false){
+  if(!S.token) return;
   try{
     const res = await fetch(API+'/auth/validate', {
       headers: { 'Authorization': 'Bearer '+S.token },
       signal: AbortSignal.timeout(10000),
     });
-    if(!res.ok) return;
+    if(!res.ok){
+      // Token inválido/expirado — força logout
+      if(res.status === 401){
+        console.warn('[auth] Token inválido — fazendo logout');
+        localStorage.removeItem('fv2_token');
+        localStorage.removeItem('fv2_user');
+        S.user = null; S.token = null;
+        import('../main.js').then(m => m.render()).catch(()=>{});
+      }
+      return;
+    }
     const d = await res.json().catch(()=>null);
-    if(d?.user){
-      const freshUser = { ...S.user, ...d.user };
-      S.user = freshUser;
-      localStorage.setItem('fv2_user', JSON.stringify(freshUser));
+    if(!d?.user) return;
+
+    // Detecta se houve mudança nas permissões
+    const oldMod = JSON.stringify(S.user?.modulos || {});
+    const newMod = JSON.stringify(d.user?.modulos || {});
+    const changed = oldMod !== newMod || S.user?.active !== d.user?.active;
+
+    // Se foi desativado, força logout
+    if(d.user.active === false){
+      try{ toast('⚠️ Seu acesso foi desativado pelo administrador', true); }catch(_){}
+      localStorage.removeItem('fv2_token');
+      localStorage.removeItem('fv2_user');
+      S.user = null; S.token = null;
+      import('../main.js').then(m => m.render()).catch(()=>{});
+      return;
+    }
+
+    // Merge: dados do backend têm prioridade sobre cache local
+    const freshUser = { ...S.user, ...d.user, modulos: d.user.modulos };
+    S.user = freshUser;
+    localStorage.setItem('fv2_user', JSON.stringify(freshUser));
+
+    // Se mudou permissão enquanto está logado, avisa e re-renderiza
+    if(changed && !silent){
+      try{ toast('🔄 Suas permissões foram atualizadas'); }catch(_){}
+      import('../main.js').then(m => m.render()).catch(()=>{});
+    } else if(changed){
       import('../main.js').then(m => m.render()).catch(()=>{});
     }
   }catch(e){ /* offline — mantém cache local */ }
+}
+
+// ── POLLING DE PERMISSÕES ─────────────────────────────────────
+// Revalida a cada 60s se o usuário continua autorizado
+// e se os módulos foram alterados pelo admin.
+let _permPollTimer = null;
+export function startPermissionPolling(){
+  if(_permPollTimer) return;
+  _permPollTimer = setInterval(() => {
+    if(S.token && S.user){
+      refreshUserFromBackend(true).catch(()=>{});
+    }
+  }, 60000); // 60 segundos
+}
+export function stopPermissionPolling(){
+  if(_permPollTimer){ clearInterval(_permPollTimer); _permPollTimer = null; }
 }
 
 // Atualiza timestamp de atividade em qualquer interação
@@ -87,8 +138,17 @@ async function refreshUserFromBackend(){
 export function logout(){
   // stopPolling is in polling.js — import dynamically to avoid circular deps
   import('./polling.js').then(m => { if(m.stopPolling) m.stopPolling(); }).catch(()=>{});
-  localStorage.removeItem('fv2_token');
-  localStorage.removeItem('fv2_user');
+  // Para também o polling de permissões
+  stopPermissionPolling();
+  // Limpa todos os caches de sessão
+  try{
+    localStorage.removeItem('fv2_token');
+    localStorage.removeItem('fv2_user');
+    localStorage.removeItem('fv_page');
+    localStorage.removeItem('fv_colabs');
+    localStorage.removeItem('fv_user_extra');
+    localStorage.removeItem('fv_perms');
+  }catch(e){}
   S.user = null;
   S.token = null;
   import('../main.js').then(m => m.render());
@@ -194,6 +254,7 @@ export async function doLogin(email, pass){
       _redirectAfterLogin(user, colab);
       import('../main.js').then(m => m.render());
       import('./polling.js').then(m => m.startPolling(8000));
+      startPermissionPolling();
       if(!colab){
         import('../pages/backup.js').then(m => { if(m.startAutoBackup) m.startAutoBackup(); }).catch(()=>{});
       }

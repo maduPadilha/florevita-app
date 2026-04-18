@@ -6,7 +6,8 @@ import { $c, $d, sc, ini, esc } from './utils/formatters.js';
 import { GET, POST, PUT, PATCH, DELETE } from './services/api.js';
 import { saveSession, loadSession, logout, doLogin, _isEntregador, can,
          getColabs, saveColabs, findColab, autoSyncColabsFromUsers,
-         mergeUserExtra, getUserPerms, setUserPerms, getHiddenUsers } from './services/auth.js';
+         mergeUserExtra, getUserPerms, setUserPerms, getHiddenUsers,
+         refreshUserFromBackend, startPermissionPolling, stopPermissionPolling } from './services/auth.js';
 import { loadData, recarregarDados, saveCachedData, loadCachedData,
          invalidateCache, mergeDriverAssignments, saveDriverAssignment } from './services/cache.js';
 import { startPolling, stopPolling } from './services/polling.js';
@@ -2452,10 +2453,13 @@ async function init(){
     history.replaceState({page:S.page}, '', '/'+slug);
     S.loading = false;
     render();              // user sees UI immediately (com cache)
-    // 2. Busca dados frescos em background — NÃO espera
+    // 2. Revalida permissões AGORA no backend (sem esperar — UI já renderizou)
+    refreshUserFromBackend(true).catch(()=>{});
+    // 3. Busca dados frescos em background — NÃO espera
     loadData();            // não-bloqueante: fase crítica + background interno
     startPolling(8000);
     startAutoBackup();
+    startPermissionPolling();  // revalida permissões a cada 60s
 
     // ── Processa QR de entrega após dados carregarem ──────────────
     if(S._pendingDeliveryQR){
