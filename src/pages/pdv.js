@@ -10,6 +10,108 @@ import { tierBadgeHTML, getClientWithStats } from './clientes.js';
 
 let _pdvLock = false;
 
+// ── POPUP PÓS-PEDIDO — imune a renders do sistema ─────────────
+// Injeta overlay direto em document.body. Não usa S._modal nem render().
+function showPostOrderPopup(o){
+  // Remove qualquer popup anterior
+  const old = document.getElementById('po-overlay');
+  if(old) old.remove();
+
+  const dataEntrega = o.scheduledDate
+    ? new Date(o.scheduledDate).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})
+    : '—';
+  const turno = o.scheduledPeriod || '';
+  const hora  = o.scheduledTime  || '';
+  const horaLabel = [turno, hora].filter(Boolean).join(' · ');
+  const isPagarNaEntrega = (o.payment === 'Pagar na Entrega');
+  const totalFmt = 'R$ ' + (o.total||0).toFixed(2).replace('.',',');
+  const trocoInfo = (isPagarNaEntrega && o.paymentOnDelivery==='Dinheiro' && o.trocoPara && parseFloat(o.trocoPara) > (o.total||0))
+    ? ` · Troco p/ R$ ${parseFloat(o.trocoPara).toFixed(2).replace('.',',')}` : '';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'po-overlay';
+  overlay.setAttribute('style',
+    'position:fixed;top:0;left:0;right:0;bottom:0;' +
+    'background:rgba(0,0,0,.55);z-index:2147483647;' +
+    'display:flex;align-items:center;justify-content:center;' +
+    'padding:20px;box-sizing:border-box;' +
+    'animation:po-fadein .2s ease-out;'
+  );
+
+  overlay.innerHTML = `
+    <style>
+      @keyframes po-fadein { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes po-slideup { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+    <div style="background:#fff;border-radius:20px;max-width:440px;width:100%;overflow:hidden;box-shadow:0 25px 70px rgba(0,0,0,.3);animation:po-slideup .25s ease-out;">
+      <div style="background:#1F5C2E;padding:22px 24px 18px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.8);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Laços Eternos 🌸</div>
+        <div style="font-family:'Playfair Display',serif;font-size:20px;color:#fff;font-weight:600;">✅ Pedido lançado!</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#F0FDF4,#fff);padding:24px;">
+        <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;margin-bottom:10px;border-bottom:1px dashed #E5E7EB;">
+            <span style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Código</span>
+            <span style="font-size:22px;font-weight:900;color:#8B2252;font-family:'Playfair Display',serif;">${o.orderNumber}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;margin-bottom:10px;border-bottom:1px dashed #E5E7EB;">
+            <span style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Entrega</span>
+            <div style="text-align:right;">
+              <div style="font-size:13px;font-weight:700;color:#333;">${dataEntrega}</div>
+              ${horaLabel?`<div style="font-size:11px;color:#6B7280;">${horaLabel}</div>`:''}
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Pagamento</span>
+            <div style="text-align:right;">
+              <div style="font-size:13px;font-weight:700;color:#333;">${o.payment||'—'}${trocoInfo}</div>
+              <div style="font-size:13px;color:#1F5C2E;font-weight:700;">${totalFmt}</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="po-btn-imprimir" style="flex:1;min-width:140px;background:#8B2252;color:#fff;border:none;padding:13px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Imprimir Pedido</button>
+          ${!isPagarNaEntrega
+            ? `<button id="po-btn-aprovar" style="flex:1;min-width:140px;background:#1F5C2E;color:#fff;border:none;padding:13px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">✅ Aprovar Pagamento</button>`
+            : `<div style="flex:1;min-width:140px;background:#FFF8E1;border:1px dashed #B7860F;border-radius:10px;padding:10px;font-size:11px;color:#8B6914;text-align:center;line-height:1.3;display:flex;align-items:center;justify-content:center;">🚚 Pagamento confirmado pelo entregador</div>`}
+        </div>
+      </div>
+      <div style="padding:14px 24px 18px;background:#fff;text-align:center;border-top:1px solid #F3F4F6;">
+        <button id="po-btn-fechar" style="background:transparent;color:#6B7280;border:1px solid #E5E7EB;padding:8px 24px;border-radius:8px;font-size:12px;cursor:pointer;">Fechar</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  console.log('[PDV popup] Overlay injetado no body. Elemento:', overlay);
+
+  const closeOverlay = () => { overlay.remove(); };
+
+  // Click fora do card fecha
+  overlay.addEventListener('click', e => {
+    if(e.target === overlay) closeOverlay();
+  });
+
+  // Botões
+  overlay.querySelector('#po-btn-fechar')?.addEventListener('click', closeOverlay);
+  overlay.querySelector('#po-btn-imprimir')?.addEventListener('click', () => {
+    import('../pages/impressao.js').then(m => {
+      if(m.printComanda) m.printComanda(o._id);
+    }).catch(err => console.warn('[PDV popup] printComanda erro:', err));
+  });
+  overlay.querySelector('#po-btn-aprovar')?.addEventListener('click', async () => {
+    try{
+      await PATCH('/orders/'+o._id+'/payment', { paymentStatus:'Pago' });
+      S.orders = S.orders.map(x => x._id===o._id ? {...x, paymentStatus:'Pago'} : x);
+      invalidateCache('orders');
+      toast('✅ Pagamento aprovado!');
+      closeOverlay();
+    }catch(e){
+      toast('Erro ao aprovar: '+(e.message||''));
+    }
+  });
+}
+
 export function renderPDV(){
   if(!can('pdv')) return `<div class="empty card"><div class="empty-icon">&#x1F6AB;</div><p>Sem permiss\u00e3o</p></div>`;
   // ── Regras de unidade (multi-unit) ───────────────────────────
@@ -550,82 +652,21 @@ export async function _finalizePDV(){
     // Pergunta se quer imprimir comanda
     S._newOrderId = o._id;
     PDV.cart=[];PDV.discount=0;PDV.payment='Pix';PDV.clientId='';PDV.clientName='';PDV.clientPhone='';PDV.clientEmail='';PDV.recipient='';PDV.recipientPhone='';PDV.cardMessage='';PDV.notes='';PDV.deliveryDate='';PDV.deliveryPeriod='Manh\u00E3';PDV.deliveryTime='';PDV.street='';PDV.neighborhood='';PDV.number='';PDV.city='';PDV.cep='';PDV.reference='';PDV.isCondominium=false;PDV.condName='';PDV.block='';PDV.apt='';PDV.type='Delivery';PDV.deliveryFee=0;PDV.zone='';PDV.clientSearch='';PDV.pickupUnit='';PDV.saleUnit='';PDV.notifyClient=true;PDV.identifyClient=true;PDV.paymentOnDelivery='';PDV.trocoPara='';PDV._showQuickReg=false;
-    S.loading=false;S.page='pedidos';
+    S.loading=false;
+    // IMPORTANTE: NÃO trocar de página para pedidos — ficamos no PDV para não
+    // interferir com o popup. A usuária volta pra pedidos manualmente se quiser.
+    console.log('[PDV popup] Pedido criado', o?.orderNumber, '— abrindo popup em 100ms');
     toast('\u2705 Pedido '+o.orderNumber+' criado!');
-    // Render da página de pedidos primeiro
+
+    // Render do PDV (limpo, já resetado) — popup é criado fora do render
     if(typeof window.render === 'function') window.render();
 
-    // Popup com setTimeout (padrão idêntico à mensagem motivacional que funciona)
+    // Popup injetado DIRETO no document.body, sem depender do S._modal
     if(o?.orderNumber){
       setTimeout(()=>{
-        const dataEntrega = o.scheduledDate
-          ? new Date(o.scheduledDate).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})
-          : '—';
-        const turno = o.scheduledPeriod || '';
-        const hora  = o.scheduledTime  || '';
-        const horaLabel = [turno, hora].filter(Boolean).join(' · ');
-        const isPagarNaEntrega = (o.payment === 'Pagar na Entrega');
-        const totalFmt = 'R$ ' + (o.total||0).toFixed(2).replace('.',',');
-        const trocoInfo = (isPagarNaEntrega && o.paymentOnDelivery==='Dinheiro' && o.trocoPara && parseFloat(o.trocoPara) > (o.total||0))
-          ? ` · Troco p/ R$ ${parseFloat(o.trocoPara).toFixed(2).replace('.',',')}` : '';
-
-        S._modal = `<div class="mo" id="mo" style="backdrop-filter:blur(4px);">
-  <div class="mo-box" style="max-width:440px;padding:0;overflow:hidden;border-radius:20px;border:none;box-shadow:0 20px 60px rgba(0,0,0,.2);" onclick="event.stopPropagation()">
-    <div style="background:var(--leaf);padding:20px 24px 16px;text-align:center;position:relative;">
-      <div style="font-size:11px;color:rgba(255,255,255,.8);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Laços Eternos 🌸</div>
-      <div style="font-family:'Playfair Display',serif;font-size:18px;color:#fff;font-weight:600;">✅ Pedido lançado!</div>
-    </div>
-    <div style="background:linear-gradient(135deg,#F0FDF4,#fff);padding:22px 24px;">
-      <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:12px;padding:14px 16px;margin-bottom:14px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;margin-bottom:10px;border-bottom:1px dashed #E5E7EB;">
-          <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Código</span>
-          <span style="font-size:22px;font-weight:900;color:var(--rose);font-family:'Playfair Display',serif;">${o.orderNumber}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;margin-bottom:10px;border-bottom:1px dashed #E5E7EB;">
-          <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Entrega</span>
-          <div style="text-align:right;">
-            <div style="font-size:13px;font-weight:700;color:var(--ink);">${dataEntrega}</div>
-            ${horaLabel?`<div style="font-size:11px;color:var(--muted);">${horaLabel}</div>`:''}
-          </div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Pagamento</span>
-          <div style="text-align:right;">
-            <div style="font-size:13px;font-weight:700;">${o.payment||'—'}${trocoInfo}</div>
-            <div style="font-size:13px;color:var(--leaf);font-weight:700;">${totalFmt}</div>
-          </div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button id="po-btn-imprimir" style="flex:1;min-width:140px;background:var(--rose);color:#fff;border:none;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Imprimir Pedido</button>
-        ${!isPagarNaEntrega
-          ? `<button id="po-btn-aprovar" style="flex:1;min-width:140px;background:var(--leaf);color:#fff;border:none;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">✅ Aprovar Pagamento</button>`
-          : `<div style="flex:1;min-width:140px;background:#FFF8E1;border:1px dashed #B7860F;border-radius:10px;padding:10px;font-size:11px;color:#8B6914;text-align:center;line-height:1.3;display:flex;align-items:center;justify-content:center;">🚚 Pagamento confirmado pelo entregador</div>`}
-      </div>
-    </div>
-    <div style="padding:14px 24px 18px;background:#fff;text-align:center;">
-      <button id="po-btn-fechar" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:8px 20px;border-radius:8px;font-size:12px;cursor:pointer;">Fechar</button>
-    </div>
-  </div></div>`;
-
-        if(typeof window.render === 'function') window.render();
-
-        const closePopup = ()=>{ S._modal=''; if(typeof window.render==='function') window.render(); };
-        document.getElementById('mo')?.addEventListener('click', e=>{ if(e.target.id==='mo') closePopup(); });
-        document.getElementById('po-btn-fechar')?.addEventListener('click', closePopup);
-        document.getElementById('po-btn-imprimir')?.addEventListener('click',()=>{
-          import('../pages/impressao.js').then(m=>{ if(m.printComanda) m.printComanda(o._id); }).catch(err=>console.warn('[PDV] printComanda:', err));
-        });
-        document.getElementById('po-btn-aprovar')?.addEventListener('click',async()=>{
-          try{
-            await PATCH('/orders/'+o._id+'/payment', { paymentStatus:'Pago' });
-            S.orders = S.orders.map(x=>x._id===o._id?{...x, paymentStatus:'Pago'}:x);
-            invalidateCache('orders');
-            toast('\u2705 Pagamento aprovado!');
-            closePopup();
-          }catch(e){ toast('Erro ao aprovar: '+(e.message||'')); }
-        });
-      }, 600);
+        console.log('[PDV popup] Injetando overlay no body');
+        showPostOrderPopup(o);
+      }, 100);
     }
   }catch(e){
     S.loading=false;
