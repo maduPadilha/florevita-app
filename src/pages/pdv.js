@@ -552,20 +552,24 @@ export async function _finalizePDV(){
     PDV.cart=[];PDV.discount=0;PDV.payment='Pix';PDV.clientId='';PDV.clientName='';PDV.clientPhone='';PDV.clientEmail='';PDV.recipient='';PDV.recipientPhone='';PDV.cardMessage='';PDV.notes='';PDV.deliveryDate='';PDV.deliveryPeriod='Manh\u00E3';PDV.deliveryTime='';PDV.street='';PDV.neighborhood='';PDV.number='';PDV.city='';PDV.cep='';PDV.reference='';PDV.isCondominium=false;PDV.condName='';PDV.block='';PDV.apt='';PDV.type='Delivery';PDV.deliveryFee=0;PDV.zone='';PDV.clientSearch='';PDV.pickupUnit='';PDV.saleUnit='';PDV.notifyClient=true;PDV.identifyClient=true;PDV.paymentOnDelivery='';PDV.trocoPara='';PDV._showQuickReg=false;
     S.loading=false;S.page='pedidos';
     toast('\u2705 Pedido '+o.orderNumber+' criado!');
+    // Render da página de pedidos primeiro
+    if(typeof window.render === 'function') window.render();
 
-    // Popup usa EXATAMENTE o mesmo padrão da mensagem motivacional
-    // (S._modal + render() + addEventListener), que é sabidamente funcional.
+    // Popup com setTimeout (padrão idêntico à mensagem motivacional que funciona)
     if(o?.orderNumber){
-      const dataEntrega = o.scheduledDate
-        ? new Date(o.scheduledDate).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})
-        : '—';
-      const turno = o.scheduledPeriod || '';
-      const hora  = o.scheduledTime  || '';
-      const horaLabel = [turno, hora].filter(Boolean).join(' · ');
-      const isPagarNaEntrega = (o.payment === 'Pagar na Entrega');
-      const totalFmt = 'R$ ' + (o.total||0).toFixed(2).replace('.',',');
+      setTimeout(()=>{
+        const dataEntrega = o.scheduledDate
+          ? new Date(o.scheduledDate).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})
+          : '—';
+        const turno = o.scheduledPeriod || '';
+        const hora  = o.scheduledTime  || '';
+        const horaLabel = [turno, hora].filter(Boolean).join(' · ');
+        const isPagarNaEntrega = (o.payment === 'Pagar na Entrega');
+        const totalFmt = 'R$ ' + (o.total||0).toFixed(2).replace('.',',');
+        const trocoInfo = (isPagarNaEntrega && o.paymentOnDelivery==='Dinheiro' && o.trocoPara && parseFloat(o.trocoPara) > (o.total||0))
+          ? ` · Troco p/ R$ ${parseFloat(o.trocoPara).toFixed(2).replace('.',',')}` : '';
 
-      S._modal = `<div class="mo" id="mo" style="backdrop-filter:blur(4px);">
+        S._modal = `<div class="mo" id="mo" style="backdrop-filter:blur(4px);">
   <div class="mo-box" style="max-width:440px;padding:0;overflow:hidden;border-radius:20px;border:none;box-shadow:0 20px 60px rgba(0,0,0,.2);" onclick="event.stopPropagation()">
     <div style="background:var(--leaf);padding:20px 24px 16px;text-align:center;position:relative;">
       <div style="font-size:11px;color:rgba(255,255,255,.8);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Laços Eternos 🌸</div>
@@ -587,7 +591,7 @@ export async function _finalizePDV(){
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Pagamento</span>
           <div style="text-align:right;">
-            <div style="font-size:13px;font-weight:700;">${o.payment||'—'}</div>
+            <div style="font-size:13px;font-weight:700;">${o.payment||'—'}${trocoInfo}</div>
             <div style="font-size:13px;color:var(--leaf);font-weight:700;">${totalFmt}</div>
           </div>
         </div>
@@ -604,27 +608,24 @@ export async function _finalizePDV(){
     </div>
   </div></div>`;
 
-      // Render síncrono (mesmo approach da mensagem motivacional)
-      if(typeof window.render === 'function') window.render();
-      else { const m = await import('../main.js'); m.render(); }
+        if(typeof window.render === 'function') window.render();
 
-      const closePopup = ()=>{ S._modal=''; if(typeof window.render==='function') window.render(); };
-      document.getElementById('mo')?.addEventListener('click', e=>{ if(e.target.id==='mo') closePopup(); });
-      document.getElementById('po-btn-fechar')?.addEventListener('click', closePopup);
-      document.getElementById('po-btn-imprimir')?.addEventListener('click',()=>{
-        import('../pages/impressao.js').then(m=>{ if(m.printComanda) m.printComanda(o._id); }).catch(err=>console.warn('[PDV] printComanda:', err));
-      });
-      document.getElementById('po-btn-aprovar')?.addEventListener('click',async()=>{
-        try{
-          await PATCH('/orders/'+o._id+'/payment', { paymentStatus:'Pago' });
-          S.orders = S.orders.map(x=>x._id===o._id?{...x, paymentStatus:'Pago'}:x);
-          invalidateCache('orders');
-          toast('\u2705 Pagamento aprovado!');
-          closePopup();
-        }catch(e){ toast('Erro ao aprovar: '+(e.message||'')); }
-      });
-    } else {
-      if(typeof window.render === 'function') window.render();
+        const closePopup = ()=>{ S._modal=''; if(typeof window.render==='function') window.render(); };
+        document.getElementById('mo')?.addEventListener('click', e=>{ if(e.target.id==='mo') closePopup(); });
+        document.getElementById('po-btn-fechar')?.addEventListener('click', closePopup);
+        document.getElementById('po-btn-imprimir')?.addEventListener('click',()=>{
+          import('../pages/impressao.js').then(m=>{ if(m.printComanda) m.printComanda(o._id); }).catch(err=>console.warn('[PDV] printComanda:', err));
+        });
+        document.getElementById('po-btn-aprovar')?.addEventListener('click',async()=>{
+          try{
+            await PATCH('/orders/'+o._id+'/payment', { paymentStatus:'Pago' });
+            S.orders = S.orders.map(x=>x._id===o._id?{...x, paymentStatus:'Pago'}:x);
+            invalidateCache('orders');
+            toast('\u2705 Pagamento aprovado!');
+            closePopup();
+          }catch(e){ toast('Erro ao aprovar: '+(e.message||'')); }
+        });
+      }, 600);
     }
   }catch(e){
     S.loading=false;
