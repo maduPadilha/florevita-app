@@ -697,29 +697,38 @@ export function bindConfigActions(){
     toast('Dados salvos!');
   };}
 
-  // Save logo de login (só admin)
+  // Save logo de login via URL digitada (só admin)
   {const _el=document.getElementById('btn-save-login-logo');if(_el)_el.onclick=async()=>{
     if(S.user?.cargo!=='admin' && S.user?.role!=='Administrador'){ toast('Sem permissão'); return; }
     const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
     const url = (document.getElementById('cfg-login-logo')?.value||'').trim();
+    if(!url){ toast('❌ Cole uma URL ou use o upload de arquivo', true); return; }
     const cfg = { ...existing, loginLogo: url };
     await saveConfig(cfg);
-    toast('🖼️ Logo salva! Aparecerá na próxima visita à tela de login.');
+    toast('🖼️ Logo salva!');
     render();
   };}
-  // Upload de arquivo → converte para base64 e salva no campo URL
-  {const _el=document.getElementById('cfg-login-logo-file');if(_el)_el.onchange=(e)=>{
+  // Upload de arquivo → converte para base64 e SALVA DIRETO (sem precisar de botão)
+  {const _el=document.getElementById('cfg-login-logo-file');if(_el)_el.onchange=async(e)=>{
     const f = e.target.files?.[0];
     if(!f) return;
+    if(S.user?.cargo!=='admin' && S.user?.role!=='Administrador'){ toast('Sem permissão'); return; }
     if(f.size > 2*1024*1024){ toast('❌ Arquivo maior que 2MB', true); return; }
+    toast('⏳ Processando imagem...');
     const reader = new FileReader();
-    reader.onload = ev => {
-      const urlInput = document.getElementById('cfg-login-logo');
-      if(urlInput){
-        urlInput.value = ev.target.result;
-        toast('📎 Imagem carregada. Clique em "Salvar Logo" para confirmar.');
+    reader.onload = async (ev) => {
+      try{
+        const base64 = ev.target.result;
+        const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
+        const cfg = { ...existing, loginLogo: base64 };
+        await saveConfig(cfg);
+        toast('✅ Logo enviada e salva!');
+        render();
+      }catch(err){
+        toast('❌ Erro ao salvar: '+(err.message||''), true);
       }
     };
+    reader.onerror = () => toast('❌ Erro ao ler o arquivo', true);
     reader.readAsDataURL(f);
   };}
   {const _el=document.getElementById('btn-clear-login-logo');if(_el)_el.onclick=async()=>{
