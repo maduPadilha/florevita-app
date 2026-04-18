@@ -392,6 +392,11 @@ ${emProducao.length>0?`
 export async function showConfirmDeliveryModal(orderId){
   const o = S.orders.find(x=>x._id===orderId);
   if(!o) return;
+  const isPagarEntrega = (o.payment === 'Pagar na Entrega');
+  const trocoInfo = (isPagarEntrega && o.paymentOnDelivery==='Dinheiro' && o.trocoPara && parseFloat(o.trocoPara) > (o.total||0))
+    ? ` · Troco p/ R$ ${parseFloat(o.trocoPara).toFixed(2).replace('.',',')} (levar R$ ${(parseFloat(o.trocoPara)-(o.total||0)).toFixed(2).replace('.',',')})`
+    : '';
+
   S._modal=`<div class="mo" id="mo"><div class="mo-box" style="max-width:480px;" onclick="event.stopPropagation()">
   <div class="mo-title">✅ Confirmar Entrega — ${o.orderNumber}</div>
 
@@ -399,8 +404,20 @@ export async function showConfirmDeliveryModal(orderId){
     <div style="font-weight:600;margin-bottom:4px;">📦 ${(o.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}</div>
     <div style="color:var(--muted);">👤 Para: ${o.recipient||o.client?.name||o.clientName||'—'}</div>
     <div style="color:var(--muted);">📍 ${o.deliveryAddress||'—'}</div>
-    ${o.payment==='Pagar na Entrega'?`<div style="color:var(--gold);font-weight:600;margin-top:6px;">💰 Cobrar ${$c(o.total)} — ${o.paymentOnDelivery||'Verificar forma'}</div>`:''}
+    ${isPagarEntrega?`<div style="color:var(--gold);font-weight:600;margin-top:6px;">💰 Cobrar ${$c(o.total)} — ${o.paymentOnDelivery||'Verificar forma'}${trocoInfo}</div>`:''}
   </div>
+
+  ${isPagarEntrega?`
+  <div style="background:#FFF8E1;border:2px solid #F59E0B;border-radius:12px;padding:14px;margin-bottom:14px;">
+    <div style="font-size:11px;font-weight:700;color:#92400E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">💳 Status do Pagamento</div>
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:8px;background:#fff;border-radius:8px;border:2px solid #E5E7EB;transition:all .15s;" id="conf-pay-lbl">
+      <input type="checkbox" id="conf-pay-received" style="width:20px;height:20px;margin-top:2px;cursor:pointer;accent-color:#059669;"/>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#065F46;">✅ Recebi o pagamento do cliente</div>
+        <div style="font-size:11px;color:#6B7280;margin-top:2px;">Marcar apenas se cliente pagou no ato (${$c(o.total)}). Se não pagou, deixe desmarcado e registre depois.</div>
+      </div>
+    </label>
+  </div>`:''}
 
   <div class="fg">
     <label class="fl">Quem recebeu? <span style="color:var(--red)">*</span></label>
@@ -427,6 +444,21 @@ export async function showConfirmDeliveryModal(orderId){
   </div>
   </div></div>`;
   await render();
+
+  // Destaque visual do checkbox de pagamento
+  const payChk = document.getElementById('conf-pay-received');
+  const payLbl = document.getElementById('conf-pay-lbl');
+  if(payChk && payLbl){
+    payChk.addEventListener('change', ()=>{
+      if(payChk.checked){
+        payLbl.style.borderColor = '#16A34A';
+        payLbl.style.background = '#F0FDF4';
+      } else {
+        payLbl.style.borderColor = '#E5E7EB';
+        payLbl.style.background = '#fff';
+      }
+    });
+  }
 
   document.getElementById('btn-mo-close')?.addEventListener('click',()=>{S._modal='';render();});
 
@@ -456,15 +488,49 @@ export async function showConfirmDeliveryModal(orderId){
       toast('❌ Informe quem recebeu o pedido', true);
       return;
     }
-    // Salva confirmacao localmente (quem recebeu + foto)
+
+    // Flag de pagamento (só existe se isPagarEntrega)
+    const payReceived = document.getElementById('conf-pay-received')?.checked;
+
+    // Salva confirmacao localmente (quem recebeu + foto + pagamento)
     const confirmations = JSON.parse(localStorage.getItem('fv_deliveries')||'{}');
-    confirmations[orderId] = { receiver, photo: photoBase64||null, confirmedAt: new Date().toISOString(), confirmedBy: S.user.name };
+    confirmations[orderId] = {
+      receiver, photo: photoBase64||null,
+      confirmedAt: new Date().toISOString(),
+      confirmedBy: S.user.name,
+      paymentReceived: !!payReceived,
+    };
     localStorage.setItem('fv_deliveries', JSON.stringify(confirmations));
 
     S._modal=''; render();
+
+    // Atualiza status de pagamento ANTES de avançar (se aplicável)
+    if(isPagarEntrega && payReceived){
+      try {
+        const { PUT } = await import('../services/api.js');
+        await PUT('/orders/'+orderId, { paymentStatus: 'Pago na Entrega' });
+        S.orders = S.orders.map(x => x._id===orderId ? {...x, paymentStatus:'Pago na Entrega'} : x);
+        // Registra receita no financeiro (agora que foi realmente pago)
+        const { registrarReceitaVenda } = await import('./financeiro.js');
+        const oUpdated = S.orders.find(x => x._id===orderId);
+        if(oUpdated) registrarReceitaVenda(oUpdated);
+      } catch(e){
+        console.warn('[expedicao] update paymentStatus falhou:', e);
+      }
+    }
+
     const { advanceOrder } = await import('./pedidos.js');
     await advanceOrder(orderId);
-    toast('✅ Entrega confirmada! Recebido por: '+receiver);
+
+    if(isPagarEntrega){
+      if(payReceived){
+        toast(`✅ Entrega confirmada! Recebido por: ${receiver} · Pagamento recebido ✓`);
+      } else {
+        toast(`✅ Entrega confirmada! Recebido por: ${receiver} · ⚠️ Pagamento pendente`, true);
+      }
+    } else {
+      toast('✅ Entrega confirmada! Recebido por: '+receiver);
+    }
   });
 }
 
