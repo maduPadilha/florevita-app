@@ -2450,6 +2450,12 @@ async function init(){
 
   seedColaboradores();
 
+  // Aplica favicon customizado (se configurado em fv_config.favicon)
+  try{
+    const { applyFaviconFromConfig } = await import('./pages/config.js');
+    applyFaviconFromConfig();
+  }catch(e){/* silencioso */}
+
   // ── Limpa cache velho automaticamente na inicialização ────────
   try{
     const raw = localStorage.getItem('fv_data_cache');

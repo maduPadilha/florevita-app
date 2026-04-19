@@ -54,6 +54,30 @@ async function saveNotifCfg(cfg){
   try{ await api('PUT','/settings/notif-cfg', cfg); }catch(e){ /* saved locally */ }
 }
 
+// ── FAVICON DINÂMICO ─────────────────────────────────────────
+// Aplica (ou remove) o favicon personalizado definido em fv_config.favicon
+export function applyFaviconFromConfig(){
+  try{
+    const cfg = JSON.parse(localStorage.getItem('fv_config')||'{}');
+    const url = cfg.favicon || '';
+    // Remove qualquer favicon antigo adicionado por este script
+    document.querySelectorAll('link[rel="icon"][data-fv-custom],link[rel="shortcut icon"][data-fv-custom]').forEach(l => l.remove());
+    if(!url) return; // sem favicon customizado — o padrão do index.html continua
+    // Adiciona novo link rel="icon" apontando para a URL
+    const link = document.createElement('link');
+    link.rel = 'icon';
+    link.href = url;
+    link.setAttribute('data-fv-custom', '1');
+    document.head.appendChild(link);
+    // Alguns navegadores preferem shortcut icon
+    const link2 = document.createElement('link');
+    link2.rel = 'shortcut icon';
+    link2.href = url;
+    link2.setAttribute('data-fv-custom', '1');
+    document.head.appendChild(link2);
+  }catch(e){ /* silencioso */ }
+}
+
 // ── TI STATE ─────────────────────────────────────────────────
 let TI = {
   history: [],
@@ -419,6 +443,38 @@ export function renderConfig(){
         <button class="btn btn-primary" id="btn-save-login-logo">💾 Salvar Logo</button>
         ${cfg.loginLogo ? `<button class="btn btn-ghost" id="btn-clear-login-logo" style="color:var(--red);">🗑️ Remover</button>`:''}
       </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">🔖 Favicon (ícone da aba do navegador)</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">
+        Ícone exibido na aba do navegador. Use imagem <strong>quadrada</strong> (32×32, 64×64, 128×128 ou 256×256).
+      </div>
+      ${cfg.favicon ? `
+      <div style="text-align:center;margin-bottom:12px;padding:16px;background:var(--cream);border-radius:10px;">
+        <img src="${cfg.favicon}" alt="Favicon atual" style="width:64px;height:64px;object-fit:contain;border-radius:8px;border:1px solid var(--border);background:#fff;padding:4px;"/>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px;">Prévia 64×64</div>
+      </div>` : `
+      <div style="text-align:center;margin-bottom:12px;padding:22px;background:var(--cream);border-radius:10px;color:var(--muted);font-size:12px;">
+        🌸 Nenhum favicon definido — usando padrão
+      </div>`}
+
+      <div class="fg">
+        <label class="fl">URL da imagem</label>
+        <input class="fi" id="cfg-favicon" value="${cfg.favicon||''}" placeholder="https://..."/>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">Link direto da imagem (PNG, JPG, ICO ou SVG)</div>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Ou envie um arquivo quadrado (máx 500KB)</label>
+        <input type="file" id="cfg-favicon-file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,image/vnd.microsoft.icon"
+          style="width:100%;padding:8px;border:1px dashed var(--border);border-radius:8px;font-size:12px;cursor:pointer;"/>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="btn-save-favicon">💾 Salvar Favicon</button>
+        ${cfg.favicon ? `<button class="btn btn-ghost" id="btn-clear-favicon" style="color:var(--red);">🗑️ Remover</button>`:''}
+      </div>
     </div>` : ''}
 
     ${canManageClientTier() ? `
@@ -737,6 +793,51 @@ export function bindConfigActions(){
     const cfg = { ...existing, loginLogo: '' };
     await saveConfig(cfg);
     toast('🗑️ Logo removida');
+    render();
+  };}
+
+  // ── FAVICON (só admin) ────────────────────────────────────────
+  {const _el=document.getElementById('btn-save-favicon');if(_el)_el.onclick=async()=>{
+    if(S.user?.cargo!=='admin' && S.user?.role!=='Administrador'){ toast('Sem permissão'); return; }
+    const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
+    const url = (document.getElementById('cfg-favicon')?.value||'').trim();
+    if(!url){ toast('❌ Cole uma URL ou use o upload de arquivo', true); return; }
+    const cfg = { ...existing, favicon: url };
+    await saveConfig(cfg);
+    applyFaviconFromConfig();
+    toast('🔖 Favicon salvo!');
+    render();
+  };}
+  {const _el=document.getElementById('cfg-favicon-file');if(_el)_el.onchange=async(e)=>{
+    const f = e.target.files?.[0];
+    if(!f) return;
+    if(S.user?.cargo!=='admin' && S.user?.role!=='Administrador'){ toast('Sem permissão'); return; }
+    if(f.size > 500*1024){ toast('❌ Arquivo maior que 500KB (use imagem menor)', true); return; }
+    toast('⏳ Processando favicon...');
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try{
+        const base64 = ev.target.result;
+        const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
+        const cfg = { ...existing, favicon: base64 };
+        await saveConfig(cfg);
+        applyFaviconFromConfig();
+        toast('✅ Favicon enviado e salvo!');
+        render();
+      }catch(err){
+        toast('❌ Erro ao salvar: '+(err.message||''), true);
+      }
+    };
+    reader.onerror = () => toast('❌ Erro ao ler o arquivo', true);
+    reader.readAsDataURL(f);
+  };}
+  {const _el=document.getElementById('btn-clear-favicon');if(_el)_el.onclick=async()=>{
+    if(!confirm('Remover o favicon customizado?')) return;
+    const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
+    const cfg = { ...existing, favicon: '' };
+    await saveConfig(cfg);
+    applyFaviconFromConfig();
+    toast('🗑️ Favicon removido — usando padrão');
     render();
   };}
 
