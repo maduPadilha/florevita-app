@@ -54,6 +54,36 @@ async function saveNotifCfg(cfg){
   try{ await api('PUT','/settings/notif-cfg', cfg); }catch(e){ /* saved locally */ }
 }
 
+// ── CARREGA BRANDING PÚBLICO (logo + favicon) ────────────────
+// Chamado no boot para que logo/favicon fiquem iguais em TODOS os dispositivos,
+// mesmo antes do login (não depende de localStorage local).
+export async function loadPublicBranding(){
+  try{
+    const res = await fetch(API + '/settings/public/branding', {
+      method: 'GET',
+      signal: AbortSignal.timeout(8000),
+    });
+    if(!res.ok) return;
+    const data = await res.json();
+    if(!data || typeof data !== 'object') return;
+    const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
+    // Merge: preserva campos locais (razao, cnpj, etc) e sobrescreve os 3 de branding
+    const merged = {
+      ...existing,
+      loginLogo: data.loginLogo ?? existing.loginLogo ?? '',
+      favicon:   data.favicon   ?? existing.favicon   ?? '',
+    };
+    // Só atualiza se houve mudança real (evita re-render desnecessário)
+    const before = JSON.stringify({ll:existing.loginLogo, fv:existing.favicon});
+    const after  = JSON.stringify({ll:merged.loginLogo,   fv:merged.favicon});
+    if(before !== after){
+      localStorage.setItem('fv_config', JSON.stringify(merged));
+    }
+    // Aplica favicon imediatamente (mesmo se já era igual — garante consistência)
+    applyFaviconFromConfig();
+  }catch(e){/* silencioso — fallback é o cache local ou default */}
+}
+
 // ── FAVICON DINÂMICO ─────────────────────────────────────────
 // Aplica (ou remove) o favicon personalizado definido em fv_config.favicon
 export function applyFaviconFromConfig(){

@@ -2450,10 +2450,17 @@ async function init(){
 
   seedColaboradores();
 
-  // Aplica favicon customizado (se configurado em fv_config.favicon)
+  // Aplica favicon customizado imediatamente (do cache local, se houver)
+  // e depois busca a versão mais recente do backend para sincronizar entre
+  // todos os dispositivos.
   try{
-    const { applyFaviconFromConfig } = await import('./pages/config.js');
+    const { applyFaviconFromConfig, loadPublicBranding } = await import('./pages/config.js');
     applyFaviconFromConfig();
+    // Async: atualiza do backend e re-aplica se houver mudança
+    loadPublicBranding().then(() => {
+      // Re-render para atualizar a logo da tela de login se a branding mudou
+      try{ render(); }catch(_){}
+    });
   }catch(e){/* silencioso */}
 
   // ── Limpa cache velho automaticamente na inicialização ────────
