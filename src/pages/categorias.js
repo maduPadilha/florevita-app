@@ -312,7 +312,7 @@ function _renderBulkList(){
         <div style="font-weight:600;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name||'—'}</div>
         <div style="font-size:11px;color:var(--muted);">${currentCats}</div>
       </div>
-      <div style="font-weight:700;color:var(--rose);font-size:13px;flex-shrink:0;">R$ ${((p.price||0).toFixed ? p.price.toFixed(2) : p.price).toString().replace('.',',')}</div>
+      <div style="font-weight:700;color:var(--rose);font-size:13px;flex-shrink:0;">R$ ${(Number(p.price)||0).toFixed(2).replace('.',',')}</div>
     </label>`;
   }).join('');
 }
@@ -412,7 +412,7 @@ function renderCatDetail(catName){
       html += '<div style="padding:10px 12px;">';
       html += '<div style="font-weight:700;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(p.name||'—')+'</div>';
       html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">';
-      html += '<span style="font-size:14px;font-weight:800;color:var(--rose);">R$ '+((p.price||0).toFixed ? p.price.toFixed(2) : p.price).toString().replace('.',',')+'</span>';
+      html += '<span style="font-size:14px;font-weight:800;color:var(--rose);">R$ '+(Number(p.price)||0).toFixed(2).replace('.',',')+'</span>';
       html += '<span style="font-size:10px;color:'+stockColor+';font-weight:700;">📦 '+stock+'</span>';
       html += '</div>';
       if(otherCats.length > 0){
@@ -547,7 +547,7 @@ export function renderCategorias(){
       html += ' style="width:100%;margin-top:10px;background:#fff;border:1.5px solid var(--rose);color:var(--rose);border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;"';
       html += ' onmouseover="this.style.background=\'var(--rose)\';this.style.color=\'#fff\';"';
       html += ' onmouseout="this.style.background=\'#fff\';this.style.color=\'var(--rose)\';">';
-      html += '👁️ Ver '+total+' produto(s) & adicionar em massa';
+      html += '👁️ Ver produtos desta categoria';
       html += '</button>';
       html += '</div>';
 
