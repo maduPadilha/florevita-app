@@ -65,9 +65,13 @@ export async function loadPublicBranding(){
   const url = API + '/settings/public/branding';
   console.log('[branding] chamando:', url);
   try{
-    // Timeout manual (AbortSignal.timeout pode não estar disponível em todos navs)
+    // Wake-up ping (Render free tier pode estar dormindo).
+    // Não espera resposta — só acorda.
+    fetch(API + '/health').catch(()=>{});
+
+    // Timeout generoso (60s) — Render pode levar ~30s para acordar
     const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const tid = setTimeout(() => ctrl.abort(), 60000);
     let res;
     try {
       res = await fetch(url, { method: 'GET', signal: ctrl.signal });
