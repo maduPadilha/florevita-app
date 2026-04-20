@@ -2450,19 +2450,18 @@ async function init(){
 
   seedColaboradores();
 
-  // Carrega branding do backend ANTES de renderizar (timeout de 2s para
-  // não bloquear demais em conexão ruim). Isso garante que qualquer
-  // dispositivo vê a logo/favicon que o admin configurou.
+  // Carrega branding do backend. Render (free tier) pode levar até 60s para
+  // acordar — aplicamos o cache local imediatamente e atualizamos quando
+  // o servidor responder (sem bloquear a tela inicial).
   try{
     const { applyFaviconFromConfig, loadPublicBranding } = await import('./pages/config.js');
-    // Aplica o que já tem no cache primeiro (instantâneo)
-    applyFaviconFromConfig();
-    // Aguarda o backend (máx 2s); se passar, segue com cache
-    await Promise.race([
-      loadPublicBranding().catch(e => console.warn('[init] loadPublicBranding falhou:', e)),
-      new Promise(r => setTimeout(r, 2000)),
-    ]);
-    console.log('[init] Branding carregado. fv_config:', JSON.parse(localStorage.getItem('fv_config')||'{}'));
+    applyFaviconFromConfig(); // cache local → instantâneo
+    // Dispara o load em background; quando terminar, re-renderiza
+    loadPublicBranding().then(() => {
+      console.log('[init] Branding sincronizado com servidor. fv_config:',
+        (()=>{ const c = JSON.parse(localStorage.getItem('fv_config')||'{}'); return {hasLogo:!!c.loginLogo,hasFavicon:!!c.favicon}; })());
+      try{ render(); applyFaviconFromConfig(); }catch(_){}
+    });
   }catch(e){ console.warn('[init] branding erro:', e); }
 
   // ── Limpa cache velho automaticamente na inicialização ────────

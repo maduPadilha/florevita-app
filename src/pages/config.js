@@ -62,11 +62,17 @@ async function saveNotifCfg(cfg){
 // Chamado no boot para que logo/favicon fiquem iguais em TODOS os dispositivos,
 // mesmo antes do login (não depende de localStorage local).
 export async function loadPublicBranding(){
+  const url = API + '/settings/public/branding';
+  console.log('[branding] chamando:', url);
   try{
-    const res = await fetch(API + '/settings/public/branding', {
-      method: 'GET',
-      signal: AbortSignal.timeout(8000),
-    });
+    // Timeout manual (AbortSignal.timeout pode não estar disponível em todos navs)
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    let res;
+    try {
+      res = await fetch(url, { method: 'GET', signal: ctrl.signal });
+    } finally { clearTimeout(tid); }
+
     console.log('[branding] HTTP status:', res.status);
     if(!res.ok){
       console.warn('[branding] endpoint não OK — usando cache local');
@@ -81,19 +87,16 @@ export async function loadPublicBranding(){
     });
     if(!data || typeof data !== 'object') return;
     const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
-    // Sobrescreve branding do servidor (fonte única) — MESMO se vier vazio
-    // (caso admin tenha removido, outros dispositivos removem também)
     const merged = {
       ...existing,
       loginLogo: data.loginLogo || '',
       favicon:   data.favicon   || '',
     };
     localStorage.setItem('fv_config', JSON.stringify(merged));
-    // Aplica favicon imediatamente
     applyFaviconFromConfig();
     console.log('[branding] aplicado no localStorage ✅');
   }catch(e){
-    console.warn('[branding] fetch erro:', e.message||e);
+    console.warn('[branding] fetch erro:', e.name||'', e.message||e);
   }
 }
 
