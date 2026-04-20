@@ -67,25 +67,34 @@ export async function loadPublicBranding(){
       method: 'GET',
       signal: AbortSignal.timeout(8000),
     });
-    if(!res.ok) return;
+    console.log('[branding] HTTP status:', res.status);
+    if(!res.ok){
+      console.warn('[branding] endpoint não OK — usando cache local');
+      return;
+    }
     const data = await res.json();
+    console.log('[branding] recebido:', {
+      hasLogo: !!data?.loginLogo,
+      logoLen: (data?.loginLogo||'').length,
+      hasFavicon: !!data?.favicon,
+      faviconLen: (data?.favicon||'').length,
+    });
     if(!data || typeof data !== 'object') return;
     const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
-    // Merge: preserva campos locais (razao, cnpj, etc) e sobrescreve os 3 de branding
+    // Sobrescreve branding do servidor (fonte única) — MESMO se vier vazio
+    // (caso admin tenha removido, outros dispositivos removem também)
     const merged = {
       ...existing,
-      loginLogo: data.loginLogo ?? existing.loginLogo ?? '',
-      favicon:   data.favicon   ?? existing.favicon   ?? '',
+      loginLogo: data.loginLogo || '',
+      favicon:   data.favicon   || '',
     };
-    // Só atualiza se houve mudança real (evita re-render desnecessário)
-    const before = JSON.stringify({ll:existing.loginLogo, fv:existing.favicon});
-    const after  = JSON.stringify({ll:merged.loginLogo,   fv:merged.favicon});
-    if(before !== after){
-      localStorage.setItem('fv_config', JSON.stringify(merged));
-    }
-    // Aplica favicon imediatamente (mesmo se já era igual — garante consistência)
+    localStorage.setItem('fv_config', JSON.stringify(merged));
+    // Aplica favicon imediatamente
     applyFaviconFromConfig();
-  }catch(e){/* silencioso — fallback é o cache local ou default */}
+    console.log('[branding] aplicado no localStorage ✅');
+  }catch(e){
+    console.warn('[branding] fetch erro:', e.message||e);
+  }
 }
 
 // ── FAVICON DINÂMICO ─────────────────────────────────────────
