@@ -2205,12 +2205,33 @@ function bindPageActions(){
       const _el = document.getElementById('cat-search');
       if(_el){
         _el.addEventListener('input', e => { S._catSearch = e.target.value; render(); });
-        // Preserva foco e posição do cursor após re-render
         if(S._catSearch){
           _el.focus();
           try { const v = _el.value; _el.setSelectionRange(v.length, v.length); } catch(_){}
         }
       }
+    }
+    // Busca dentro do modal de bulk add — sem re-render pesado
+    {
+      const _bs = document.getElementById('bulk-search-input');
+      if(_bs){
+        _bs.addEventListener('input', e => {
+          import('./pages/categorias.js').then(m => m.setBulkSearch(e.target.value));
+        });
+        // Preserva foco
+        if(S._catBulkSearch){
+          _bs.focus();
+          try { const v = _bs.value; _bs.setSelectionRange(v.length, v.length); } catch(_){}
+        }
+      }
+      // Atualiza contador na footer quando checkboxes mudam
+      const updateSel = () => {
+        const n = (S._catBulkSelected || new Set()).size;
+        document.querySelectorAll('#bulk-sel-count').forEach(el => el.textContent = n);
+      };
+      document.querySelectorAll('[data-bulk-toggle]').forEach(cb => {
+        cb.addEventListener('change', updateSel);
+      });
     }
   }
 
