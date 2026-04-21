@@ -22,10 +22,10 @@ const saveDeliveryFees = _saveDeliveryFees_STATE;
 export { DELIVERY_FEES, saveDeliveryFees };
 
 // ── CONFIG LOAD/SAVE (migrated to API with localStorage fallback) ──
-async function loadConfig(){
+// Exportado para ser chamado ao abrir tela e após login (sync entre dispositivos)
+export async function loadConfig(){
   try{
     const data = await api('GET','/settings/config');
-    // Backend retorna { key, value, ... } — extrai o value real
     const cfg = data?.value && typeof data.value === 'object' ? data.value : (data || {});
     if(cfg && typeof cfg === 'object' && Object.keys(cfg).length > 0){
       localStorage.setItem('fv_config', JSON.stringify(cfg));
@@ -33,6 +33,23 @@ async function loadConfig(){
     }
   }catch(e){ /* fallback to localStorage */ }
   return JSON.parse(localStorage.getItem('fv_config')||'{}');
+}
+
+// Lazy sync ao abrir a tela de Configurações — pega a versão mais recente do backend
+let _cfgFetched = false;
+function triggerConfigFetch(){
+  if(_cfgFetched) return;
+  _cfgFetched = true;
+  loadConfig().then(cfg => {
+    // Re-renderiza se a config do backend é diferente da local (pra refletir nos inputs)
+    const localStr = localStorage.getItem('fv_config') || '{}';
+    if(JSON.stringify(cfg) !== localStr){
+      localStorage.setItem('fv_config', JSON.stringify(cfg));
+    }
+    if(S.page === 'config'){
+      import('../main.js').then(m => m.render()).catch(()=>{});
+    }
+  }).catch(()=>{});
 }
 
 async function saveConfig(cfg){
@@ -444,6 +461,8 @@ export async function executeReset(){
 
 // ── RENDER CONFIG ────────────────────────────────────────────
 export function renderConfig(){
+  // Busca config atualizada do backend em background (1ª vez que abre a tela)
+  triggerConfigFetch();
   const cfg = JSON.parse(localStorage.getItem('fv_config')||'{}');
   return`
 <div class="g2">

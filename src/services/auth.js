@@ -253,6 +253,9 @@ export async function doLogin(email, pass){
       // loadData is in data.js — import dynamically
       const { loadData } = await import('./cache.js');
       await loadData().catch(()=>{});
+      // Sincroniza config do servidor (certificado, CSC, tokens, logo, etc)
+      // para garantir que admin vê os mesmos dados em qualquer dispositivo
+      import('../pages/config.js').then(m => m.loadConfig()).catch(()=>{});
       S.loading=false; S._loginMsg=null;
       _redirectAfterLogin(user, colab);
       import('../main.js').then(m => m.render());
