@@ -15,6 +15,7 @@ import { startPolling, stopPolling } from './services/polling.js';
 // Pages - import render functions
 import { renderLogin, bindLogin } from './pages/login.js';
 import { renderPedidoPublico, getPublicOrderIdFromURL } from './pages/pedido-publico.js';
+import { renderNotasFiscais, bindNotasFiscaisEvents, emitirNotaFiscal } from './pages/notas-fiscais.js';
 import { renderDashboard, selectedOrders } from './pages/dashboard.js';
 import { renderPDV, finalizePDV } from './pages/pdv.js';
 import { renderPedidos, showOrderViewModal, showEditOrderModal, advanceOrder } from './pages/pedidos.js';
@@ -1267,6 +1268,7 @@ function renderApp(){
     {k:'expedicao',l:'Expedição',i:'📤',m:'delivery',s:'Operação',hide:['Entregador']},
     {k:'ponto',l:'Ponto Eletrônico',i:'🕐',m:'ponto',s:'Operação'},
     {k:'financeiro',l:'Financeiro',i:'💰',m:'financial',s:'Financeiro'},
+    {k:'notasFiscais',l:'Notas Fiscais',i:'🧾',m:'financial',s:'Financeiro'},
     {k:'relatorios',l:'Relatórios',i:'📈',m:'reports',s:'Financeiro'},
     {k:'alertas',l:'Alertas',i:'🔔',m:'alertas',s:'Sistema'},
     {k:'whatsapp',l:'WhatsApp',i:'💬',m:'whatsapp',s:'Sistema'},
@@ -1319,7 +1321,7 @@ ${renderSidebar(nav, 0, 0)}
     }
   }
 
-  const pages={dashboard:renderDashboard,pdv:renderPDV,pedidos:renderPedidos,clientes:renderClientes,produtos:renderProdutos,estoque:renderEstoque,producao:renderProducao,expedicao:renderExpedicao,entregador:renderAppEntregador,financeiro:renderFinanceiro,relatorios:renderRelatorios,alertas:renderAlertas,usuarios:renderUsuarios,colaboradores:renderColaboradores,impressao:renderImpressao,config:renderConfig,ponto:renderPonto,caixa:renderCaixa,backup:renderBackup,whatsapp:renderWhatsApp,ecommerce:renderEcommerce,orcamento:renderOrcamento,categorias:renderCategorias};
+  const pages={dashboard:renderDashboard,pdv:renderPDV,pedidos:renderPedidos,clientes:renderClientes,produtos:renderProdutos,estoque:renderEstoque,producao:renderProducao,expedicao:renderExpedicao,entregador:renderAppEntregador,financeiro:renderFinanceiro,relatorios:renderRelatorios,alertas:renderAlertas,usuarios:renderUsuarios,colaboradores:renderColaboradores,impressao:renderImpressao,config:renderConfig,ponto:renderPonto,caixa:renderCaixa,backup:renderBackup,whatsapp:renderWhatsApp,ecommerce:renderEcommerce,orcamento:renderOrcamento,categorias:renderCategorias,notasFiscais:renderNotasFiscais};
   const content = (()=>{ try{ return pages[S.page] ? pages[S.page]() : `<div class="empty card"><div class="empty-icon">🌸</div><p>Em desenvolvimento</p></div>`; }catch(e){ console.error('[render '+S.page+']',e); return `<div class="card" style="color:var(--red);padding:20px;">⚠️ Erro ao carregar o módulo. <button onclick="setPage('dashboard')" class="btn btn-ghost btn-sm" style="margin-top:8px;">← Dashboard</button><br/><small style="color:var(--muted)">${e.message}</small></div>`; } })();
   const pendingAlerts = renderAlertas ? (() => { try { const a=renderAlertas(); return (a.match(/<div class="alert-item/g)||[]).length; } catch(e){ return 0; } })() : 0;
   const newOrders = S.orders.filter(o=>o.status==='Aguardando').length;
@@ -2196,6 +2198,11 @@ function bindPageActions(){
   // ── WhatsApp ──────────────────────────────────────────────────
   if(S.page==='whatsapp'){
     try{ bindWhatsAppEvents(); }catch(e){ console.error('bindWhatsAppEvents', e); }
+  }
+
+  // ── Notas Fiscais ─────────────────────────────────────────────
+  if(S.page==='notasFiscais'){
+    try{ bindNotasFiscaisEvents(); }catch(e){ console.error('bindNotasFiscaisEvents', e); }
   }
 
   // ── Categorias ────────────────────────────────────────────────

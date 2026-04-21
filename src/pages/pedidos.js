@@ -248,7 +248,14 @@ export function renderPedidos(){
         <td style="white-space:nowrap">
           <button type="button" class="btn btn-ghost btn-sm" onclick="showOrderViewModal('${o._id}')">👁️ Ver</button>
           <button type="button" class="btn btn-ghost btn-sm" onclick="printComanda('${o._id}')">🖨️</button>
-          ${S.user?.role==='Administrador'?`<button style="background:#1a3d27;color:#fff;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;font-size:10px;font-weight:700;">NFC-e</button>`:''}
+          ${(()=>{
+            const cnpj = (o.cpfCnpj||o.clientCpf||'').replace(/\D/g,'');
+            const isPJ = cnpj.length === 14;
+            return (S.user?.role==='Administrador' || S.user?.cargo==='admin') ? `
+              <button type="button" onclick="emitirNotaFiscal('${o._id}','NFCe')" title="Emitir NFC-e (cupom fiscal)" style="background:#1a3d27;color:#fff;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;font-size:10px;font-weight:700;margin-left:2px;">📄 NFC-e</button>
+              ${isPJ ? `<button type="button" onclick="emitirNotaFiscal('${o._id}','NFe')" title="Emitir NF-e (DANFE) — pessoa jurídica" style="background:#5B21B6;color:#fff;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;font-size:10px;font-weight:700;margin-left:2px;">📑 NF-e</button>` : ''}
+            ` : '';
+          })()}
         </td>
       </tr>`;
     }).join('')}</tbody>

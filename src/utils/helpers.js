@@ -36,7 +36,7 @@ const PAGE_SLUGS = {
   alertas:'alertas', whatsapp:'whatsapp', usuarios:'usuarios',
   colaboradores:'colaboradores', impressao:'impressao', backup:'backup',
   config:'configuracoes', ecommerce:'ecommerce', orcamento:'orcamentos',
-  entregador:'entregador',
+  entregador:'entregador', notasFiscais:'notas-fiscais',
 };
 // SLUG_TO_PAGE: aceita tanto /vendas (novo) quanto /pdv (legado) para compat
 const SLUG_TO_PAGE = Object.fromEntries(Object.entries(PAGE_SLUGS).map(([k,v])=>[v,k]));
@@ -51,7 +51,7 @@ const PAGE_TO_MOD = {
   alertas:'alertas', whatsapp:'whatsapp', usuarios:'users',
   colaboradores:'users', impressao:'impressao', backup:'backup',
   config:'config', ecommerce:'ecommerce', orcamento:'orcamentos',
-  entregador:'delivery',
+  entregador:'delivery', notasFiscais:'financial',
 };
 
 export function setPage(p, pushHistory=true){

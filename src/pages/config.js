@@ -548,6 +548,83 @@ export function renderConfig(){
     </div>` : ''}
 
     <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">🧾 Configuração Fiscal
+        <span class="tag ${(cfg.regimeTributario&&cfg.ncmDefault)?'t-green':'t-gold'}">${(cfg.regimeTributario&&cfg.ncmDefault)?'Preenchido':'Incompleto'}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">
+        Dados tributários usados para gerar NFC-e e NF-e. Confirme com seu contador.
+      </div>
+
+      <div class="fr2">
+        <div class="fg"><label class="fl">Regime Tributário <span style="color:var(--red)">*</span></label>
+          <select class="fi" id="cfg-regime">
+            <option value="">Selecione...</option>
+            <option value="1" ${cfg.regimeTributario==='1'?'selected':''}>Simples Nacional</option>
+            <option value="2" ${cfg.regimeTributario==='2'?'selected':''}>Simples Nacional — excesso sublimite</option>
+            <option value="3" ${cfg.regimeTributario==='3'?'selected':''}>Regime Normal (Lucro Presumido/Real)</option>
+            <option value="4" ${cfg.regimeTributario==='4'?'selected':''}>MEI</option>
+          </select>
+        </div>
+        <div class="fg"><label class="fl">CNAE principal</label>
+          <input class="fi" id="cfg-cnae" value="${cfg.cnae||''}" placeholder="4774-1/00"/>
+        </div>
+      </div>
+
+      <div class="fr2">
+        <div class="fg"><label class="fl">NCM padrão dos produtos</label>
+          <input class="fi" id="cfg-ncm-default" value="${cfg.ncmDefault||'06031100'}" placeholder="06031100"/>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">Ex: 06031100 (rosas), 06031900 (outras flores), 06029089 (plantas)</div>
+        </div>
+        <div class="fg"><label class="fl">CFOP venda dentro do estado</label>
+          <input class="fi" id="cfg-cfop" value="${cfg.cfopDefault||'5102'}" placeholder="5102"/>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">5102 = Venda merc. adquirida de terceiros</div>
+        </div>
+      </div>
+
+      <div class="fr2">
+        <div class="fg"><label class="fl">CSOSN / CST ICMS</label>
+          <input class="fi" id="cfg-csosn" value="${cfg.csosnDefault||'102'}" placeholder="102"/>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">102 = Simples sem permissão crédito · 400 = Não tributada</div>
+        </div>
+        <div class="fg"><label class="fl">Alíquota ICMS (%)</label>
+          <input class="fi" id="cfg-icms" type="number" step="0.01" value="${cfg.icmsAliquota||0}" placeholder="0"/>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">Em Simples: deixe 0 (imposto já embutido no DAS)</div>
+        </div>
+      </div>
+
+      <div class="fr2">
+        <div class="fg"><label class="fl">Origem da mercadoria</label>
+          <select class="fi" id="cfg-origem">
+            <option value="0" ${(cfg.origemMercadoria||'0')==='0'?'selected':''}>0 — Nacional</option>
+            <option value="1" ${cfg.origemMercadoria==='1'?'selected':''}>1 — Estrangeira (import direta)</option>
+            <option value="2" ${cfg.origemMercadoria==='2'?'selected':''}>2 — Estrangeira (mercado interno)</option>
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Unidade comercial padrão</label>
+          <input class="fi" id="cfg-unidade" value="${cfg.unidadeComercial||'UN'}" placeholder="UN" maxlength="6"/>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">UN, PC, KG, MT, etc.</div>
+        </div>
+      </div>
+
+      <div class="fg"><label class="fl">Provedor de emissão (gateway)</label>
+        <select class="fi" id="cfg-nfe-gateway">
+          <option value="mock" ${(cfg.nfeGateway||'mock')==='mock'?'selected':''}>Mock (testes — não envia à SEFAZ)</option>
+          <option value="focus" ${cfg.nfeGateway==='focus'?'selected':''}>Focus NFe (produção)</option>
+        </select>
+      </div>
+
+      ${cfg.nfeGateway==='focus' ? `
+      <div class="fg"><label class="fl">Token Focus NFe</label>
+        <input class="fi" id="cfg-focus-token" type="password" value="${cfg.focusToken||''}" placeholder="Cole o token aqui"/>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;">
+          Obter em <a href="https://app.focusnfe.com.br" target="_blank" style="color:var(--rose);">app.focusnfe.com.br</a> → sua empresa → Tokens
+        </div>
+      </div>` : ''}
+
+      <button class="btn btn-primary" id="btn-save-fiscal">💾 Salvar Config Fiscal</button>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
       <div class="card-title">Certificado Digital (NF-e / NFC-e)
         <span class="tag ${cfg.certData?'t-green':'t-red'}">${cfg.certData?'Configurado':'Nao configurado'}</span>
       </div>
@@ -881,6 +958,27 @@ export function bindConfigActions(){
     reader.onerror = () => toast('❌ Erro ao ler o arquivo', true);
     reader.readAsDataURL(f);
   };}
+  // Save config fiscal
+  {const _el=document.getElementById('btn-save-fiscal');if(_el)_el.onclick=async()=>{
+    const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
+    const cfg = {
+      ...existing,
+      regimeTributario:   document.getElementById('cfg-regime')?.value || '',
+      cnae:               document.getElementById('cfg-cnae')?.value?.trim() || '',
+      ncmDefault:         document.getElementById('cfg-ncm-default')?.value?.replace(/\D/g,'') || '',
+      cfopDefault:        document.getElementById('cfg-cfop')?.value?.replace(/\D/g,'') || '',
+      csosnDefault:       document.getElementById('cfg-csosn')?.value?.replace(/\D/g,'') || '',
+      icmsAliquota:       parseFloat(document.getElementById('cfg-icms')?.value) || 0,
+      origemMercadoria:   document.getElementById('cfg-origem')?.value || '0',
+      unidadeComercial:   document.getElementById('cfg-unidade')?.value?.trim()?.toUpperCase() || 'UN',
+      nfeGateway:         document.getElementById('cfg-nfe-gateway')?.value || 'mock',
+      focusToken:         document.getElementById('cfg-focus-token')?.value?.trim() || existing.focusToken || '',
+    };
+    await saveConfig(cfg);
+    toast('✅ Configuração fiscal salva!');
+    render();
+  };}
+
   {const _el=document.getElementById('btn-clear-favicon');if(_el)_el.onclick=async()=>{
     if(!confirm('Remover o favicon customizado?')) return;
     const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
