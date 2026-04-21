@@ -621,6 +621,24 @@ export function renderConfig(){
         </div>
       </div>` : ''}
 
+      <!-- CSC — obrigatório para NFC-e -->
+      <div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:10px;padding:12px;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;color:#92400E;margin-bottom:6px;">🔑 CSC — Código de Segurança do Contribuinte (NFC-e)</div>
+        <div style="font-size:11px;color:#78350F;margin-bottom:10px;line-height:1.5;">
+          Gerado no portal da SEFAZ/AM. Obrigatório para emitir NFC-e (cupom fiscal).
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">CSC ID</label>
+            <input class="fi" id="cfg-csc-id" value="${cfg.cscId||'1'}" placeholder="1" maxlength="10"/>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px;">Normalmente 1 ou 000001</div>
+          </div>
+          <div class="fg"><label class="fl">CSC Token</label>
+            <input class="fi" id="cfg-csc-token" type="password" value="${cfg.cscToken||''}" placeholder="Código alfanumérico"/>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px;">Ex: A1B2C3D4E5F6...</div>
+          </div>
+        </div>
+      </div>
+
       <button class="btn btn-primary" id="btn-save-fiscal">💾 Salvar Config Fiscal</button>
     </div>
 
@@ -973,6 +991,8 @@ export function bindConfigActions(){
       unidadeComercial:   document.getElementById('cfg-unidade')?.value?.trim()?.toUpperCase() || 'UN',
       nfeGateway:         document.getElementById('cfg-nfe-gateway')?.value || 'mock',
       focusToken:         document.getElementById('cfg-focus-token')?.value?.trim() || existing.focusToken || '',
+      cscId:              document.getElementById('cfg-csc-id')?.value?.trim() || '1',
+      cscToken:           document.getElementById('cfg-csc-token')?.value?.trim() || existing.cscToken || '',
     };
     await saveConfig(cfg);
     toast('✅ Configuração fiscal salva!');
