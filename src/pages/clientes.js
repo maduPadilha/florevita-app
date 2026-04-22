@@ -310,10 +310,16 @@ export function renderClientes(){
         <div class="av" style="width:44px;height:44px;font-size:16px;">${ini(sel.name)}</div>
         <div>
           <div style="font-weight:700;font-size:15px">${sel.name}</div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap;">
             ${sel.code?`<span style="font-size:11px;color:var(--rose);font-weight:700;background:var(--rose-l);padding:1px 7px;border-radius:10px;">#${sel.code}</span>`:''}
+            <span style="font-size:10px;font-weight:700;background:${sel.tipoPessoa==='PJ'?'#5B21B6':'#059669'};color:#fff;padding:2px 7px;border-radius:10px;">${sel.tipoPessoa==='PJ'?'🏢 PJ':'👤 PF'}</span>
             <span class="tag ${segc(sel.segment||'Novo')}">${sel.segment||'Novo'}</span>
           </div>
+          ${(() => {
+            if(sel.tipoPessoa==='PJ' && sel.cnpj) return `<div style="font-size:10px;color:var(--muted);margin-top:2px;font-family:monospace;">CNPJ: ${sel.cnpj}${sel.inscEstadual?' · IE: '+sel.inscEstadual:''}</div>`;
+            if(sel.cpf) return `<div style="font-size:10px;color:var(--muted);margin-top:2px;font-family:monospace;">CPF: ${sel.cpf}</div>`;
+            return '';
+          })()}
         </div>
       </div>
       <button class="btn btn-ghost btn-sm" id="btn-cli-close">&times;</button>
@@ -513,16 +519,47 @@ export async function showClientModal(client=null){
     <button onclick="S._modal='';render();" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">&times;</button>
   </div>
 
-  <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;">&#128100; Dados Pessoais</div>
+  <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;">&#128100; Dados do Cliente</div>
+
+  <!-- Tipo: PF ou PJ (obrigatório) -->
+  <div class="fg" style="margin-bottom:10px;">
+    <label class="fl">Tipo de cliente <span style="color:var(--red)">*</span></label>
+    <div style="display:flex;gap:8px;">
+      <label style="flex:1;background:${(client?.tipoPessoa||'PF')==='PF'?'var(--rose-l)':'var(--cream)'};border:2px solid ${(client?.tipoPessoa||'PF')==='PF'?'var(--rose)':'var(--border)'};border-radius:10px;padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .15s;">
+        <input type="radio" name="cm-tipo" value="PF" ${(client?.tipoPessoa||'PF')==='PF'?'checked':''} id="cm-tipo-pf" style="cursor:pointer;"/>
+        <span style="font-weight:600;">👤 Pessoa Física (CPF)</span>
+      </label>
+      <label style="flex:1;background:${client?.tipoPessoa==='PJ'?'var(--rose-l)':'var(--cream)'};border:2px solid ${client?.tipoPessoa==='PJ'?'var(--rose)':'var(--border)'};border-radius:10px;padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .15s;">
+        <input type="radio" name="cm-tipo" value="PJ" ${client?.tipoPessoa==='PJ'?'checked':''} id="cm-tipo-pj" style="cursor:pointer;"/>
+        <span style="font-weight:600;">🏢 Pessoa Jurídica (CNPJ)</span>
+      </label>
+    </div>
+  </div>
+
   <div class="fr2">
-    <div class="fg" style="grid-column:span 2"><label class="fl">Nome completo *</label>
-      <input class="fi" id="cm-name" value="${client?.name||''}" placeholder="Nome do cliente"/></div>
+    <div class="fg" style="grid-column:span 2"><label class="fl" id="cm-name-label">${client?.tipoPessoa==='PJ'?'Razão Social':'Nome completo'} <span style="color:var(--red)">*</span></label>
+      <input class="fi" id="cm-name" value="${client?.name||''}" placeholder="${client?.tipoPessoa==='PJ'?'Razão Social da empresa':'Nome do cliente'}"/></div>
     <div class="fg"><label class="fl">Celular/WhatsApp *</label>
       <input class="fi" id="cm-phone" value="${client?.phone||''}" placeholder="(92) 9xxxx-xxxx"/></div>
-    <div class="fg"><label class="fl">CPF <span style="font-size:10px;color:var(--muted);font-weight:400;">(opcional · obrigat\u00F3rio no e-commerce)</span></label>
-      <input class="fi" id="cm-cpf" value="${client?.cpf||''}" placeholder="000.000.000-00" maxlength="14" inputmode="numeric"/></div>
-    <div class="fg"><label class="fl">Aniversario</label>
-      <input class="fi" id="cm-bday" type="date" value="${client?.birthday||''}"/></div>
+    <!-- CPF (PF) -->
+    <div class="fg" id="cm-cpf-wrap" style="${client?.tipoPessoa==='PJ'?'display:none;':''}">
+      <label class="fl">CPF <span style="font-size:10px;color:var(--muted);font-weight:400;">(opcional — usado para emitir NFC-e)</span></label>
+      <input class="fi" id="cm-cpf" value="${client?.cpf||''}" placeholder="000.000.000-00" maxlength="14" inputmode="numeric"/>
+    </div>
+    <!-- CNPJ (PJ) -->
+    <div class="fg" id="cm-cnpj-wrap" style="${client?.tipoPessoa==='PJ'?'':'display:none;'}">
+      <label class="fl">CNPJ <span style="font-size:10px;color:var(--muted);font-weight:400;">(obrigatório para emitir NF-e)</span></label>
+      <input class="fi" id="cm-cnpj" value="${client?.cnpj||''}" placeholder="00.000.000/0000-00" maxlength="18" inputmode="numeric"/>
+    </div>
+    <!-- Inscrição Estadual (PJ) -->
+    <div class="fg" id="cm-ie-wrap" style="${client?.tipoPessoa==='PJ'?'':'display:none;'}">
+      <label class="fl">Inscrição Estadual <span style="font-size:10px;color:var(--muted);font-weight:400;">(deixe em branco se ISENTO)</span></label>
+      <input class="fi" id="cm-ie" value="${client?.inscEstadual||''}" placeholder="Número da IE ou ISENTO"/>
+    </div>
+    <div class="fg" id="cm-bday-wrap" style="${client?.tipoPessoa==='PJ'?'display:none;':''}">
+      <label class="fl">Aniversário</label>
+      <input class="fi" id="cm-bday" type="date" value="${client?.birthday||''}"/>
+    </div>
     <div class="fg"><label class="fl">Segmento</label>
       <select class="fi" id="cm-seg">
         ${SEGMENTS.map(s=>`<option ${client?.segment===s?'selected':''}>${s}</option>`).join('')}
@@ -579,6 +616,46 @@ export async function showClientModal(client=null){
     const cpfEl = document.getElementById('cm-cpf');
     if(cpfEl) cpfEl.addEventListener('input', e => { e.target.value = maskCPF(e.target.value); });
   }
+  // Mascara CNPJ
+  {
+    const cnpjEl = document.getElementById('cm-cnpj');
+    if(cnpjEl) cnpjEl.addEventListener('input', e => {
+      let v = e.target.value.replace(/\D/g,'').slice(0,14);
+      if(v.length > 12) v = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, '$1.$2.$3/$4-$5');
+      else if(v.length > 8) v = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, '$1.$2.$3/$4');
+      else if(v.length > 5) v = v.replace(/^(\d{2})(\d{3})(\d{0,3})/, '$1.$2.$3');
+      else if(v.length > 2) v = v.replace(/^(\d{2})(\d{0,3})/, '$1.$2');
+      e.target.value = v;
+    });
+  }
+  // Toggle PF/PJ — mostra/esconde CPF vs CNPJ+IE e ajusta label do nome
+  function applyTipoToggle(tipo){
+    const isPJ = tipo === 'PJ';
+    const cpfW = document.getElementById('cm-cpf-wrap');
+    const cnpjW = document.getElementById('cm-cnpj-wrap');
+    const ieW = document.getElementById('cm-ie-wrap');
+    const bdayW = document.getElementById('cm-bday-wrap');
+    const nameLbl = document.getElementById('cm-name-label');
+    const nameInp = document.getElementById('cm-name');
+    if(cpfW) cpfW.style.display = isPJ ? 'none' : '';
+    if(cnpjW) cnpjW.style.display = isPJ ? '' : 'none';
+    if(ieW) ieW.style.display = isPJ ? '' : 'none';
+    if(bdayW) bdayW.style.display = isPJ ? 'none' : '';
+    if(nameLbl) nameLbl.firstChild.textContent = (isPJ ? 'Razão Social ' : 'Nome completo ');
+    if(nameInp) nameInp.placeholder = isPJ ? 'Razão Social da empresa' : 'Nome do cliente';
+    // Atualiza highlight das radios
+    document.querySelectorAll('input[name="cm-tipo"]').forEach(r => {
+      const lbl = r.closest('label');
+      if(lbl){
+        const selected = r.checked;
+        lbl.style.background = selected ? 'var(--rose-l)' : 'var(--cream)';
+        lbl.style.borderColor = selected ? 'var(--rose)' : 'var(--border)';
+      }
+    });
+  }
+  document.querySelectorAll('input[name="cm-tipo"]').forEach(r => {
+    r.addEventListener('change', () => applyTipoToggle(r.value));
+  });
 
   // Datas especiais — adicionar
   document.getElementById('btn-add-data-especial')?.addEventListener('click',()=>{
@@ -605,10 +682,16 @@ function maskCPF(v){
 
 // ── SALVAR CLIENTE ────────────────────────────────────────────
 export async function saveClient(editId=null){
+  // Tipo (PF/PJ) — obrigatório
+  const tipoRadio = document.querySelector('input[name="cm-tipo"]:checked');
+  const tipoPessoa = tipoRadio?.value || 'PF';
+
   const name  = document.getElementById('cm-name')?.value?.trim()||'';
   const phone = document.getElementById('cm-phone')?.value?.trim()||'';
-  const cpf   = document.getElementById('cm-cpf')?.value?.trim()||'';
-  const bday  = document.getElementById('cm-bday')?.value||'';
+  const cpf   = tipoPessoa === 'PF' ? (document.getElementById('cm-cpf')?.value?.trim()||'') : '';
+  const cnpj  = tipoPessoa === 'PJ' ? (document.getElementById('cm-cnpj')?.value?.trim()||'') : '';
+  const ie    = tipoPessoa === 'PJ' ? (document.getElementById('cm-ie')?.value?.trim()||'') : '';
+  const bday  = tipoPessoa === 'PF' ? (document.getElementById('cm-bday')?.value||'') : '';
   const seg   = document.getElementById('cm-seg')?.value||'Novo';
   const addr  = {
     street:       document.getElementById('cm-street')?.value?.trim()||'',
@@ -618,8 +701,19 @@ export async function saveClient(editId=null){
     city:         'Manaus',
   };
 
-  if(!name)  return toast('\u274C Nome \u00E9 obrigat\u00F3rio', true);
-  if(!phone) return toast('\u274C Celular \u00E9 obrigat\u00F3rio', true);
+  if(!tipoPessoa) return toast('❌ Selecione se é Pessoa Física ou Jurídica', true);
+  if(!name)  return toast(`❌ ${tipoPessoa==='PJ'?'Razão Social':'Nome'} é obrigatório`, true);
+  if(!phone) return toast('❌ Celular é obrigatório', true);
+  // Valida CNPJ (se preenchido) — 14 dígitos
+  if(tipoPessoa === 'PJ' && cnpj){
+    const d = cnpj.replace(/\D/g,'');
+    if(d.length !== 14) return toast('❌ CNPJ deve ter 14 dígitos', true);
+  }
+  // Valida CPF (se preenchido) — 11 dígitos
+  if(tipoPessoa === 'PF' && cpf){
+    const d = cpf.replace(/\D/g,'');
+    if(d.length !== 11) return toast('❌ CPF deve ter 11 dígitos', true);
+  }
 
   // Duplicate check: same name + same phone (digits only)
   const duplicate = S.clients.find(c => {
@@ -635,8 +729,17 @@ export async function saveClient(editId=null){
 
   S._modal=''; S.loading=true; try{render();}catch(e){}
   try{
-    const payload={name,phone,cpf:cpf||undefined,birthday:bday||undefined,segment:seg,address:addr,
-      unit:S.user.unit==='Todas'?'Loja Novo Aleixo':S.user.unit};
+    const payload={
+      name, phone,
+      tipoPessoa,
+      cpf: cpf || undefined,
+      cnpj: cnpj || undefined,
+      inscEstadual: ie || undefined,
+      birthday: bday || undefined,
+      segment: seg,
+      address: addr,
+      unit: S.user.unit === 'Todas' ? 'Loja Novo Aleixo' : S.user.unit,
+    };
     let c;
     if(editId){
       c = await PUT('/clients/'+editId, payload);

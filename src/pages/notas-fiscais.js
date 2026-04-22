@@ -104,18 +104,25 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
     : null;
   const client = clientRec || clientByPhone;
 
+  // Tipo vem do cadastro do cliente (ou do pedido, se foi copiado)
+  const tipoPessoa = (order.clientTipoPessoa || client?.tipoPessoa || 'PF').toUpperCase();
+  const isPJ = tipoPessoa === 'PJ';
+
+  // Documento: se PJ, pega CNPJ; se PF, pega CPF
   const cpfCnpj = (
     order.cpfCnpj ||
     order.clientCpf ||
     order.client?.cpf ||
-    client?.cpf ||
-    client?.cnpj ||
+    (isPJ ? client?.cnpj : client?.cpf) ||
     ''
   ).replace(/\D/g, '');
-  const isPJ = cpfCnpj.length === 14;
 
   if (tipo === 'NFe' && !isPJ) {
-    toast('❌ NF-e requer CNPJ do destinatário. Use NFC-e ou cadastre o CNPJ no cliente.', true);
+    toast('❌ NF-e requer cliente cadastrado como Pessoa Jurídica (com CNPJ).', true);
+    return;
+  }
+  if (tipo === 'NFe' && cpfCnpj.length !== 14) {
+    toast('❌ CNPJ do cliente não está cadastrado ou é inválido.', true);
     return;
   }
 
