@@ -126,11 +126,16 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
     return;
   }
 
-  // Modal de confirmação
+  // Valores iniciais do pedido (editáveis no modal)
+  const iniProdutos = Number(order.subtotal || order.total || 0);
+  const iniFrete = Number(order.deliveryFee || 0);
+  const iniDesconto = Number(order.discount || 0);
+
+  // Modal de confirmação com valores editáveis
   S._modal = `<div class="mo" id="mo" onclick="if(event.target===this){S._modal='';window.render&&window.render();}">
-    <div class="mo-box" style="max-width:480px;" onclick="event.stopPropagation()">
+    <div class="mo-box" style="max-width:520px;max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
       <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">📄 Emitir ${tipo === 'NFCe' ? 'NFC-e (Cupom Fiscal)' : 'NF-e (DANFE)'}</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Pedido ${fmtOrderNum(order)} · ${$c(order.total)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Pedido ${fmtOrderNum(order)}</div>
 
       <div style="background:var(--cream);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;">
         <div style="font-weight:700;margin-bottom:4px;">Destinatário</div>
@@ -139,8 +144,38 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
         ${!cpfCnpj && tipo === 'NFCe' ? '<div style="color:var(--gold);font-size:11px;margin-top:4px;">⚠️ Sem CPF — será emitida como "Consumidor sem identificação"</div>' : ''}
       </div>
 
+      <!-- Valores editáveis (ajuste só na NOTA, não altera o pedido) -->
+      <div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;color:#92400E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">💰 Valores da Nota</div>
+        <div style="font-size:10px;color:#78350F;margin-bottom:10px;line-height:1.4;">
+          Editável antes de emitir — não altera o pedido, só o que vai pra SEFAZ.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div>
+            <label style="font-size:10px;color:#78350F;font-weight:600;">Valor produtos</label>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:11px;color:var(--muted);">R$</span>
+              <input type="number" step="0.01" min="0" id="nfe-val-produtos" value="${iniProdutos.toFixed(2)}"
+                style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:700;"/>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:10px;color:#78350F;font-weight:600;">Valor frete (embutido)</label>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:11px;color:var(--muted);">R$</span>
+              <input type="number" step="0.01" min="0" id="nfe-val-frete" value="${iniFrete.toFixed(2)}"
+                style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;"/>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #FCD34D;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;font-weight:700;color:#92400E;">Total da nota:</span>
+          <span id="nfe-val-total" style="font-size:16px;font-weight:800;color:#065F46;">${$c(iniProdutos + iniFrete - iniDesconto)}</span>
+        </div>
+      </div>
+
       <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 12px;font-size:11px;color:#1D4ED8;margin-bottom:14px;">
-        🌐 Ambiente atual: <strong>${cfg.certAmbiente === 'producao' ? 'PRODUÇÃO' : 'HOMOLOGAÇÃO (teste)'}</strong> · Gateway: <strong>${cfg.nfeGateway || 'mock'}</strong>
+        🌐 Ambiente: <strong>${cfg.certAmbiente === 'producao' ? 'PRODUÇÃO' : 'HOMOLOGAÇÃO (teste)'}</strong> · Gateway: <strong>${cfg.nfeGateway || 'mock'}</strong>
       </div>
 
       <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -149,6 +184,17 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
       </div>
     </div></div>`;
   await render();
+
+  // Recalcula total ao editar valor produtos ou frete
+  const recalcTotal = () => {
+    const p = parseFloat(document.getElementById('nfe-val-produtos')?.value) || 0;
+    const f = parseFloat(document.getElementById('nfe-val-frete')?.value) || 0;
+    const total = p + f - iniDesconto;
+    const el = document.getElementById('nfe-val-total');
+    if(el) el.textContent = `R$ ${total.toFixed(2).replace('.',',')}`;
+  };
+  document.getElementById('nfe-val-produtos')?.addEventListener('input', recalcTotal);
+  document.getElementById('nfe-val-frete')?.addEventListener('input', recalcTotal);
 
   document.getElementById('btn-emitir-confirm')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-emitir-confirm');
@@ -162,9 +208,13 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
         telefone: order.clientPhone || client?.phone || '',
         inscEstadual: client?.inscEstadual || '',
       };
+      // Overrides dos valores (editados pelo usuário no modal)
+      const valorProdutos = parseFloat(document.getElementById('nfe-val-produtos')?.value) || 0;
+      const valorFrete = parseFloat(document.getElementById('nfe-val-frete')?.value) || 0;
+      const overrideValores = { valorProdutos, valorFrete };
       let resp;
       try {
-        resp = await POST('/notas-fiscais/emitir', { orderId, tipo, destinatario });
+        resp = await POST('/notas-fiscais/emitir', { orderId, tipo, destinatario, overrideValores });
       } catch (err) {
         // 409 = já existe nota Processando/Autorizada → se for Processando/Rejeitada,
         // pergunta se quer descartar e tentar de novo
@@ -185,7 +235,7 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
             if (btn) { btn.disabled = true; btn.textContent = '🗑️ Descartando anterior...'; }
             await descartarNotaFiscal(existentes[0]._id, true);
             if (btn) btn.textContent = '⏳ Re-emitindo...';
-            resp = await POST('/notas-fiscais/emitir', { orderId, tipo, destinatario });
+            resp = await POST('/notas-fiscais/emitir', { orderId, tipo, destinatario, overrideValores });
           } else {
             throw err;
           }
