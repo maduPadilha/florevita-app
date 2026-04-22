@@ -133,6 +133,24 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
   });
 }
 
+// ── CONSULTAR status na Focus (re-busca na SEFAZ) ────────────
+export async function consultarStatusNota(notaId) {
+  try {
+    toast('🔄 Consultando SEFAZ...');
+    const resp = await POST('/notas-fiscais/' + notaId + '/consultar', {});
+    if (Array.isArray(S._notasFiscais) && resp?.nota) {
+      S._notasFiscais = S._notasFiscais.map(n => n._id === notaId ? resp.nota : n);
+    }
+    const st = resp?.nota?.status || '—';
+    if (st === 'Autorizada') toast('✅ Autorizada!');
+    else if (st === 'Rejeitada' || st === 'Denegada') toast(`❌ ${st}: ${resp.nota?.statusMensagem || ''}`, true);
+    else toast(`⏳ Status: ${st}`);
+    render();
+  } catch (e) {
+    toast('❌ Erro: ' + (e.message || ''), true);
+  }
+}
+
 // ── CANCELAR nota ─────────────────────────────────────────────
 export async function cancelarNotaFiscal(notaId) {
   const motivo = prompt('Motivo do cancelamento (mín 15 caracteres):');
@@ -234,6 +252,7 @@ ${filtered.length === 0 ? `
       <td style="font-weight:700;">${$c(n.valorTotal || 0)}</td>
       <td>${statusBadge(n.status)}</td>
       <td style="white-space:nowrap;">
+        ${['Processando','Pendente'].includes(n.status) ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-consultar="${n._id}" title="Consultar status na SEFAZ" style="color:var(--blue);">🔄</button>` : ''}
         ${n.pdfUrl || n.danfeUrl ? `<a href="${n.danfeUrl || n.pdfUrl}" target="_blank" class="btn btn-ghost btn-xs" title="Ver PDF">📄</a>` : ''}
         ${n.xmlUrl ? `<a href="${n.xmlUrl}" target="_blank" class="btn btn-ghost btn-xs" title="Baixar XML">📥</a>` : ''}
         ${n.status === 'Autorizada' ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-cancel="${n._id}" style="color:var(--red);" title="Cancelar">🚫</button>` : ''}
@@ -264,10 +283,27 @@ export function bindNotasFiscaisEvents() {
   document.querySelectorAll('[data-nfe-cancel]').forEach(b => {
     b.addEventListener('click', () => cancelarNotaFiscal(b.dataset.nfeCancel));
   });
+  document.querySelectorAll('[data-nfe-consultar]').forEach(b => {
+    b.addEventListener('click', () => consultarStatusNota(b.dataset.nfeConsultar));
+  });
+
+  // Auto-consulta notas em Processando a cada 10s (até virarem Autorizada/Rejeitada)
+  clearInterval(window._nfeAutoPoll);
+  const pendentes = (S._notasFiscais || []).filter(n => ['Processando','Pendente'].includes(n.status));
+  if (pendentes.length > 0 && S.page === 'notasFiscais') {
+    window._nfeAutoPoll = setInterval(() => {
+      if (S.page !== 'notasFiscais') { clearInterval(window._nfeAutoPoll); return; }
+      const ainda = (S._notasFiscais || []).filter(n => ['Processando','Pendente'].includes(n.status));
+      if (ainda.length === 0) { clearInterval(window._nfeAutoPoll); return; }
+      // Consulta só a primeira pendente (evita sobrecarga)
+      consultarStatusNota(ainda[0]._id);
+    }, 10000);
+  }
 }
 
 // Expõe globalmente
 if (typeof window !== 'undefined') {
   window.emitirNotaFiscal = emitirNotaFiscal;
   window.cancelarNotaFiscal = cancelarNotaFiscal;
+  window.consultarStatusNota = consultarStatusNota;
 }
