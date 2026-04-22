@@ -475,7 +475,27 @@ export function renderConfig(){
         <div class="fg"><label class="fl">Inscricao Estadual</label><input class="fi" id="cfg-ie" value="${cfg.ie||''}" placeholder="IE"/></div>
       </div>
       <div class="fg"><label class="fl">WhatsApp</label><input class="fi" id="cfg-whats" value="${cfg.whats||'5592993002433'}" placeholder="5592993002433"/></div>
-      <div class="fg"><label class="fl">Endereco</label><input class="fi" id="cfg-addr" value="${cfg.addr||''}" placeholder="Rua, numero — Manaus/AM"/></div>
+      <div class="fg"><label class="fl">Endereço completo <span style="font-size:10px;color:var(--muted);font-weight:400;">(para exibição)</span></label><input class="fi" id="cfg-addr" value="${cfg.addr||''}" placeholder="Rua, numero — Manaus/AM"/></div>
+
+      <!-- Campos estruturados para emissão fiscal -->
+      <div style="background:#FFFBEB;border:1px solid #F59E0B;border-radius:8px;padding:10px;margin-bottom:10px;">
+        <div style="font-size:10px;font-weight:700;color:#92400E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">📮 Endereço para NFC-e/NF-e (campos separados obrigatórios)</div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">CEP <span style="color:var(--red)">*</span></label>
+            <input class="fi" id="cfg-cep" value="${cfg.cep||''}" placeholder="69046-000" maxlength="9"/></div>
+          <div class="fg"><label class="fl">Rua / Logradouro <span style="color:var(--red)">*</span></label>
+            <input class="fi" id="cfg-rua" value="${cfg.rua||''}" placeholder="R. Brasileia"/></div>
+          <div class="fg"><label class="fl">Número <span style="color:var(--red)">*</span></label>
+            <input class="fi" id="cfg-numero" value="${cfg.numero||''}" placeholder="17"/></div>
+          <div class="fg"><label class="fl">Complemento</label>
+            <input class="fi" id="cfg-complemento" value="${cfg.complemento||''}" placeholder="QD D3 LT 17"/></div>
+          <div class="fg"><label class="fl">Bairro <span style="color:var(--red)">*</span></label>
+            <input class="fi" id="cfg-bairro" value="${cfg.bairro||'Novo Aleixo'}" placeholder="Novo Aleixo"/></div>
+          <div class="fg"><label class="fl">Cidade</label>
+            <input class="fi" id="cfg-cidade" value="${cfg.cidade||'Manaus'}" placeholder="Manaus"/></div>
+        </div>
+      </div>
+
       <div class="fg"><label class="fl">E-mail</label><input class="fi" id="cfg-email" value="${cfg.email||''}" placeholder="contato@lacoseternos.com.br"/></div>
       <button class="btn btn-primary" id="btn-save-cfg">Salvar Dados</button>
     </div>
@@ -901,6 +921,36 @@ export function bindConfigActions(){
     document.getElementById('city-name')?.focus();
   };}
 
+  // CEP da empresa: auto-preenche via ViaCEP + mascara
+  {
+    const cepEl = document.getElementById('cfg-cep');
+    if(cepEl){
+      let lastCep = '';
+      const buscar = async (cep) => {
+        try{
+          const res = await fetch('https://viacep.com.br/ws/'+cep+'/json/');
+          if(!res.ok) return;
+          const data = await res.json();
+          if(data?.erro) return;
+          const set = (id, val) => {
+            const el = document.getElementById(id);
+            if(el && val && !el.value.trim()) el.value = val;
+          };
+          set('cfg-rua', data.logradouro);
+          set('cfg-bairro', data.bairro);
+          const cidadeEl = document.getElementById('cfg-cidade');
+          if(cidadeEl && data.localidade) cidadeEl.value = data.localidade;
+          toast('📍 Endereço preenchido pelo CEP');
+        }catch(e){/* silencioso */}
+      };
+      cepEl.addEventListener('input', e => {
+        const d = e.target.value.replace(/\D/g,'').slice(0,8);
+        e.target.value = d.length > 5 ? d.slice(0,5) + '-' + d.slice(5) : d;
+        if(d.length === 8 && d !== lastCep){ lastCep = d; buscar(d); }
+      });
+    }
+  }
+
   // Save config (migrated to API)
   {const _el=document.getElementById('btn-save-cfg');if(_el)_el.onclick=async()=>{
     const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
@@ -912,6 +962,13 @@ export function bindConfigActions(){
       whats:document.getElementById('cfg-whats')?.value,
       addr:document.getElementById('cfg-addr')?.value,
       email:document.getElementById('cfg-email')?.value,
+      // Endereço estruturado (para emissão fiscal)
+      cep:         document.getElementById('cfg-cep')?.value?.replace(/\D/g,'') || '',
+      rua:         document.getElementById('cfg-rua')?.value?.trim() || '',
+      numero:      document.getElementById('cfg-numero')?.value?.trim() || '',
+      complemento: document.getElementById('cfg-complemento')?.value?.trim() || '',
+      bairro:      document.getElementById('cfg-bairro')?.value?.trim() || '',
+      cidade:      document.getElementById('cfg-cidade')?.value?.trim() || 'Manaus',
     };
     await saveConfig(cfg);
     toast('Dados salvos!');
