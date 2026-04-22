@@ -386,6 +386,23 @@ export async function enviarNotaEmail(notaId) {
   window.location.href = `mailto:${email}?subject=${subj}&body=${body}`;
 }
 
+// ── DESCARTAR TODAS notas nao-autorizadas (limpeza) ──────────
+export async function descartarTodasNotas() {
+  const pendentes = (S._notasFiscais || []).filter(n =>
+    ['Processando','Pendente','Rejeitada','Denegada','Cancelada'].includes(n.status)
+  ).length;
+  if (pendentes === 0) { toast('Nenhuma nota para limpar'); return; }
+  if (!confirm(`Descartar ${pendentes} nota(s) nao autorizadas?\n\nNotas Autorizadas NAO serao afetadas.`)) return;
+  try {
+    const resp = await DELETE('/notas-fiscais/limpar/nao-autorizadas');
+    toast(`🧹 ${resp?.deletedCount || pendentes} nota(s) removida(s)`);
+    _fetchedOnce = false;
+    await loadNotas();
+  } catch (e) {
+    toast('❌ Erro: ' + (e.message || ''), true);
+  }
+}
+
 // ── DESCARTAR nota (Processando/Rejeitada/Pendente) ──────────
 export async function descartarNotaFiscal(notaId, silencioso = false) {
   if (!silencioso) {
@@ -483,7 +500,10 @@ export function renderNotasFiscais() {
     <h2 style="font-family:'Playfair Display',serif;font-size:22px;color:var(--primary);margin:0;">🧾 Notas Fiscais</h2>
     <p style="font-size:13px;color:var(--muted);margin:2px 0 0;">NFC-e (cupom) e NF-e (DANFE) emitidas</p>
   </div>
-  <button type="button" class="btn btn-ghost btn-sm" id="btn-reload-nfe">🔄 Atualizar</button>
+  <div style="display:flex;gap:6px;">
+    <button type="button" class="btn btn-ghost btn-sm" id="btn-reload-nfe">🔄 Atualizar</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="btn-limpar-nfe" style="color:var(--red);border:1px solid var(--red);">🧹 Limpar testes</button>
+  </div>
 </div>
 
 <div class="g4" style="margin-bottom:14px;">
@@ -560,6 +580,7 @@ export function bindNotasFiscaisEvents() {
     await loadNotas();
     toast('✅ Lista atualizada');
   });
+  document.getElementById('btn-limpar-nfe')?.addEventListener('click', descartarTodasNotas);
   document.querySelectorAll('[data-nfe-cancel]').forEach(b => {
     b.addEventListener('click', () => cancelarNotaFiscal(b.dataset.nfeCancel));
   });
