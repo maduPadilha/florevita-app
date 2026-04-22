@@ -627,13 +627,58 @@ export async function showClientModal(client=null){
     const cpfEl = document.getElementById('cm-cpf');
     if(cpfEl) cpfEl.addEventListener('input', e => { e.target.value = maskCPF(e.target.value); });
   }
-  // Mascara CEP (XXXXX-XXX)
+  // Mascara CEP (XXXXX-XXX) + auto-preenchimento via ViaCEP
   {
     const cepEl = document.getElementById('cm-cep');
-    if(cepEl) cepEl.addEventListener('input', e => {
-      const d = e.target.value.replace(/\D/g,'').slice(0,8);
-      e.target.value = d.length > 5 ? d.slice(0,5) + '-' + d.slice(5) : d;
-    });
+    if(cepEl){
+      let lastCep = '';
+      cepEl.addEventListener('input', e => {
+        const d = e.target.value.replace(/\D/g,'').slice(0,8);
+        e.target.value = d.length > 5 ? d.slice(0,5) + '-' + d.slice(5) : d;
+        if(d.length === 8 && d !== lastCep){
+          lastCep = d;
+          buscarViaCEP(d);
+        }
+      });
+      // Também busca ao colar ou ao sair do campo
+      cepEl.addEventListener('blur', () => {
+        const d = cepEl.value.replace(/\D/g,'');
+        if(d.length === 8 && d !== lastCep){
+          lastCep = d;
+          buscarViaCEP(d);
+        }
+      });
+    }
+  }
+  // ViaCEP: preenche rua, bairro, cidade e UF automaticamente
+  async function buscarViaCEP(cep){
+    try{
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch('https://viacep.com.br/ws/'+cep+'/json/', { signal: ctrl.signal });
+      if(!res.ok) return;
+      const data = await res.json();
+      if(data?.erro) { toast('⚠️ CEP não encontrado'); return; }
+      const setIfEmpty = (id, val) => {
+        const el = document.getElementById(id);
+        if(el && val && !el.value.trim()) el.value = val;
+      };
+      // Sempre atualiza cidade e UF (são do CEP, não subjetivos)
+      const cityEl = document.getElementById('cm-city');
+      if(cityEl && data.localidade) cityEl.value = data.localidade;
+      const ufEl = document.getElementById('cm-uf');
+      if(ufEl && data.uf){
+        Array.from(ufEl.options).forEach(o => { if(o.value === data.uf) o.selected = true; });
+      }
+      // Rua e bairro só preenche se estiverem vazios (respeita edição manual)
+      setIfEmpty('cm-street', data.logradouro);
+      setIfEmpty('cm-neigh', data.bairro);
+      // Foca no campo de número (o que sobra preencher)
+      document.getElementById('cm-number')?.focus();
+      toast('📍 Endereço preenchido pelo CEP');
+    }catch(e){
+      if(e.name !== 'AbortError') console.warn('ViaCEP:', e);
+    }
   }
   // Mascara CNPJ
   {
