@@ -117,6 +117,10 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
     ''
   ).replace(/\D/g, '');
 
+  // UF do cliente (para detectar interestadual)
+  const ufCliente = (client?.address?.state || client?.address?.uf || 'AM').toUpperCase();
+  const isInterestadual = ufCliente !== 'AM';
+
   if (tipo === 'NFe' && !isPJ) {
     toast('❌ NF-e requer cliente cadastrado como Pessoa Jurídica (com CNPJ).', true);
     return;
@@ -124,6 +128,17 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
   if (tipo === 'NFe' && cpfCnpj.length !== 14) {
     toast('❌ CNPJ do cliente não está cadastrado ou é inválido.', true);
     return;
+  }
+  // NFC-e é tradicionalmente para venda presencial no estado.
+  // Se cliente for de outro estado, sugere NF-e.
+  if (tipo === 'NFCe' && isInterestadual) {
+    const prosseguir = confirm(
+      `⚠️ Cliente é de ${ufCliente} (fora do AM).\n\n` +
+      `NFC-e (cupom fiscal) é para venda presencial DENTRO do estado.\n` +
+      `Para venda interestadual o correto é NF-e (DANFE).\n\n` +
+      `Deseja continuar emitindo a NFC-e mesmo assim?`
+    );
+    if (!prosseguir) return;
   }
 
   // Valores iniciais do pedido (editáveis no modal)
@@ -138,9 +153,10 @@ export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
       <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Pedido ${fmtOrderNum(order)}</div>
 
       <div style="background:var(--cream);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;">
-        <div style="font-weight:700;margin-bottom:4px;">Destinatário</div>
+        <div style="font-weight:700;margin-bottom:4px;">Destinatário ${isPJ ? '🏢' : '👤'}</div>
         <div>${order.clientName || '—'}</div>
         <div style="color:var(--muted);">${isPJ ? 'CNPJ' : 'CPF'}: ${cpfCnpj || '—'}</div>
+        ${client?.address?.city ? `<div style="color:var(--muted);font-size:11px;margin-top:2px;">📍 ${client.address.city}/${ufCliente}${isInterestadual?` <span style="color:#D97706;font-weight:700;">— INTERESTADUAL · CFOP 6102</span>`:''}</div>` : ''}
         ${!cpfCnpj && tipo === 'NFCe' ? '<div style="color:var(--gold);font-size:11px;margin-top:4px;">⚠️ Sem CPF — será emitida como "Consumidor sem identificação"</div>' : ''}
       </div>
 

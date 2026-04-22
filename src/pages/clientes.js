@@ -567,16 +567,27 @@ export async function showClientModal(client=null){
     </div>
   </div>
 
-  <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin:12px 0 8px;">&#128205; Endereco</div>
+  <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin:12px 0 8px;">&#128205; Endereço</div>
   <div class="fr2">
     <div class="fg" style="grid-column:span 2"><label class="fl">Rua</label>
       <input class="fi" id="cm-street" value="${client?.address?.street||''}" placeholder="Rua, Avenida..."/></div>
-    <div class="fg"><label class="fl">Numero</label>
+    <div class="fg"><label class="fl">Número</label>
       <input class="fi" id="cm-number" value="${client?.address?.number||''}" placeholder="123"/></div>
     <div class="fg"><label class="fl">Bairro</label>
       <input class="fi" id="cm-neigh" value="${client?.address?.neighborhood||''}" placeholder="Bairro"/></div>
+    <div class="fg"><label class="fl">Cidade</label>
+      <input class="fi" id="cm-city" value="${client?.address?.city||'Manaus'}" placeholder="Manaus"/></div>
+    <div class="fg"><label class="fl">Estado (UF)</label>
+      <select class="fi" id="cm-uf">
+        ${(()=>{
+          const ufs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+          const sel = client?.address?.state || client?.address?.uf || 'AM';
+          return ufs.map(u=>`<option ${u===sel?'selected':''}>${u}</option>`).join('');
+        })()}
+      </select>
+    </div>
     <div class="fg"><label class="fl">CEP</label>
-      <input class="fi" id="cm-cep" value="${client?.address?.cep||''}" placeholder="69000-000"/></div>
+      <input class="fi" id="cm-cep" value="${client?.address?.cep||''}" placeholder="00000-000" maxlength="9"/></div>
   </div>
 
   <!-- ── DATAS ESPECIAIS ──────────────────────────────────── -->
@@ -698,7 +709,8 @@ export async function saveClient(editId=null){
     number:       document.getElementById('cm-number')?.value?.trim()||'',
     neighborhood: document.getElementById('cm-neigh')?.value?.trim()||'',
     cep:          document.getElementById('cm-cep')?.value?.trim()||'',
-    city:         'Manaus',
+    city:         document.getElementById('cm-city')?.value?.trim()||'Manaus',
+    state:        document.getElementById('cm-uf')?.value||'AM',
   };
 
   if(!tipoPessoa) return toast('❌ Selecione se é Pessoa Física ou Jurídica', true);
