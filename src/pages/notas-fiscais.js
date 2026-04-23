@@ -84,7 +84,7 @@ function statusBadge(status) {
 
 // ── EMITIR nota (via modal simples) ───────────────────────────
 export async function emitirNotaFiscal(orderId, tipo = 'NFCe') {
-  if (!can('reports') && !can('orders')) {
+  if (!can('reports') && !can('orders') && !can('financial') && !isAdmin()) {
     toast('Sem permissão para emitir notas fiscais', true);
     return;
   }
@@ -383,7 +383,7 @@ export function verDetalhesNota(notaId) {
           <button type="button" class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${n.chave}').then(()=>window._fvToast&&window._fvToast('🔑 Chave copiada'))">📋 Copiar chave</button>` : ''}
         ${['Processando','Pendente'].includes(n.status) ? `
           <button type="button" class="btn btn-ghost btn-sm" onclick="window.consultarStatusNota('${n._id}')">🔄 Consultar SEFAZ</button>` : ''}
-        ${n.status === 'Autorizada' ? `
+        ${n.status === 'Autorizada' && isAdmin() ? `
           <button type="button" class="btn btn-ghost btn-sm" onclick="window.cancelarNotaFiscal('${n._id}')" style="color:var(--red);border-color:var(--red);">🚫 Cancelar nota</button>` : ''}
         ${['Processando','Pendente','Rejeitada','Denegada'].includes(n.status) ? `
           <button type="button" class="btn btn-ghost btn-sm" onclick="window.descartarNotaFiscal('${n._id}').then(()=>{S._modal='';window.render&&window.render();})" style="color:var(--red);">🗑️ Descartar</button>` : ''}
@@ -478,7 +478,16 @@ export async function consultarStatusNota(notaId, opts = {}) {
 }
 
 // ── CANCELAR nota ─────────────────────────────────────────────
+// Helper: somente admin pode cancelar notas fiscais
+function isAdmin() {
+  return S.user?.role === 'Administrador' || S.user?.cargo === 'admin';
+}
+
 export async function cancelarNotaFiscal(notaId) {
+  if (!isAdmin()) {
+    toast('❌ Apenas administradores podem cancelar notas fiscais', true);
+    return;
+  }
   const motivo = prompt('Motivo do cancelamento (mín 15 caracteres):');
   if (!motivo || motivo.length < 15) {
     toast('❌ Motivo muito curto (mín 15 caracteres)', true);
@@ -498,7 +507,8 @@ export async function cancelarNotaFiscal(notaId) {
 
 // ── RENDER PÁGINA ─────────────────────────────────────────────
 export function renderNotasFiscais() {
-  if (!can('reports') && S.user?.role !== 'Administrador' && S.user?.cargo !== 'admin') {
+  // Acesso à tela: admin, ou colaborador com modulo financial/reports/orders
+  if (!isAdmin() && !can('financial') && !can('reports') && !can('orders')) {
     return '<div class="empty card"><div class="empty-icon">🚫</div><p>Sem permissão para Notas Fiscais</p></div>';
   }
 
@@ -540,7 +550,7 @@ export function renderNotasFiscais() {
   </div>
   <div style="display:flex;gap:6px;">
     <button type="button" class="btn btn-ghost btn-sm" id="btn-reload-nfe">🔄 Atualizar</button>
-    <button type="button" class="btn btn-ghost btn-sm" id="btn-limpar-nfe" style="color:var(--red);border:1px solid var(--red);">🧹 Limpar testes</button>
+    ${isAdmin() ? `<button type="button" class="btn btn-ghost btn-sm" id="btn-limpar-nfe" style="color:var(--red);border:1px solid var(--red);">🧹 Limpar testes</button>` : ''}
   </div>
 </div>
 
@@ -590,7 +600,7 @@ ${filtered.length === 0 ? `
         ${n.pdfUrl || n.danfeUrl ? `<a href="${n.danfeUrl || n.pdfUrl}" target="_blank" class="btn btn-ghost btn-xs" title="Imprimir / PDF">🖨️</a>` : ''}
         ${n.xmlUrl ? `<a href="${n.xmlUrl}" target="_blank" class="btn btn-ghost btn-xs" title="Baixar XML">📥</a>` : ''}
         ${['Processando','Pendente','Rejeitada','Denegada'].includes(n.status) ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-consultar="${n._id}" title="Consultar status na SEFAZ (recupera nota se foi autorizada)" style="color:var(--blue);">🔄</button>` : ''}
-        ${n.status === 'Autorizada' ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-cancel="${n._id}" style="color:var(--red);" title="Cancelar oficialmente na SEFAZ">🚫</button>` : ''}
+        ${n.status === 'Autorizada' && isAdmin() ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-cancel="${n._id}" style="color:var(--red);" title="Cancelar oficialmente na SEFAZ">🚫</button>` : ''}
         ${['Processando','Pendente','Rejeitada','Denegada'].includes(n.status) ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-descartar="${n._id}" style="color:var(--red);" title="Descartar (permite re-emitir)">🗑️</button>` : ''}
       </td>
     </tr>`).join('')}
