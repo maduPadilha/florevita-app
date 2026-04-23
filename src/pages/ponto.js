@@ -6,6 +6,46 @@ import { toast } from '../utils/helpers.js';
 import { findColab, getColabs } from '../services/auth.js';
 import { rolec } from '../utils/formatters.js';
 
+// ── TIMEZONE MANAUS (UTC-4, sem horario de verao) ────────────
+// O sistema e usado em Manaus e todos os dispositivos devem
+// gerar registros no fuso de Manaus, independente do timezone
+// local do navegador.
+const MANAUS_TZ = 'America/Manaus';
+
+// Converte Date -> YYYY-MM-DD em Manaus
+export function manausDateStr(d = new Date()) {
+  // sv-SE formata como YYYY-MM-DD nativo
+  return d.toLocaleDateString('sv-SE', { timeZone: MANAUS_TZ });
+}
+
+// Converte Date -> HH:MM em Manaus (24h)
+export function manausTimeHM(d = new Date()) {
+  return d.toLocaleTimeString('pt-BR', {
+    timeZone: MANAUS_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+// Converte Date -> HH:MM:SS em Manaus
+export function manausTimeHMS(d = new Date()) {
+  return d.toLocaleTimeString('pt-BR', {
+    timeZone: MANAUS_TZ,
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+}
+
+// Retorna componentes de data em Manaus como { y, m, d, dayOfWeek }
+export function manausDateParts(d = new Date()) {
+  const s = manausDateStr(d);             // "2026-04-22"
+  const [y, m, dd] = s.split('-').map(Number);
+  // Cria Date "meio-dia local" para calcular dayOfWeek sem risco de fuso
+  const tmp = new Date(y, m - 1, dd, 12, 0, 0, 0);
+  return { y, m, d: dd, dayOfWeek: tmp.getDay() };
+}
+
 // ── PERMISSÃO: Análise Estratégica de Operação ───────────────
 // Admin sempre pode; delegável via modulos.reportsOperacao = true
 export function canViewReportsOperacao(){
@@ -65,10 +105,10 @@ export function startPontoReminder(){
     if(!sched) return;
 
     const now = new Date();
-    const dow = now.getDay();
+    const { dayOfWeek: dow } = manausDateParts(now);
     if(!(sched.diasSemana||[]).includes(dow)) return;
 
-    const today = now.toISOString().split('T')[0];
+    const today = manausDateStr(now);
     const records = getPontoRecordsSync();
     const todayRec = records.find(r => r.userId === S.user._id && r.date === today);
 
@@ -197,14 +237,14 @@ function calcMinutosTrabalhados(r) {
 // Minutos PARCIAIS trabalhados até agora (se ainda em andamento e for hoje)
 function calcMinutosParciais(r) {
   if (!r.chegada) return 0;
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = manausDateStr();
   // Se já tem saída, usa cálculo normal
   if (r.saida) return calcMinutosTrabalhados(r);
   // Se não é hoje, não há parcial
   if (r.date !== todayStr) return 0;
-  // Calcula até agora
-  const now = new Date();
-  const nowMin = now.getHours()*60 + now.getMinutes();
+  // Calcula até agora (horario de Manaus)
+  const nowHM = manausTimeHM();
+  const nowMin = toMin(nowHM);
   const total = nowMin - toMin(r.chegada);
   let almoco = 0;
   if (r.saidaAlmoco && r.voltaAlmoco) {
@@ -256,10 +296,10 @@ function getEntradaSaida(r) {
   };
 }
 
-// Range start/end (inclusive) for filter selection
+// Range start/end (inclusive) for filter selection — sempre em fuso Manaus
 function getDateRange() {
-  const todayD = new Date(); todayD.setHours(0,0,0,0);
-  const today = todayD.toISOString().split('T')[0];
+  const { y: ty, m: tm, d: td, dayOfWeek } = manausDateParts();
+  const today = `${ty}-${String(tm).padStart(2,'0')}-${String(td).padStart(2,'0')}`;
   const f = S._pontoFilter || 'hoje';
   if (S._pontoDate) return { start: S._pontoDate, end: S._pontoDate, label: new Date(S._pontoDate+'T12:00').toLocaleDateString('pt-BR') };
   if (S._pontoMonth) {
@@ -270,21 +310,23 @@ function getDateRange() {
     return { start, end, label: new Date(y, m-1, 1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'}) };
   }
   if (f === 'semana') {
-    const d = new Date(todayD);
-    const day = d.getDay(); // 0=Dom
-    const diffToMon = (day === 0 ? -6 : 1 - day);
-    d.setDate(d.getDate() + diffToMon);
-    const start = d.toISOString().split('T')[0];
-    const e = new Date(d); e.setDate(e.getDate()+6);
-    const end = e.toISOString().split('T')[0];
-    return { start, end, label: 'Semana atual' };
+    // Semana comeca na segunda (dayOfWeek 1). Domingo (0) = dia 7 da semana anterior.
+    const diffToMon = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+    const base = new Date(ty, tm - 1, td, 12, 0, 0, 0);
+    const start = new Date(base); start.setDate(base.getDate() + diffToMon);
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return { start: fmt(start), end: fmt(end), label: 'Semana atual' };
   }
   if (f === 'mes') {
-    const d = new Date(todayD);
-    const start = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
-    const lastDay = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
-    const end = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
-    return { start, end, label: d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}) };
+    const start = `${ty}-${String(tm).padStart(2,'0')}-01`;
+    const lastDay = new Date(ty, tm, 0).getDate();
+    const end = `${ty}-${String(tm).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+    const label = new Date(ty, tm-1, 1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+    return { start, end, label };
+  }
+  if (f === 'ano') {
+    return { start: `${ty}-01-01`, end: `${ty}-12-31`, label: `Ano ${ty}` };
   }
   return { start: today, end: today, label: 'Hoje' };
 }
@@ -409,8 +451,8 @@ export function renderAnaliseEstrategica(mergedRecords, rangeLabel){
 }
 
 export function renderPonto() {
-  const todayStr = new Date().toISOString().split('T')[0];
-  const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const todayStr = manausDateStr();
+  const now = manausTimeHM();
 
   // Trigger background load on first render
   if (!S._pontoLoaded) {
@@ -616,6 +658,7 @@ export function renderPonto() {
         { k: 'hoje', l: 'Hoje' },
         { k: 'semana', l: 'Semana' },
         { k: 'mes', l: 'Mês' },
+        { k: 'ano', l: 'Ano' },
       ].map(p => `
         <button class="btn-period" data-period="${p.k}"
           style="padding:7px 14px;border-radius:var(--r);border:1px solid var(--border);font-size:12px;font-weight:600;cursor:pointer;
@@ -834,7 +877,7 @@ export async function showPontoManualModal(record = null) {
   const isEdit = !!record;
   const r = record || {
     userId: '',
-    date: new Date().toISOString().split('T')[0],
+    date: manausDateStr(),
     chegada: '',
     saidaAlmoco: '',
     voltaAlmoco: '',
@@ -1008,15 +1051,29 @@ export async function showPontoManualModal(record = null) {
 
 // ── BIND EVENTS ──────────────────────────────────────────────
 
+// Timer global do relogio em tela
+let _pontoClockTimer = null;
+
 export function bindPontoEvents() {
   const render = () => import('../main.js').then(m => m.render()).catch(() => {});
+
+  // ── Relogio em tempo real (fuso Manaus) ───────────────────
+  // Atualiza a cada 1s enquanto a pagina do ponto estiver aberta
+  if (_pontoClockTimer) { clearInterval(_pontoClockTimer); _pontoClockTimer = null; }
+  const updateClock = () => {
+    const el = document.getElementById('ponto-clock');
+    if (!el) { clearInterval(_pontoClockTimer); _pontoClockTimer = null; return; }
+    el.textContent = manausTimeHMS();
+  };
+  updateClock();
+  _pontoClockTimer = setInterval(updateClock, 1000);
 
   // ── Botão Entrada ─────────────────────────────────────────
   const btnEnt = document.getElementById('btn-ponto-entrada');
   if (btnEnt) btnEnt.onclick = () => {
     if (btnEnt.disabled) return;
-    const todayStr = new Date().toISOString().split('T')[0];
-    const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const todayStr = manausDateStr();
+    const now = manausTimeHM();
     const records = getPontoRecordsSync();
     let rec = records.find(r => r.userId === S.user._id && r.date === todayStr);
     if (!rec) {
@@ -1058,8 +1115,8 @@ export function bindPontoEvents() {
   const btnSai = document.getElementById('btn-ponto-saida');
   if (btnSai) btnSai.onclick = () => {
     if (btnSai.disabled) return;
-    const todayStr = new Date().toISOString().split('T')[0];
-    const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const todayStr = manausDateStr();
+    const now = manausTimeHM();
     const records = getPontoRecordsSync();
     let rec = records.find(r => r.userId === S.user._id && r.date === todayStr);
     if (!rec || !rec.chegada) { toast('Registre a entrada primeiro'); return; }
