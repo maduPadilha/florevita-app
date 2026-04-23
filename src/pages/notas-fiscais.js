@@ -568,7 +568,7 @@ ${filtered.length === 0 ? `
         <button type="button" class="btn btn-ghost btn-xs" data-nfe-ver="${n._id}" title="Ver detalhes">👁️</button>
         ${n.pdfUrl || n.danfeUrl ? `<a href="${n.danfeUrl || n.pdfUrl}" target="_blank" class="btn btn-ghost btn-xs" title="Imprimir / PDF">🖨️</a>` : ''}
         ${n.xmlUrl ? `<a href="${n.xmlUrl}" target="_blank" class="btn btn-ghost btn-xs" title="Baixar XML">📥</a>` : ''}
-        ${['Processando','Pendente'].includes(n.status) ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-consultar="${n._id}" title="Consultar status na SEFAZ" style="color:var(--blue);">🔄</button>` : ''}
+        ${['Processando','Pendente','Rejeitada','Denegada'].includes(n.status) ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-consultar="${n._id}" title="Consultar status na SEFAZ (recupera nota se foi autorizada)" style="color:var(--blue);">🔄</button>` : ''}
         ${n.status === 'Autorizada' ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-cancel="${n._id}" style="color:var(--red);" title="Cancelar oficialmente na SEFAZ">🚫</button>` : ''}
         ${['Processando','Pendente','Rejeitada','Denegada'].includes(n.status) ? `<button type="button" class="btn btn-ghost btn-xs" data-nfe-descartar="${n._id}" style="color:var(--red);" title="Descartar (permite re-emitir)">🗑️</button>` : ''}
       </td>
