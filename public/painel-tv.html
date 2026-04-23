@@ -184,6 +184,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
 .risk-badge.risk-late{background:#DC2626;color:#fff;}
 .risk-badge.risk-warn{background:#FBBF24;color:#78350F;}
 
+/* ── PRIORIDADE (pedidos feitos com antecedencia) ── */
+.priority-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:900;padding:2px 8px;border-radius:999px;letter-spacing:.7px;margin-left:6px;text-transform:uppercase;}
+.priority-1{background:rgba(251,191,36,.2);color:#F59E0B;border:1px solid rgba(251,191,36,.5);}
+.priority-2{background:rgba(249,115,22,.25);color:#FB923C;border:1px solid rgba(249,115,22,.55);}
+.priority-3{background:linear-gradient(135deg,#DC2626,#F59E0B);color:#fff;border:1px solid #FCD34D;box-shadow:0 0 10px rgba(245,158,11,.6);}
+.order-card.prio-1{border-left:4px solid #F59E0B;}
+.order-card.prio-2{border-left:4px solid #FB923C;}
+.order-card.prio-3{border-left:4px solid #FCD34D;box-shadow:0 0 14px rgba(252,211,77,.28);}
+.order-card.prio-critical{animation: prio-critical 1.4s ease-in-out infinite !important;border:2px solid #FCD34D !important;}
+@keyframes prio-critical{0%,100%{box-shadow:0 0 12px rgba(252,211,77,.45),0 0 4px rgba(220,38,38,.3);}50%{box-shadow:0 0 22px rgba(252,211,77,.85),0 0 10px rgba(220,38,38,.6);}}
+
 /* ── MODO CELEBRACAO (tela cheia) ── */
 #celebration-screen{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000;background:linear-gradient(135deg,#831843,#BE185D,#EC4899,#F472B6);overflow:hidden;}
 #celebration-screen.show{display:flex;}
@@ -627,6 +638,50 @@ function getColumnAlert(o, column){
   return null;
 }
 
+// ── PRIORIDADE por antecedencia (pedidos feitos com muita antecedencia) ──
+// Calcula quantos dias existem entre a data do pedido (createdAt) e
+// a data de entrega (scheduledDate). Pedidos feitos com mais antecedencia
+// tem prioridade maior — aparecem no topo e ganham badge visual.
+// Regras:
+//   >= 14 dias = prioridade ALTA  (ex: casamento agendado ha semanas)
+//   >=  3 dias = prioridade MEDIA (pedido encomendado com antecedencia)
+//   <   3 dias = normal
+function getPriority(o){
+  if(!o.createdAt || !o.scheduledDate) return { level: 0, days: 0 };
+  const created   = new Date(o.createdAt);
+  const scheduled = new Date(o.scheduledDate);
+  const diffMs    = scheduled - created;
+  const diffDays  = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if(diffDays >= 14) return { level: 3, days: diffDays, label: 'ALTA' };
+  if(diffDays >=  7) return { level: 2, days: diffDays, label: 'MEDIA' };
+  if(diffDays >=  3) return { level: 1, days: diffDays, label: 'ANTECIPADO' };
+  return { level: 0, days: diffDays };
+}
+
+// Detecta se um pedido com prioridade esta chegando perto do horario de entrega
+// (hoje e < 3h restantes). Esses sao os mais criticos — nao podem atrasar.
+function isCriticalPriority(o){
+  const p = getPriority(o);
+  if(p.level === 0) return false;
+  // So conta se for pra hoje (mesma data Manaus)
+  const manausOffset = -4 * 60;
+  const nowBrowser = new Date();
+  const nowManaus = new Date(nowBrowser.getTime() + (manausOffset - nowBrowser.getTimezoneOffset()) * 60000);
+  const todayStr = nowManaus.toISOString().split('T')[0];
+  const sched = new Date(o.scheduledDate);
+  const schedManaus = new Date(sched.getTime() + (manausOffset - sched.getTimezoneOffset()) * 60000);
+  const schedDay = schedManaus.toISOString().split('T')[0];
+  if(schedDay !== todayStr) return false;
+  // Calcula minutos restantes ate o horario prometido (scheduledTime HH:MM)
+  if(o.scheduledTime && o.scheduledTime !== '00:00'){
+    const [h,m] = o.scheduledTime.split(':').map(Number);
+    const targetMins = h*60 + m;
+    const curMins = nowManaus.getHours()*60 + nowManaus.getMinutes();
+    return (targetMins - curMins) <= 180; // 3 horas ou menos
+  }
+  return true; // pra hoje sem horario especifico = critico mesmo
+}
+
 // ── TAMANHO DINAMICO dos cards (pelo total da coluna) ──
 function sizeFor(count){
   if(count <= 3)  return 'xl';
@@ -742,9 +797,18 @@ function renderPanel(){
   const lateCount = orders.filter(o=>getLate(o)==='late').length;
 
   const sort=arr=>[...arr].sort((a,b)=>{
+    // 1) Atrasados primeiro
     const lv={late:0,warn:1,ok:2};
-    const d=(lv[getLate(a)]??2)-(lv[getLate(b)]??2);
-    return d||new Date(a.createdAt)-new Date(b.createdAt);
+    const d1=(lv[getLate(a)]??2)-(lv[getLate(b)]??2);
+    if(d1!==0) return d1;
+    // 2) Prioridade criticos (proximo do horario + feito com antecedencia)
+    const ca=isCriticalPriority(a), cb=isCriticalPriority(b);
+    if(ca!==cb) return ca?-1:1;
+    // 3) Nivel de prioridade decrescente (ALTA > MEDIA > ANTECIPADO > normal)
+    const d2 = getPriority(b).level - getPriority(a).level;
+    if(d2!==0) return d2;
+    // 4) Ordem cronologica (mais antigo primeiro)
+    return new Date(a.createdAt)-new Date(b.createdAt);
   });
 
   document.getElementById('kpi-total').textContent=orders.length;
@@ -826,19 +890,30 @@ function cardHTML(o, type){
     ? '<span class="risk-badge risk-warn">EM RISCO</span>'
     : '';
 
+  // Prioridade por antecedencia (pedidos feitos ha dias/semanas)
+  const prio = getPriority(o);
+  const prioCritical = prio.level > 0 && isCriticalPriority(o);
+  const prioCls = prio.level > 0
+    ? (' prio-' + prio.level + (prioCritical ? ' prio-critical' : ''))
+    : '';
+  const prioLabel = {1:'ANTECIPADO',2:'PRIORIDADE',3:'🎯 PRIORIDADE ALTA'}[prio.level] || '';
+  const prioBadge = prio.level > 0
+    ? `<span class="priority-badge priority-${prio.level}" title="Pedido feito ha ${prio.days} dias — encomendado com antecedencia">${prioLabel}</span>`
+    : '';
+
   const imgHTML = imgUrl
     ? `<img class="prod-img" src="${imgUrl}" onerror="this.style.display='none'">`
     : `<div class="prod-img-placeholder">🌸</div>`;
 
   if(type==='entrega'){
     const driver=getDriver(o);
-    return `<div class="order-card ${late} ${alertCls}" id="card-${id}">
+    return `<div class="order-card ${late} ${alertCls}${prioCls}" id="card-${id}">
       <div class="card-alert-bar"></div>
       <div style="display:flex;gap:10px;align-items:flex-start;">
         ${imgHTML}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <span class="card-order-num">${num}${riskBadge}</span>
+            <span class="card-order-num">${num}${prioBadge}${riskBadge}</span>
             <span class="card-time-badge ${tc}">${ic} ${el}</span>
           </div>
           ${badge(o)}
@@ -857,13 +932,13 @@ function cardHTML(o, type){
     </div>`;
   }
 
-  return `<div class="order-card ${late} ${alertCls}" id="card-${id}">
+  return `<div class="order-card ${late} ${alertCls}${prioCls}" id="card-${id}">
     <div class="card-alert-bar"></div>
     <div style="display:flex;gap:10px;align-items:flex-start;">
       ${imgHTML}
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <span class="card-order-num">${num}${riskBadge}</span>
+          <span class="card-order-num">${num}${prioBadge}${riskBadge}</span>
           <span class="card-time-badge ${tc}">${ic} ${el}</span>
         </div>
         ${badge(o)}

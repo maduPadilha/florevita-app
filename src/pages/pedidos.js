@@ -5,6 +5,39 @@ import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
 import { invalidateCache } from '../services/cache.js';
 
+// ── PRIORIDADE por antecedencia ──────────────────────────────
+// Quanto mais antigo o pedido (diff entre createdAt e scheduledDate),
+// maior a prioridade no dia da execucao. Evita esquecer encomendas
+// agendadas com semanas de antecedencia.
+export function getOrderPriority(o) {
+  if (!o.createdAt || !o.scheduledDate) return { level: 0, days: 0 };
+  const diffDays = Math.floor((new Date(o.scheduledDate) - new Date(o.createdAt)) / 86400000);
+  if (diffDays >= 14) return { level: 3, days: diffDays, label: '🎯 PRIORIDADE ALTA' };
+  if (diffDays >=  7) return { level: 2, days: diffDays, label: '🎯 PRIORIDADE' };
+  if (diffDays >=  3) return { level: 1, days: diffDays, label: '📅 ANTECIPADO' };
+  return { level: 0, days: diffDays };
+}
+
+// Pedido com prioridade + proximo do horario = critico
+export function isOrderPriorityCritical(o) {
+  const p = getOrderPriority(o);
+  if (p.level === 0) return false;
+  // Deve ser de hoje (fuso Manaus: offset -4h)
+  const nowUtc = Date.now();
+  const manausNow = new Date(nowUtc - 4*3600000);
+  const manausToday = manausNow.toISOString().slice(0,10);
+  const schedDay = new Date(new Date(o.scheduledDate).getTime() - 4*3600000).toISOString().slice(0,10);
+  if (schedDay !== manausToday) return false;
+  // <= 3h restantes ate o horario promettido = critico
+  if (o.scheduledTime && o.scheduledTime !== '00:00') {
+    const [h,m] = o.scheduledTime.split(':').map(Number);
+    const targetMin = h*60 + m;
+    const curMin = manausNow.getUTCHours()*60 + manausNow.getUTCMinutes();
+    return (targetMin - curMin) <= 180;
+  }
+  return true;
+}
+
 // Pre-carrega notas fiscais uma vez para que o botao "Imprimir DANFE/Cupom"
 // possa ser exibido ao lado dos pedidos que ja tem nota autorizada.
 let _notasPreloaded = false;
@@ -134,6 +167,16 @@ export function renderPedidos(){
   });
   // Busca por numero, nome ou telefone
   filtered = searchOrders(filtered, S._orderSearch);
+
+  // Ordena por prioridade: criticos → nivel de prioridade → cronologico
+  filtered = [...filtered].sort((a, b) => {
+    const ca = isOrderPriorityCritical(a), cb = isOrderPriorityCritical(b);
+    if (ca !== cb) return ca ? -1 : 1;
+    const d = getOrderPriority(b).level - getOrderPriority(a).level;
+    if (d !== 0) return d;
+    return new Date(b.createdAt) - new Date(a.createdAt); // mais recentes depois
+  });
+
   // Expor filtrados para export (admin)
   S._filteredOrders = filtered;
 
@@ -229,13 +272,20 @@ export function renderPedidos(){
       const rawNum=o.orderNumber||o.numero||'';
       const numDigits=String(rawNum).replace(/^PED-?/i,'').replace(/\D/g,'');
       const numDisplay=numDigits?('#'+numDigits.padStart(5,'0')):'—';
+      const prio = getOrderPriority(o);
+      const prioCritical = prio.level > 0 && isOrderPriorityCritical(o);
+      const prioBg = prio.level === 3 ? 'background:#FFFBEB;border-left:4px solid #F59E0B;'
+                   : prio.level === 2 ? 'background:#FEF3C7;border-left:3px solid #FB923C;'
+                   : prio.level === 1 ? 'background:#FFFDF5;border-left:2px solid #FCD34D;' : '';
+      const prioBadgeHtml = prio.level > 0
+        ? `<div style="display:inline-flex;align-items:center;gap:3px;background:${prio.level===3?'linear-gradient(135deg,#DC2626,#F59E0B)':prio.level===2?'#FB923C':'#FCD34D'};color:${prio.level>=2?'#fff':'#78350F'};font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;letter-spacing:.5px;margin-top:3px;${prioCritical?'box-shadow:0 0 10px rgba(245,158,11,.7);animation:prio-pulse 1.2s ease-in-out infinite;':''}" title="Pedido feito ha ${prio.days} dias">${prio.label}${prioCritical?' ⚠️':''}</div>` : '';
       let createdByName=o.createdByName||o.createdBy||o.criadoPorName||o.atendente||o.user||'';
       if(!createdByName&&o.criadoPor&&Array.isArray(S.users)){
         const u=S.users.find(x=>x._id===o.criadoPor);
         if(u)createdByName=u.name||u.nome||'';
       }
-      return`<tr style="${isPrior?'background:#FFF7F7':''}">
-        <td style="color:var(--rose);font-weight:600;white-space:nowrap">${isPrior?'🔴 ':''}${numDisplay}</td>
+      return`<tr style="${isPrior?'background:#FFF7F7;':''}${prioBg}">
+        <td style="color:var(--rose);font-weight:600;white-space:nowrap">${isPrior?'🔴 ':''}${numDisplay}${prioBadgeHtml}</td>
         <td>
           <div style="font-weight:500">${o.client?.name||o.clientName||'—'}</div>
           ${o.recipient&&o.recipient!==(o.client?.name||o.clientName)?`<div style="font-size:10px;color:var(--muted)">→ ${o.recipient}</div>`:''}

@@ -225,6 +225,7 @@ hr{border:none;border-top:1px solid var(--border);margin:12px 0;}
 .delivery-warning{border-left:4px solid var(--gold)!important;}
 .delivery-ok{border-left:4px solid var(--leaf)!important;}
 @keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.3)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0)}}
+@keyframes prio-pulse{0%,100%{box-shadow:0 0 8px rgba(245,158,11,.5);transform:scale(1);}50%{box-shadow:0 0 16px rgba(245,158,11,.9);transform:scale(1.04);}}
 .risk-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;}
 .risk-high{background:var(--red-l);color:var(--red);}
 .risk-med{background:var(--gold-l);color:var(--gold);}
