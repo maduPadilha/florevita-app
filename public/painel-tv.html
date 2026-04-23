@@ -42,9 +42,47 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
 .col-producao .col-header{border-color:var(--yellow);background:var(--yellow-l);}
 .col-expedicao .col-header{border-color:var(--blue);background:var(--blue-l);}
 .col-entrega   .col-header{border-color:var(--green);background:var(--green-l);}
-.col-body{flex:1;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:5px;}
-.col-body::-webkit-scrollbar{width:3px;}
-.col-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px;}
+.col-body{flex:1;overflow:hidden;padding:6px;display:flex;flex-direction:column;gap:5px;min-height:0;}
+.col-body::-webkit-scrollbar{display:none;}
+
+/* ── TAMANHOS DINAMICOS por quantidade de pedidos ── */
+/* xl: 1-3 pedidos (grande) | md: 4-8 | sm: 9-15 (compacto) | xs: 16+ (ultra) */
+.col-body[data-size="xl"] .order-card { padding:12px 14px; }
+.col-body[data-size="xl"] .card-order-num { font-size:26px; }
+.col-body[data-size="xl"] .card-product   { font-size:16px; }
+.col-body[data-size="xl"] .card-info      { font-size:12px; }
+.col-body[data-size="xl"] .prod-img,
+.col-body[data-size="xl"] .prod-img-placeholder { width:56px; height:56px; }
+
+.col-body[data-size="md"] .order-card { padding:8px 11px; }
+.col-body[data-size="md"] .card-order-num { font-size:20px; }
+.col-body[data-size="md"] .card-product   { font-size:13px; }
+.col-body[data-size="md"] .card-info      { font-size:11px; }
+.col-body[data-size="md"] .sub-badge      { font-size:9px; padding:1px 6px; }
+.col-body[data-size="md"] .prod-img,
+.col-body[data-size="md"] .prod-img-placeholder { width:44px; height:44px; }
+.col-body[data-size="md"] .btn-confirm-delivery { padding:5px; font-size:11px; margin-top:5px; }
+
+.col-body[data-size="sm"] .order-card { padding:5px 8px; gap:2px; }
+.col-body[data-size="sm"] .card-order-num { font-size:15px; }
+.col-body[data-size="sm"] .card-product   { font-size:11px; line-height:1.1; }
+.col-body[data-size="sm"] .card-info      { font-size:9px; margin-top:1px; }
+.col-body[data-size="sm"] .card-time-badge{ font-size:9px; padding:1px 5px; }
+.col-body[data-size="sm"] .sub-badge      { font-size:8px; padding:1px 4px; margin-bottom:2px; }
+.col-body[data-size="sm"] .prod-img,
+.col-body[data-size="sm"] .prod-img-placeholder { width:32px; height:32px; }
+.col-body[data-size="sm"] .btn-confirm-delivery { padding:3px; font-size:9px; margin-top:3px; }
+
+.col-body[data-size="xs"] .order-card { padding:3px 6px; gap:1px; }
+.col-body[data-size="xs"] .card-order-num { font-size:12px; }
+.col-body[data-size="xs"] .card-product   { font-size:9px; line-height:1; }
+.col-body[data-size="xs"] .card-info      { font-size:8px; margin-top:0; gap:4px; }
+.col-body[data-size="xs"] .card-time-badge{ font-size:8px; padding:0 4px; }
+.col-body[data-size="xs"] .sub-badge      { display:none; }
+.col-body[data-size="xs"] .prod-img,
+.col-body[data-size="xs"] .prod-img-placeholder { display:none; }
+.col-body[data-size="xs"] .btn-confirm-delivery { padding:2px; font-size:8px; margin-top:2px; }
+.col-body[data-size="xs"] .turno-tag { font-size:8px; padding:0 3px; }
 
 /* ── CARDS ── */
 .order-card{border-radius:10px;padding:10px 12px;border:1px solid;position:relative;overflow:hidden;transition:all .3s;}
@@ -134,6 +172,39 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
 @keyframes toast-in{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);}}
 @keyframes toast-out{to{opacity:0;}}
 @keyframes marquee-scroll{from{transform:translateX(0);}to{transform:translateX(-100%);}}
+
+/* ── PULSAO SUAVE por coluna quando em alerta ── */
+@keyframes pulse-pink{0%,100%{background:var(--bg3);}50%{background:rgba(236,72,153,.22);border-color:rgba(236,72,153,.6);}}
+@keyframes pulse-greenLt{0%,100%{background:var(--bg3);}50%{background:rgba(34,197,94,.20);border-color:rgba(34,197,94,.6);}}
+@keyframes pulse-red{0%,100%{background:var(--bg3);}50%{background:rgba(239,68,68,.28);border-color:rgba(239,68,68,.7);}}
+.order-card.alert-producao  { animation: pulse-pink    1s ease-in-out infinite; }
+.order-card.alert-expedicao { animation: pulse-greenLt 1s ease-in-out infinite; }
+.order-card.alert-entrega   { animation: pulse-red     1s ease-in-out infinite; }
+.risk-badge{display:inline-block;font-size:9px;font-weight:900;padding:2px 8px;border-radius:999px;letter-spacing:.7px;margin-left:6px;}
+.risk-badge.risk-late{background:#DC2626;color:#fff;}
+.risk-badge.risk-warn{background:#FBBF24;color:#78350F;}
+
+/* ── MODO CELEBRACAO (tela cheia) ── */
+#celebration-screen{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000;background:linear-gradient(135deg,#831843,#BE185D,#EC4899,#F472B6);overflow:hidden;}
+#celebration-screen.show{display:flex;}
+#celebration-screen::before,#celebration-screen::after{
+  content:'🌸 💐 🌹 ✨ 🎉 🌻 💖 ⭐ 🌷 💕 🥂 🎊 🎀 🌺';
+  position:absolute;font-size:3.4rem;opacity:.55;white-space:nowrap;letter-spacing:14px;
+  animation:float-emoji 14s linear infinite;pointer-events:none;
+}
+#celebration-screen::before{top:18%;animation-delay:-2s;}
+#celebration-screen::after{top:70%;animation-delay:-7s;}
+@keyframes float-emoji{from{transform:translateX(-60%);}to{transform:translateX(100vw);}}
+.celeb-content{position:relative;text-align:center;color:#fff;z-index:2;animation:celeb-pop .7s ease-out;padding:0 24px;}
+@keyframes celeb-pop{from{transform:scale(.3);opacity:0;}to{transform:scale(1);opacity:1;}}
+.celeb-flower{font-size:clamp(7rem,18vw,15rem);animation:celeb-bounce 1.6s ease-in-out infinite;filter:drop-shadow(0 10px 20px rgba(0,0,0,.3));}
+@keyframes celeb-bounce{0%,100%{transform:translateY(0) rotate(-4deg);}50%{transform:translateY(-34px) rotate(4deg);}}
+.celeb-title{font-family:'Playfair Display',serif;font-size:clamp(2rem,5vw,4.2rem);margin:10px 0 0;font-weight:800;text-shadow:0 4px 14px rgba(0,0,0,.28);}
+.celeb-subtitle{font-family:'Playfair Display',serif;font-size:clamp(2.4rem,6.4vw,5.6rem);font-weight:900;margin:12px 0 22px;text-shadow:0 6px 16px rgba(0,0,0,.3);}
+.celeb-heart{font-size:clamp(3rem,8vw,6rem);animation:celeb-beat 1.1s ease-in-out infinite;display:inline-block;}
+@keyframes celeb-beat{0%,100%{transform:scale(1);}25%,75%{transform:scale(1.2);}50%{transform:scale(1.35);}}
+.celeb-caption{font-size:clamp(1.2rem,2.2vw,2.1rem);font-weight:600;margin-top:16px;opacity:.95;letter-spacing:.5px;}
+.celeb-hint{margin-top:26px;font-size:clamp(.8rem,1.1vw,1rem);opacity:.75;font-style:italic;}
 </style>
 </head>
 <body>
@@ -210,6 +281,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
 </div>
 
 <div id="toast-tv"></div>
+
+<!-- MODO CELEBRACAO — ativa quando Produção + Expedição + Entrega = 0 -->
+<div id="celebration-screen">
+  <div class="celeb-content">
+    <div class="celeb-flower">💐</div>
+    <div class="celeb-title">Melhor equipe,</div>
+    <div class="celeb-subtitle">vocês são sensacionais! <span class="celeb-heart">💖</span></div>
+    <div class="celeb-caption">🌟 Zero pendências — todos os pedidos finalizados! 🌟</div>
+    <div class="celeb-hint">Tela voltará automaticamente quando entrar um novo pedido.</div>
+  </div>
+</div>
+
 <button id="btn-fs" onclick="toggleFS()" title="Tela Cheia">⛶</button>
 <div id="marquee-bar"><span style="padding:0 14px;flex-shrink:0;">📋 Próximas:</span><div id="marquee-inner"></div></div>
 
@@ -259,6 +342,56 @@ function sndDelivered(){
   const notes=[523,659,784,659,523];
   notes.forEach((f,i)=>setTimeout(()=>beep(f,.2,.25,'sine'),i*200));
 }
+
+// ── SONS ESPECIFICOS POR COLUNA (alertas) ─────────────
+// Produção — leve (1 bipe agudo curto)
+function sndAlertProducao(){ if(!soundOn) return; beep(520,.18,.22,'sine'); }
+// Expedição — médio (2 bipes médios)
+function sndAlertExpedicao(){
+  if(!soundOn) return;
+  beep(660,.2,.30,'sine');
+  setTimeout(()=>beep(660,.2,.30,'sine'),230);
+}
+// Em Entrega — urgente (3 bipes agressivos)
+function sndAlertEntrega(){
+  if(!soundOn) return;
+  for(let i=0;i<3;i++) setTimeout(()=>{
+    beep(880,.11,.42,'square');
+    setTimeout(()=>beep(660,.11,.42,'square'),130);
+  }, i*340);
+}
+
+// 🎉 Musica da celebracao — melodia festiva (escala ascendente triunfal)
+let _celebCtx = null;
+function playCelebrationMusic(){
+  if(!soundOn) return;
+  try{
+    if(_celebCtx){ try{_celebCtx.close();}catch(_){} }
+    _celebCtx = new (window.AudioContext||window.webkitAudioContext)();
+    // C D E G C(oitava) E G C — melodia triunfal
+    const notes=[
+      [523,0.00,.20],[587,0.22,.20],[659,0.44,.20],[784,0.66,.28],
+      [1046,0.98,.38],[784,1.42,.22],[1046,1.68,.50],
+      [1318,2.25,.60],
+    ];
+    notes.forEach(([f,t,d])=>{
+      const o=_celebCtx.createOscillator(), g=_celebCtx.createGain();
+      o.connect(g); g.connect(_celebCtx.destination);
+      o.type='triangle'; o.frequency.value=f;
+      g.gain.setValueAtTime(0,_celebCtx.currentTime+t);
+      g.gain.linearRampToValueAtTime(.28,_celebCtx.currentTime+t+.02);
+      g.gain.exponentialRampToValueAtTime(.001,_celebCtx.currentTime+t+d);
+      o.start(_celebCtx.currentTime+t);
+      o.stop(_celebCtx.currentTime+t+d);
+    });
+  }catch(e){}
+}
+function stopCelebrationMusic(){ try{ if(_celebCtx){ _celebCtx.close(); _celebCtx=null; } }catch(_){} }
+
+// ── ALERTED ORDERS (nao repetir som) ─────────────────
+// Key: "col:orderId" — se pedido sair da coluna, remove da set
+const alertedOrders = new Set();
+let celebrationPlayed = false;
 
 // ── RELÓGIO ──────────────────────────────────────────
 setInterval(()=>{
@@ -450,6 +583,57 @@ function elapsed(o){
   const m=Math.floor((Date.now()-new Date(o.createdAt||Date.now()).getTime())/60000);
   return m<60?m+'min':Math.floor(m/60)+'h'+(m%60?m%60+'m':'');
 }
+
+// ── ALERTAS ESPECIFICOS POR COLUNA (fuso Manaus) ────
+// Regras do usuario:
+//  - Expedição: alerta apos 100 min na coluna (75-99min = risco; 100+ = atrasado)
+//  - Em Entrega: alerta 20 min antes do horario (0-20min = risco; apos horario = atrasado)
+function getColumnAlert(o, column){
+  const manausOffset = -4 * 60;
+  const nowBrowser = new Date();
+  const nowManaus = new Date(nowBrowser.getTime() + (manausOffset - nowBrowser.getTimezoneOffset()) * 60000);
+
+  if(column === 'expedicao'){
+    // Referencia: updatedAt (quando mudou para Pronto) ou createdAt
+    const ref = new Date(o.updatedAt || o.readyAt || o.createdAt || Date.now());
+    const refManaus = new Date(ref.getTime() + (manausOffset - ref.getTimezoneOffset()) * 60000);
+    const mins = Math.floor((nowManaus - refManaus) / 60000);
+    if(mins >= 100) return 'late';
+    if(mins >= 75)  return 'warn';
+    return null;
+  }
+
+  if(column === 'entrega'){
+    // Horario esperado via scheduledTime (HH:MM) ou scheduledDate
+    let targetMins = null;
+    if(o.scheduledTime && o.scheduledTime !== '00:00'){
+      const [h,m] = o.scheduledTime.split(':').map(Number);
+      targetMins = h*60 + m;
+    } else if(o.scheduledDate){
+      const d = new Date(o.scheduledDate);
+      const dM = new Date(d.getTime() + (manausOffset - d.getTimezoneOffset()) * 60000);
+      targetMins = dM.getHours()*60 + dM.getMinutes();
+    }
+    if(targetMins === null) return null;
+    const curMins = nowManaus.getHours()*60 + nowManaus.getMinutes();
+    const diff = targetMins - curMins;       // minutos ate horario (negativo = passou)
+    if(diff < 0)   return 'late';
+    if(diff <= 20) return 'warn';
+    return null;
+  }
+
+  // Producao — marcacao manual (order.priorityAlert) ou nao alerta
+  if(column === 'producao' && o.priorityAlert) return 'warn';
+  return null;
+}
+
+// ── TAMANHO DINAMICO dos cards (pelo total da coluna) ──
+function sizeFor(count){
+  if(count <= 3)  return 'xl';
+  if(count <= 8)  return 'md';
+  if(count <= 15) return 'sm';
+  return 'xs';
+}
 function getProduct(o){
   if(o.items?.length) return o.items.map(i=>i.nome||i.name||'').filter(Boolean).slice(0,2).join(', ')||'—';
   return o.product||o.productName||'—';
@@ -516,6 +700,45 @@ function renderPanel(){
   const expedicao = orders.filter(o=>getCol(o)==='expedicao');
   const entrega   = orders.filter(o=>getCol(o)==='entrega');
   const done      = orders.filter(o=>getCol(o)==='done');
+
+  // ── Avaliar alertas por coluna e disparar sons uma unica vez ──
+  const fireAlerts = (list, col, sndFn) => {
+    const currentKeys = new Set();
+    list.forEach(o => {
+      const key = col + ':' + (o._id || o.orderNumber);
+      currentKeys.add(key);
+      const alert = getColumnAlert(o, col);
+      if(alert && !alertedOrders.has(key)){
+        alertedOrders.add(key);
+        sndFn();
+      }
+    });
+    // Remove do Set os pedidos que sairam da coluna (permite re-alerta se voltar)
+    [...alertedOrders].forEach(k => {
+      if(k.startsWith(col + ':') && !currentKeys.has(k)) alertedOrders.delete(k);
+    });
+  };
+  fireAlerts(producao,  'producao',  sndAlertProducao);
+  fireAlerts(expedicao, 'expedicao', sndAlertExpedicao);
+  fireAlerts(entrega,   'entrega',   sndAlertEntrega);
+
+  // ── Modo Celebracao ──────────────────────────────
+  const totalAtivos = producao.length + expedicao.length + entrega.length;
+  const celebEl = document.getElementById('celebration-screen');
+  if(totalAtivos === 0){
+    if(!celebrationPlayed){
+      celebrationPlayed = true;
+      if(celebEl) celebEl.classList.add('show');
+      playCelebrationMusic();
+    }
+  } else {
+    if(celebrationPlayed){
+      celebrationPlayed = false;
+      if(celebEl) celebEl.classList.remove('show');
+      stopCelebrationMusic();
+    }
+  }
+
   const lateCount = orders.filter(o=>getLate(o)==='late').length;
 
   const sort=arr=>[...arr].sort((a,b)=>{
@@ -572,6 +795,8 @@ function badge(o){
 // ── RENDER COLUMN ─────────────────────────────────────
 function renderCol(colId, items, type){
   const el=document.getElementById(colId);
+  // Tamanho dinamico baseado na quantidade de pedidos
+  el.setAttribute('data-size', sizeFor(items.length));
   if(!items.length){
     el.innerHTML='<div class="empty-col"><div class="empty-icon">'+(type==='producao'?'🌿':type==='expedicao'?'📦':'🚚')+'</div><div class="empty-text">Nenhum pedido agora</div></div>';
     return;
@@ -592,19 +817,28 @@ function cardHTML(o, type){
   const imgUrl= getProductImg(o);
   const id    = o._id;
 
+  // Alerta especifico da coluna (pulsacao + badge)
+  const colAlert = getColumnAlert(o, type);
+  const alertCls = colAlert ? ('alert-'+type) : '';
+  const riskBadge = colAlert === 'late'
+    ? '<span class="risk-badge risk-late">ATRASADO</span>'
+    : colAlert === 'warn'
+    ? '<span class="risk-badge risk-warn">EM RISCO</span>'
+    : '';
+
   const imgHTML = imgUrl
     ? `<img class="prod-img" src="${imgUrl}" onerror="this.style.display='none'">`
     : `<div class="prod-img-placeholder">🌸</div>`;
 
   if(type==='entrega'){
     const driver=getDriver(o);
-    return `<div class="order-card ${late}" id="card-${id}">
+    return `<div class="order-card ${late} ${alertCls}" id="card-${id}">
       <div class="card-alert-bar"></div>
       <div style="display:flex;gap:10px;align-items:flex-start;">
         ${imgHTML}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <span class="card-order-num">${num}</span>
+            <span class="card-order-num">${num}${riskBadge}</span>
             <span class="card-time-badge ${tc}">${ic} ${el}</span>
           </div>
           ${badge(o)}
@@ -623,13 +857,13 @@ function cardHTML(o, type){
     </div>`;
   }
 
-  return `<div class="order-card ${late}" id="card-${id}">
+  return `<div class="order-card ${late} ${alertCls}" id="card-${id}">
     <div class="card-alert-bar"></div>
     <div style="display:flex;gap:10px;align-items:flex-start;">
       ${imgHTML}
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <span class="card-order-num">${num}</span>
+          <span class="card-order-num">${num}${riskBadge}</span>
           <span class="card-time-badge ${tc}">${ic} ${el}</span>
         </div>
         ${badge(o)}
