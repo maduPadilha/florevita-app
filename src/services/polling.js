@@ -5,6 +5,7 @@ import { getHiddenUsers, mergeUserExtra } from './auth.js';
 import { mergeDriverAssignments, saveCachedData } from './cache.js';
 import { toast } from '../utils/helpers.js';
 import { filtrarPedidosPorUnidade } from '../utils/unidadeRules.js';
+import { checkAndRingIfoodOrders } from './ifoodRingtone.js';
 
 let _pollTimer = null, _pollCount = 0;
 const POLL_PAGES = ['producao','expedicao','entregador','rota','pedidos','dashboard','caixa','financeiro','colaboradores','relatorios'];
@@ -24,6 +25,25 @@ export async function pollData(){
       const merged = mergeDriverAssignments(filteredOrders);
       if(JSON.stringify(merged)!==JSON.stringify(S.orders)){
         S.orders=merged; changed=true;
+      }
+      // Toca toque de telefone para pedidos iFood novos (ignora primeira carga)
+      if(_pollCount > 1){
+        try { checkAndRingIfoodOrders(merged); }
+        catch(e){ console.warn('[iFood ring] erro:', e); }
+      } else {
+        // Na primeira carga, marca todos os pedidos iFood existentes como "ja vistos"
+        // para nao tocar quando o usuario abre o sistema pela primeira vez.
+        try {
+          const seen = new Set(JSON.parse(localStorage.getItem('fv_ifood_ringed_ids')||'[]'));
+          merged.forEach(o => {
+            const isIfood = (o.source === 'iFood') || (o.orderNumber||'').startsWith('IF');
+            if(isIfood){
+              const id = o._id || o.ifoodOrderId || o.orderNumber;
+              if(id) seen.add(id);
+            }
+          });
+          localStorage.setItem('fv_ifood_ringed_ids', JSON.stringify([...seen].slice(-500)));
+        } catch(_){}
       }
     }
     // Mescla atividades remotas com cache local — leitores de fv_activities
