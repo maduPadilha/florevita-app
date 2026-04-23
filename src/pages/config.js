@@ -681,6 +681,58 @@ export function renderConfig(){
       <button class="btn btn-primary" id="btn-save-fiscal">💾 Salvar Config Fiscal</button>
     </div>
 
+    <!-- ── INTEGRACAO IFOOD ── -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">🍔 Integração iFood
+        <span id="ifood-status-tag" class="tag" style="font-size:10px;">...</span>
+      </div>
+      <div class="alert al-info" style="margin-bottom:12px;">
+        Cadastre as credenciais do <strong>Portal do Desenvolvedor iFood</strong> (developer.ifood.com.br).
+        O sistema consulta novos pedidos a cada 30 segundos e importa automaticamente.
+      </div>
+      <div class="fr2">
+        <div class="fg">
+          <label class="fl">Client ID *</label>
+          <input type="text" class="fi" id="ifood-client-id" placeholder="abc123-def456-..."/>
+        </div>
+        <div class="fg">
+          <label class="fl">Client Secret *</label>
+          <input type="password" class="fi" id="ifood-client-secret" placeholder="(deixe em branco para manter)"/>
+        </div>
+      </div>
+      <div class="fr2" style="margin-top:10px;">
+        <div class="fg">
+          <label class="fl">Merchant IDs (virgulado)</label>
+          <input type="text" class="fi" id="ifood-merchants" placeholder="id-loja-1, id-loja-2"/>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px;">Se vazio, recebe de todas as lojas associadas à conta.</div>
+        </div>
+        <div class="fg">
+          <label class="fl">Ambiente</label>
+          <select class="fi" id="ifood-ambiente">
+            <option value="producao">Produção</option>
+            <option value="sandbox">Sandbox (teste)</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;align-items:center;margin-top:12px;flex-wrap:wrap;">
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;">
+          <input type="checkbox" id="ifood-polling"/>
+          <span>🔄 Polling ativo (recebe pedidos automaticamente)</span>
+        </label>
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;">
+          <input type="checkbox" id="ifood-autoaccept"/>
+          <span>✅ Auto-aceitar pedidos (recomendado)</span>
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="btn-save-ifood">💾 Salvar iFood</button>
+        <button class="btn btn-ghost" id="btn-test-ifood">🔌 Testar conexão</button>
+        <button class="btn btn-ghost" id="btn-poll-ifood">⚡ Forçar polling agora</button>
+        <button class="btn btn-ghost" id="btn-log-ifood">📜 Ver log de eventos</button>
+      </div>
+      <div id="ifood-telemetry" style="margin-top:12px;font-size:11px;color:var(--muted);padding:8px;background:var(--cream);border-radius:8px;display:none;"></div>
+    </div>
+
     <div class="card" style="margin-bottom:14px;">
       <div class="card-title">Certificado Digital (NF-e / NFC-e)
         <span class="tag ${cfg.certData?'t-green':'t-red'}">${cfg.certData?'Configurado':'Nao configurado'}</span>
@@ -1053,6 +1105,110 @@ export function bindConfigActions(){
     reader.readAsDataURL(f);
   };}
   // Save config fiscal
+  // ── IFOOD: carregar config + bindings ────────────────────
+  (async () => {
+    try {
+      const { GET } = await import('../services/api.js');
+      const data = await GET('/ifood/config').catch(() => null);
+      if (!data) return;
+      document.getElementById('ifood-client-id').value = data.clientId || '';
+      document.getElementById('ifood-client-secret').placeholder = data.hasSecret ? '••••••••••  (configurado — deixe vazio para manter)' : 'Cole o Client Secret';
+      document.getElementById('ifood-merchants').value = (data.merchantIds||[]).join(', ');
+      document.getElementById('ifood-ambiente').value = data.ambiente || 'producao';
+      document.getElementById('ifood-polling').checked = !!data.pollingEnabled;
+      document.getElementById('ifood-autoaccept').checked = !!data.autoAccept;
+      // Tag de status
+      const tag = document.getElementById('ifood-status-tag');
+      if (tag) {
+        if (data.pollingEnabled && data.tokenValid) {
+          tag.className = 'tag t-green'; tag.textContent = '● Ativa';
+        } else if (data.clientId && data.hasSecret) {
+          tag.className = 'tag t-yellow'; tag.textContent = '○ Pausada';
+        } else {
+          tag.className = 'tag t-red'; tag.textContent = 'Não configurada';
+        }
+      }
+      // Telemetria
+      const tel = document.getElementById('ifood-telemetry');
+      if (tel && (data.lastPollingAt || data.errorCount)) {
+        tel.style.display = 'block';
+        tel.innerHTML = `
+          <div><strong>Último polling:</strong> ${data.lastPollingAt ? new Date(data.lastPollingAt).toLocaleString('pt-BR') : '—'}</div>
+          <div><strong>Último evento recebido:</strong> ${data.lastEventAt ? new Date(data.lastEventAt).toLocaleString('pt-BR') : '—'}</div>
+          ${data.errorCount ? `<div style="color:var(--red)"><strong>Erros:</strong> ${data.errorCount} — ${data.lastError||''}</div>` : '<div style="color:var(--leaf)"><strong>✅ Sem erros recentes</strong></div>'}
+        `;
+      }
+    } catch (e) { console.warn('[iFood config] load falhou:', e); }
+  })();
+
+  {const _el=document.getElementById('btn-save-ifood');if(_el)_el.onclick=async()=>{
+    const { PUT } = await import('../services/api.js');
+    const clientSecret = document.getElementById('ifood-client-secret').value.trim();
+    const body = {
+      clientId: document.getElementById('ifood-client-id').value.trim(),
+      merchantIds: document.getElementById('ifood-merchants').value.split(',').map(s=>s.trim()).filter(Boolean),
+      ambiente: document.getElementById('ifood-ambiente').value,
+      pollingEnabled: document.getElementById('ifood-polling').checked,
+      autoAccept: document.getElementById('ifood-autoaccept').checked,
+    };
+    if (clientSecret) body.clientSecret = clientSecret;
+    try {
+      await PUT('/ifood/config', body);
+      toast('✅ Configuração iFood salva');
+      render();
+    } catch (e) { toast('❌ Erro: ' + e.message, true); }
+  };}
+  {const _el=document.getElementById('btn-test-ifood');if(_el)_el.onclick=async()=>{
+    const { POST } = await import('../services/api.js');
+    _el.disabled = true; _el.textContent = '⏳ Testando...';
+    try {
+      const r = await POST('/ifood/test', {});
+      toast(r.success ? '✅ Conexão OK! Token: ' + r.token : '❌ ' + r.error, !r.success);
+    } catch(e){ toast('❌ ' + e.message, true); }
+    _el.disabled = false; _el.textContent = '🔌 Testar conexão';
+  };}
+  {const _el=document.getElementById('btn-poll-ifood');if(_el)_el.onclick=async()=>{
+    const { POST } = await import('../services/api.js');
+    _el.disabled = true; _el.textContent = '⏳ Consultando...';
+    try {
+      const r = await POST('/ifood/poll', {});
+      toast(`✅ Polled ${r.polled||0} · Processados ${r.processed||0} · Erros ${r.errors||0}`);
+      if ((r.processed||0) > 0) setTimeout(() => window.location.reload(), 1500);
+    } catch(e){ toast('❌ ' + e.message, true); }
+    _el.disabled = false; _el.textContent = '⚡ Forçar polling agora';
+  };}
+  {const _el=document.getElementById('btn-log-ifood');if(_el)_el.onclick=async()=>{
+    const { GET } = await import('../services/api.js');
+    try {
+      const events = await GET('/ifood/events');
+      const w = window.open('', '_blank', 'width=900,height=700');
+      if (!w) return toast('Pop-up bloqueado', true);
+      w.document.write(`
+        <html><head><title>Log iFood</title>
+        <style>body{font-family:system-ui;padding:16px;background:#0F172A;color:#F1F5F9;}
+        table{width:100%;border-collapse:collapse;font-size:12px;}
+        th,td{padding:6px;border-bottom:1px solid #334155;text-align:left;}
+        th{background:#1E293B;position:sticky;top:0;}
+        .ok{color:#4ADE80;} .err{color:#F87171;}
+        </style></head><body>
+        <h2>🍔 Log de Eventos iFood (últimos ${events.length})</h2>
+        <table><thead><tr>
+          <th>Data</th><th>Evento</th><th>Order iFood</th><th>Status</th><th>Pedido local</th><th>Erro</th>
+        </tr></thead><tbody>
+        ${events.map(e => `<tr>
+          <td>${new Date(e.createdAt).toLocaleString('pt-BR')}</td>
+          <td><strong>${e.fullCode||e.code}</strong></td>
+          <td style="font-family:monospace;">${e.orderId}</td>
+          <td>${e.processed?'<span class=ok>✅ Processado</span>':'<span class=err>⏳ Pendente</span>'} ${e.acknowledged?'<span class=ok>📬 Ack</span>':''}</td>
+          <td>${e.localOrderId||'—'}</td>
+          <td class=err>${e.error||''}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        </body></html>
+      `);
+    } catch(e){ toast('❌ ' + e.message, true); }
+  };}
+
   {const _el=document.getElementById('btn-save-fiscal');if(_el)_el.onclick=async()=>{
     const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
     const cfg = {
