@@ -27,7 +27,7 @@ import { renderExpedicao, showConfirmDeliveryModal, getEntregadores, bindExpedic
 import { renderPonto, bindPontoEvents } from './pages/ponto.js';
 import { renderFinanceiro, showFinModal } from './pages/financeiro.js';
 import { renderCaixa, bindCaixaEvents } from './pages/caixa.js';
-import { renderRelatorios } from './pages/relatorios.js';
+import { renderRelatorios, exportAltaDemandaCSV } from './pages/relatorios.js';
 import { renderAlertas } from './pages/alertas.js';
 import { renderUsuarios, showNewUserModal, showEditUserModal, saveUser, deleteUser, confirmDeleteUser, toggleUserActive } from './pages/usuarios.js';
 import { renderColaboradores, showColabModal, deleteColab, syncColabToBackend, syncAllColabs } from './pages/colaboradores.js';
@@ -1945,6 +1945,31 @@ function bindPageActions(){
     document.getElementById('rel-colab-filter')?.addEventListener('change',e=>{S._relColab=e.target.value;render();});
     {const _el=document.getElementById('btn-export-pdf');if(_el)_el.onclick=()=>window.print();}
     document.querySelectorAll('[data-meta-per]').forEach(b=>{b.onclick=()=>{S._relMetaPer=b.dataset.metaPer;render();};});
+
+    // ── Aba Alta Demanda: presets + filtros + exportar ──
+    document.querySelectorAll('[data-rel-alta-preset]').forEach(b=>{
+      b.onclick=()=>{ S._relAltaPreset=b.dataset.relAltaPreset; S._relAltaDate=''; render(); };
+    });
+    document.getElementById('rel-alta-date')?.addEventListener('change',e=>{ S._relAltaDate=e.target.value; render(); });
+    document.getElementById('rel-alta-range')?.addEventListener('change',e=>{ S._relAltaRange=e.target.value; render(); });
+    // Filtros com debounce (texto)
+    const _altaDebounce = (id, key) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      let t = null;
+      el.addEventListener('input', e => {
+        clearTimeout(t);
+        t = setTimeout(()=>{ S[key]=e.target.value; render(); setTimeout(()=>{ const x=document.getElementById(id); if(x){x.focus();x.setSelectionRange(x.value.length,x.value.length);} },10); }, 300);
+      });
+    };
+    _altaDebounce('rel-alta-prod','_relAltaProd');
+    _altaDebounce('rel-alta-bairro','_relAltaBairro');
+    document.getElementById('rel-alta-hora1')?.addEventListener('change',e=>{ S._relAltaHora1=e.target.value; render(); });
+    document.getElementById('rel-alta-hora2')?.addEventListener('change',e=>{ S._relAltaHora2=e.target.value; render(); });
+    document.getElementById('btn-rel-alta-clear')?.addEventListener('click',()=>{
+      S._relAltaProd=''; S._relAltaBairro=''; S._relAltaHora1=''; S._relAltaHora2=''; S._relAltaDate=''; render();
+    });
+    document.getElementById('btn-rel-alta-export')?.addEventListener('click',()=>{ try{ exportAltaDemandaCSV(); }catch(e){ console.error(e); } });
     const _si = document.getElementById('order-search-input');
     if(_si){
       let _searchTimer=null;

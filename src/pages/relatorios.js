@@ -583,6 +583,7 @@ export function renderRelatorios(){
   ${tabBtn('clientes','👥 Clientes')}
   ${tabBtn('metas','🎯 Metas')}
   ${(S.user?.cargo==='admin'||S.user?.role==='Administrador'||(S.user?.modulos&&S.user.modulos.reportsOperacao===true))?tabBtn('operacao','⏰ Operação'):''}
+  ${tabBtn('altademanda','💐 Alta Demanda')}
   ${tabBtn('custom','📋 Meus Relatórios')}
 </div>
 
@@ -970,9 +971,367 @@ ${(()=>{
 
 ${tab==='operacao'?renderTabOperacao(period, periodLabel):''}
 
+${tab==='altademanda'?renderTabAltaDemanda():''}
+
 ${tab==='custom'?renderCustomReports():''}
 
 `;
+}
+
+// ── TAB ALTA DEMANDA: Relatorio para datas especiais ──────────
+// Dia das Maes, Namorados, Natal, Dia da Mulher — ou data custom.
+// Agrega todos os dados do PDV com filtros por produto, bairro,
+// horario e data de entrega.
+function renderTabAltaDemanda(){
+  // Datas especiais (ano corrente) — ajuste automaticamente para o proximo ano
+  // quando a data atual ja passou. Usa fuso Manaus (UTC-4) para determinar "hoje".
+  const now = new Date();
+  const manausNow = new Date(now.getTime() - (4*60 + now.getTimezoneOffset())*60000);
+  const thisYear = manausNow.getFullYear();
+
+  // Dia das Maes BR = 2o domingo de maio
+  const maesDate = (y) => {
+    const d = new Date(y, 4, 1); // 1 de maio
+    // avanca ate primeiro domingo
+    while (d.getDay() !== 0) d.setDate(d.getDate()+1);
+    d.setDate(d.getDate()+7); // segundo domingo
+    return d.toISOString().slice(0,10);
+  };
+  const presets = [
+    { key: 'maes',      label: '💐 Dia das Mães',     emoji: '💐', date: maesDate(thisYear) },
+    { key: 'namorados', label: '💕 Dia dos Namorados', emoji: '💕', date: `${thisYear}-06-12` },
+    { key: 'mulher',    label: '🌹 Dia da Mulher',    emoji: '🌹', date: `${thisYear}-03-08` },
+    { key: 'pais',      label: '🎩 Dia dos Pais',     emoji: '🎩', date: (y=>{
+        const d=new Date(y,7,1); while(d.getDay()!==0) d.setDate(d.getDate()+1); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10);
+      })(thisYear) },
+    { key: 'natal',     label: '🎄 Natal',            emoji: '🎄', date: `${thisYear}-12-24` },
+    { key: 'valentines',label: '❤️ Valentines Day',   emoji: '❤️', date: `${thisYear}-02-14` },
+    { key: 'finados',   label: '🕯️ Finados',          emoji: '🕯️', date: `${thisYear}-11-02` },
+  ];
+
+  const selPreset = S._relAltaPreset ?? 'maes';
+  const customDate = S._relAltaDate || '';
+  const rangeDays  = parseInt(S._relAltaRange, 10) || 3; // dias antes da data
+  const fProd   = (S._relAltaProd  || '').toLowerCase().trim();
+  const fBairro = (S._relAltaBairro|| '').toLowerCase().trim();
+  const fHora1  = S._relAltaHora1 || '';
+  const fHora2  = S._relAltaHora2 || '';
+
+  // Determina data alvo
+  let targetDate = customDate;
+  if (!customDate && selPreset) {
+    const p = presets.find(x => x.key === selPreset);
+    if (p) targetDate = p.date;
+  }
+
+  // Janela: (targetDate - rangeDays) ate targetDate
+  const targetD = targetDate ? new Date(targetDate + 'T12:00:00') : null;
+  const startD  = targetD ? new Date(targetD.getTime() - rangeDays*86400000) : null;
+
+  const inRange = (iso) => {
+    if (!iso || !startD || !targetD) return false;
+    const d = new Date(iso);
+    const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
+    const sDay = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate(), 0);
+    const tDay = new Date(targetD.getFullYear(), targetD.getMonth(), targetD.getDate(), 23, 59);
+    return dDay >= sDay && dDay <= tDay;
+  };
+
+  // Base: pedidos com scheduledDate dentro da janela
+  let altos = S.orders.filter(o => o.scheduledDate && inRange(o.scheduledDate));
+
+  // Filtros
+  if (fProd) {
+    altos = altos.filter(o =>
+      (o.items||[]).some(i => (i.name||'').toLowerCase().includes(fProd))
+    );
+  }
+  if (fBairro) {
+    altos = altos.filter(o =>
+      ((o.deliveryNeighborhood||o.deliveryZone||'').toLowerCase()).includes(fBairro)
+    );
+  }
+  if (fHora1 || fHora2) {
+    altos = altos.filter(o => {
+      const h = o.scheduledTime;
+      if (!h || h === '00:00') return false;
+      if (fHora1 && h < fHora1) return false;
+      if (fHora2 && h > fHora2) return false;
+      return true;
+    });
+  }
+
+  // KPIs
+  const totalPedidos  = altos.length;
+  const totalFat      = altos.filter(o => o.status !== 'Cancelado').reduce((s,o)=>s+(Number(o.total)||0),0);
+  const ticket        = totalPedidos ? totalFat/totalPedidos : 0;
+  const entregues     = altos.filter(o => o.status === 'Entregue').length;
+  const cancelados    = altos.filter(o => o.status === 'Cancelado').length;
+  const pendentes     = altos.filter(o => !['Entregue','Cancelado'].includes(o.status)).length;
+
+  // Agregacoes
+  const byProd = {};
+  altos.forEach(o => (o.items||[]).forEach(i => {
+    const n = i.name || '—';
+    if (!byProd[n]) byProd[n] = { qty:0, rev:0 };
+    byProd[n].qty += Number(i.qty)||1;
+    byProd[n].rev += Number(i.totalPrice) || (Number(i.unitPrice)||0)*(Number(i.qty)||1);
+  }));
+  const prodList = Object.entries(byProd).sort((a,b)=>b[1].qty-a[1].qty);
+
+  const byBairro = {};
+  altos.forEach(o => {
+    const b = o.deliveryNeighborhood || o.deliveryZone || '—';
+    byBairro[b] = (byBairro[b]||0) + 1;
+  });
+  const bairroList = Object.entries(byBairro).sort((a,b)=>b[1]-a[1]);
+
+  const byHora = {};
+  altos.forEach(o => {
+    const h = (o.scheduledTime || '').slice(0,2);
+    if (!h || h === '00') return;
+    byHora[h+'h'] = (byHora[h+'h']||0) + 1;
+  });
+  const horaList = Object.entries(byHora).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  const byDia = {};
+  altos.forEach(o => {
+    const d = (o.scheduledDate||'').slice(0,10);
+    byDia[d] = (byDia[d]||0) + 1;
+  });
+  const diaList = Object.entries(byDia).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  // Lista de bairros disponiveis (para autocomplete)
+  const bairros = [...new Set(S.orders.map(o=>(o.deliveryNeighborhood||'').trim()).filter(Boolean))].sort();
+
+  const formatDia = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso + 'T12:00:00');
+    return d.toLocaleDateString('pt-BR',{weekday:'short', day:'2-digit', month:'short'});
+  };
+
+  return `
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">💐 Relatório de Alta Demanda</div>
+  <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+    Datas especiais concentram volume enorme em poucos dias. Este relatório organiza todos os pedidos do PDV para planejamento e análise.
+  </p>
+
+  <!-- Presets -->
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+    ${presets.map(p => `
+      <button class="btn btn-sm ${selPreset===p.key && !customDate ? 'btn-primary' : 'btn-ghost'}"
+        data-rel-alta-preset="${p.key}" style="font-weight:600;">${p.label}</button>
+    `).join('')}
+  </div>
+
+  <!-- Filtros -->
+  <div class="g3" style="gap:10px;margin-bottom:8px;">
+    <div class="fg">
+      <label class="fl">🗓️ Data alvo (custom)</label>
+      <input type="date" class="fi" id="rel-alta-date" value="${customDate || targetDate || ''}"/>
+    </div>
+    <div class="fg">
+      <label class="fl">📅 Dias antes p/ análise</label>
+      <select class="fi" id="rel-alta-range">
+        ${[1,2,3,5,7,10,14].map(n=>`<option value="${n}" ${rangeDays===n?'selected':''}>${n} dia${n>1?'s':''} antes</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">🌹 Produto</label>
+      <input type="text" class="fi" id="rel-alta-prod" placeholder="Buscar produto..." value="${fProd}"/>
+    </div>
+  </div>
+  <div class="g3" style="gap:10px;margin-bottom:12px;">
+    <div class="fg">
+      <label class="fl">📍 Bairro</label>
+      <input type="text" class="fi" id="rel-alta-bairro" placeholder="Buscar bairro..." value="${fBairro}" list="rel-alta-bairros"/>
+      <datalist id="rel-alta-bairros">${bairros.map(b=>`<option value="${b}">`).join('')}</datalist>
+    </div>
+    <div class="fg">
+      <label class="fl">🕐 Horário de</label>
+      <input type="time" class="fi" id="rel-alta-hora1" value="${fHora1}"/>
+    </div>
+    <div class="fg">
+      <label class="fl">🕐 Até</label>
+      <input type="time" class="fi" id="rel-alta-hora2" value="${fHora2}"/>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+    <div style="font-size:12px;color:var(--muted);">
+      ${targetDate ? `📌 Janela: <strong>${formatDia(startD?.toISOString().slice(0,10))}</strong> até <strong>${formatDia(targetDate)}</strong>` : 'Escolha uma data'}
+    </div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-ghost btn-sm" id="btn-rel-alta-clear">✕ Limpar filtros</button>
+      <button class="btn btn-green btn-sm" id="btn-rel-alta-export">📤 Exportar CSV</button>
+      <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </div>
+</div>
+
+${!targetDate ? `
+<div class="empty card"><div class="empty-icon">💐</div><p>Selecione uma data especial ou escolha uma data custom.</p></div>
+` : `
+
+<!-- KPIs -->
+<div class="g4" style="margin-bottom:14px;">
+  <div class="mc rose"><div class="mc-label">Pedidos no período</div><div class="mc-val">${totalPedidos}</div></div>
+  <div class="mc leaf"><div class="mc-label">Faturamento</div><div class="mc-val">${$c(totalFat)}</div></div>
+  <div class="mc gold"><div class="mc-label">Ticket Médio</div><div class="mc-val">${$c(ticket)}</div></div>
+  <div class="mc purple"><div class="mc-label">Entregues</div><div class="mc-val">${entregues}</div><div class="mc-sub">${pendentes} pendentes · ${cancelados} cancelados</div></div>
+</div>
+
+<div class="g2">
+  <!-- Produtos -->
+  <div class="card">
+    <div class="card-title">🌹 Produtos Mais Vendidos <span class="notif">${prodList.length}</span></div>
+    ${prodList.length===0 ? `<div class="empty"><p>Sem produtos no filtro.</p></div>` : `
+    <div style="max-height:360px;overflow-y:auto;">
+      <table style="width:100%;font-size:12px;">
+        <thead><tr style="text-align:left;border-bottom:1px solid var(--border);">
+          <th style="padding:6px 4px;">#</th><th>Produto</th><th style="text-align:right;">Qtde</th><th style="text-align:right;">Receita</th>
+        </tr></thead>
+        <tbody>
+        ${prodList.map(([n, {qty, rev}], i) => `
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:6px 4px;color:var(--rose);font-weight:700;">#${i+1}</td>
+            <td>${n}</td>
+            <td style="text-align:right;font-weight:600;">${qty}</td>
+            <td style="text-align:right;color:var(--leaf);font-weight:700;">${$c(rev)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`}
+  </div>
+
+  <!-- Por horario -->
+  <div class="card">
+    <div class="card-title">🕐 Distribuição por Horário</div>
+    ${horaList.length===0 ? `<div class="empty"><p>Sem horários específicos.</p></div>` : `
+    <div style="padding:4px 0;">
+      ${(()=>{
+        const maxH = Math.max(...horaList.map(([,v])=>v), 1);
+        return horaList.map(([h, v]) => `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;">
+            <div style="width:44px;font-weight:700;">${h}</div>
+            <div class="pb" style="flex:1;"><div class="pf" style="width:${(v/maxH)*100}%;background:var(--rose);"></div></div>
+            <div style="width:38px;text-align:right;font-weight:600;">${v}</div>
+          </div>`).join('');
+      })()}
+    </div>`}
+  </div>
+</div>
+
+<div class="g2" style="margin-top:14px;">
+  <!-- Por bairro -->
+  <div class="card">
+    <div class="card-title">📍 Pedidos por Bairro <span class="notif">${bairroList.length}</span></div>
+    ${bairroList.length===0 ? `<div class="empty"><p>Sem bairros.</p></div>` : `
+    <div style="max-height:300px;overflow-y:auto;padding:4px 0;">
+      ${(()=>{
+        const maxB = bairroList[0]?.[1] || 1;
+        return bairroList.slice(0,20).map(([b, v]) => `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:12px;">
+            <div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b}</div>
+            <div class="pb" style="width:100px;"><div class="pf" style="width:${(v/maxB)*100}%;background:var(--leaf);"></div></div>
+            <div style="width:34px;text-align:right;font-weight:700;">${v}</div>
+          </div>`).join('');
+      })()}
+    </div>`}
+  </div>
+
+  <!-- Por dia -->
+  <div class="card">
+    <div class="card-title">📅 Pedidos por Data de Entrega</div>
+    ${diaList.length===0 ? `<div class="empty"><p>Sem dados.</p></div>` : `
+    <div style="padding:4px 0;">
+      ${(()=>{
+        const maxD = Math.max(...diaList.map(([,v])=>v), 1);
+        return diaList.map(([d, v]) => {
+          const isTarget = d === targetDate;
+          return `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;${isTarget?'font-weight:800;color:var(--rose);':''}">
+            <div style="width:110px;">${formatDia(d)}${isTarget?' 🎯':''}</div>
+            <div class="pb" style="flex:1;"><div class="pf" style="width:${(v/maxD)*100}%;background:${isTarget?'var(--rose)':'var(--gold)'};"></div></div>
+            <div style="width:38px;text-align:right;font-weight:700;">${v}</div>
+          </div>`;
+        }).join('');
+      })()}
+    </div>`}
+  </div>
+</div>
+
+<!-- TODOS OS PEDIDOS (lista completa) -->
+<div class="card" style="margin-top:14px;">
+  <div class="card-title">📋 Pedidos no período <span class="notif">${altos.length}</span></div>
+  ${altos.length===0 ? `<div class="empty"><div class="empty-icon">📋</div><p>Nenhum pedido nos filtros aplicados.</p></div>` : `
+  <div style="overflow-x:auto;">
+    <table>
+      <thead><tr>
+        <th>#</th><th>Cliente</th><th>Destinatário</th><th>Produto</th>
+        <th>Bairro</th><th>Entrega</th><th>Horário</th><th>Total</th>
+        <th>Canal</th><th>Status</th>
+      </tr></thead>
+      <tbody>
+        ${altos.sort((a,b)=>(a.scheduledDate||'').localeCompare(b.scheduledDate||'') || (a.scheduledTime||'').localeCompare(b.scheduledTime||'')).map(o => {
+          const prod = (o.items||[]).map(i=>i.name).filter(Boolean).slice(0,2).join(', ') || '—';
+          const canal = o.source || 'PDV';
+          return `<tr>
+            <td style="color:var(--rose);font-weight:700;white-space:nowrap;">#${o.orderNumber||'—'}</td>
+            <td>${o.client?.name || o.clientName || '—'}</td>
+            <td style="font-size:11px;">${o.recipient || '—'}</td>
+            <td style="font-size:11px;max-width:200px;">${prod}</td>
+            <td style="font-size:11px;">${o.deliveryNeighborhood||o.deliveryZone||'—'}</td>
+            <td style="font-size:11px;">${formatDia(o.scheduledDate)}</td>
+            <td style="font-size:11px;font-weight:700;">${o.scheduledTime||'—'}${o.scheduledTimeEnd?'–'+o.scheduledTimeEnd:''}</td>
+            <td style="font-weight:700;color:var(--leaf);">${$c(o.total||0)}</td>
+            <td style="font-size:10px;">${canal}</td>
+            <td><span class="tag ${sc(o.status)}" style="font-size:10px;">${o.status}</span></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`}
+</div>
+`}
+`;
+}
+
+// ── Exporta Alta Demanda para CSV ─────────────────────────────
+export function exportAltaDemandaCSV(){
+  const targetDate = S._relAltaDate || '';
+  const data = S._lastAltaDemandaOrders || S.orders.filter(o => o.scheduledDate === targetDate);
+  if (!data.length) { toast('Sem dados para exportar'); return; }
+  const header = ['Numero','Cliente','Destinatario','Produto','Qtd','Bairro','Data Entrega','Horario','Total','Pagamento','Canal','Status','Criado em'];
+  const rows = data.map(o => {
+    const prod = (o.items||[]).map(i=>`${i.name} (${i.qty||1}x)`).join(' | ');
+    const qty  = (o.items||[]).reduce((s,i)=>s+(Number(i.qty)||1),0);
+    return [
+      o.orderNumber||'',
+      o.client?.name || o.clientName || '',
+      o.recipient || '',
+      prod,
+      qty,
+      o.deliveryNeighborhood || o.deliveryZone || '',
+      (o.scheduledDate||'').slice(0,10),
+      o.scheduledTime || '',
+      Number(o.total||0).toFixed(2),
+      o.payment || '',
+      o.source || 'PDV',
+      o.status || '',
+      (o.createdAt||'').slice(0,19).replace('T',' '),
+    ];
+  });
+  const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `alta-demanda-${targetDate||'custom'}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('📤 CSV exportado');
 }
 
 // ── TAB OPERAÇÃO: Análise de Ponto/Horas/Pontualidade ─────────
