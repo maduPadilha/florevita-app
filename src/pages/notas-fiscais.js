@@ -38,6 +38,13 @@ async function autoConsultarPendentes() {
       try {
         const resp = await POST('/notas-fiscais/' + n._id + '/consultar', {});
         if (Array.isArray(S._notasFiscais) && resp?.nota) {
+          const novoSt = resp.nota.status;
+          // Avisa apenas se autorizou ou rejeitou (mudou estado final)
+          if (n.status !== novoSt && novoSt === 'Autorizada') {
+            toast(`✅ Nota ${resp.nota.numero || ''} autorizada!`);
+          } else if (n.status !== novoSt && (novoSt === 'Rejeitada' || novoSt === 'Denegada')) {
+            toast(`❌ Nota rejeitada: ${resp.nota.statusMensagem || ''}`, true);
+          }
           S._notasFiscais = S._notasFiscais.map(x => x._id === n._id ? resp.nota : x);
         }
       } catch (e) { /* silencioso */ }
@@ -422,20 +429,30 @@ export async function descartarNotaFiscal(notaId, silencioso = false) {
 }
 
 // ── CONSULTAR status na Focus (re-busca na SEFAZ) ────────────
-export async function consultarStatusNota(notaId) {
+export async function consultarStatusNota(notaId, opts = {}) {
+  const silencioso = opts.silencioso === true;
   try {
-    toast('🔄 Consultando SEFAZ...');
+    if (!silencioso) toast('🔄 Consultando SEFAZ...');
     const resp = await POST('/notas-fiscais/' + notaId + '/consultar', {});
+    const prev = (S._notasFiscais || []).find(n => n._id === notaId);
     if (Array.isArray(S._notasFiscais) && resp?.nota) {
       S._notasFiscais = S._notasFiscais.map(n => n._id === notaId ? resp.nota : n);
     }
     const st = resp?.nota?.status || '—';
-    if (st === 'Autorizada') toast('✅ Autorizada!');
-    else if (st === 'Rejeitada' || st === 'Denegada') toast(`❌ ${st}: ${resp.nota?.statusMensagem || ''}`, true);
-    else toast(`⏳ Status: ${st}`);
+    // Só avisa se NÃO for silencioso, OU se o status MUDOU de Processando para algo terminal
+    const statusChanged = prev && prev.status !== st && ['Autorizada','Rejeitada','Denegada','Cancelada'].includes(st);
+    if (!silencioso) {
+      if (st === 'Autorizada') toast('✅ Autorizada!');
+      else if (st === 'Rejeitada' || st === 'Denegada') toast(`❌ ${st}: ${resp.nota?.statusMensagem || ''}`, true);
+      else toast(`⏳ Status: ${st}`);
+    } else if (statusChanged) {
+      // Auto-poll detectou mudança — avisa só quando autoriza
+      if (st === 'Autorizada') toast(`✅ Nota ${resp.nota?.numero || ''} autorizada!`);
+      else if (st === 'Rejeitada' || st === 'Denegada') toast(`❌ Nota rejeitada: ${resp.nota?.statusMensagem || ''}`, true);
+    }
     render();
   } catch (e) {
-    toast('❌ Erro: ' + (e.message || ''), true);
+    if (!silencioso) toast('❌ Erro: ' + (e.message || ''), true);
   }
 }
 
@@ -594,7 +611,7 @@ export function bindNotasFiscaisEvents() {
     b.addEventListener('click', () => verDetalhesNota(b.dataset.nfeVer));
   });
 
-  // Auto-consulta notas em Processando a cada 10s (até virarem Autorizada/Rejeitada)
+  // Auto-consulta notas em Processando a cada 5s (ate virarem Autorizada/Rejeitada)
   clearInterval(window._nfeAutoPoll);
   const pendentes = (S._notasFiscais || []).filter(n => ['Processando','Pendente'].includes(n.status));
   if (pendentes.length > 0 && S.page === 'notasFiscais') {
@@ -602,9 +619,9 @@ export function bindNotasFiscaisEvents() {
       if (S.page !== 'notasFiscais') { clearInterval(window._nfeAutoPoll); return; }
       const ainda = (S._notasFiscais || []).filter(n => ['Processando','Pendente'].includes(n.status));
       if (ainda.length === 0) { clearInterval(window._nfeAutoPoll); return; }
-      // Consulta só a primeira pendente (evita sobrecarga)
-      consultarStatusNota(ainda[0]._id);
-    }, 10000);
+      // Consulta TODAS pendentes silenciosamente (só avisa se mudar de status)
+      ainda.forEach(n => consultarStatusNota(n._id, { silencioso: true }).catch(()=>{}));
+    }, 5000);
   }
 }
 
