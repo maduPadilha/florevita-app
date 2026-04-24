@@ -163,8 +163,8 @@ export function renderAppEntregador(){
       <div style="font-size:50px;margin-bottom:12px">${S.orders.length===0?'🔄':'✅'}</div>
       <div style="font-size:17px;font-weight:700;color:#F5C0B5;margin-bottom:8px;">${S.orders.length===0?'Carregando entregas...':'Sem entregas designadas'}</div>
       <div style="font-size:12px;color:rgba(245,192,181,.4);line-height:1.6;margin-bottom:16px;">${S.orders.length===0?'Conectando ao servidor...':'As entregas aparecem aqui quando a Expedicao atribuir pedidos ao seu nome.'}</div>
-      ${diagDrivers?`<div style="margin-top:8px;padding:10px;background:rgba(255,255,255,.05);border-radius:8px;font-size:11px;color:rgba(255,255,255,.4);text-align:left;">
-        📋 Em rota: ${emRota.length} pedido(s)<br>Entregadores: ${diagDrivers}<br>Seu nome: <strong style="color:#E8917A">${S.user?.name}</strong></div>`:''}
+      ${diagDrivers && (S.user?.role==='Administrador' || S.user?.cargo==='admin') ? `<div style="margin-top:8px;padding:10px;background:rgba(255,255,255,.05);border-radius:8px;font-size:11px;color:rgba(255,255,255,.4);text-align:left;">
+        📋 [ADM] Em rota: ${emRota.length} pedido(s)<br>Entregadores: ${diagDrivers}<br>Seu nome: <strong style="color:#E8917A">${S.user?.name}</strong></div>`:''}
       <button id="btn-refresh-rota2" style="background:#C8736A;color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:13px;font-weight:700;cursor:pointer;margin-top:12px;">🔄 Atualizar Agora</button>
     </div>`
     :minhas.map((o,idx)=>{
