@@ -834,7 +834,15 @@ function getProduct(o){
   return o.product||o.productName||'—';
 }
 function getClient(o){ return o.clientName||o.cliente||o.recipient||'—'; }
-function getBairro(o){ return o.address?.bairro||o.bairro||o.address?.zone||'—'; }
+function getBairro(o){
+  return o.deliveryNeighborhood
+      || o.address?.bairro
+      || o.bairro
+      || o.deliveryZone
+      || o.address?.zone
+      || o.zone
+      || '—';
+}
 function getDriver(o){
   return o.driverName
       || o.driver
@@ -1166,6 +1174,11 @@ function cardHTML(o, type){
     <div class="card-info"><span class="lbl">Produto:</span><span class="val" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;display:inline-block;vertical-align:bottom;" title="${produto}">${produto||'—'}</span></div>
     <div class="card-info"><span class="lbl">Bairro:</span><span class="val">${bairro||'—'}</span></div>
     ${turno && entregaVal !== turno ? `<div class="card-info"><span class="lbl">Turno:</span><span class="val">${turno}</span></div>` : ''}
+    ${(type==='expedicao'||type==='entrega'||type==='entregue') ? (() => {
+      const drv = getDriver(o);
+      const semEntregador = !drv || drv === '—';
+      return `<div class="card-info"><span class="lbl">Entregador:</span><span class="val" style="color:${semEntregador?'#C8436A':'#047857'};font-weight:700;">${semEntregador?'Sem entregador':drv}</span></div>`;
+    })() : ''}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:8px;">
       <div style="font-size:15px;"><span class="lbl" style="color:#8B6978;">${entregaLbl}:</span> <span class="val" style="font-weight:700;color:#2D1A20;">${entregaVal}</span></div>
       ${statusBadge(o, type)}
