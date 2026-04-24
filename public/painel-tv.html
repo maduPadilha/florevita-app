@@ -33,15 +33,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
 .kpi-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
 
 /* ── COLUMNS ── */
-#columns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;height:calc(100vh - 58px - 48px - 34px);overflow:hidden;}
+#columns{display:grid;grid-template-columns:repeat(5, 1fr);gap:2px;height:calc(100vh - 58px - 48px - 34px);overflow:hidden;}
 .col{display:flex;flex-direction:column;overflow:hidden;background:var(--bg2);}
 .col-header{padding:10px 14px;border-bottom:2px solid;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 .col-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:2px;}
 .col-count{font-size:22px;font-weight:800;}
 .col-sub{font-size:10px;color:var(--muted);margin-top:1px;}
-.col-producao .col-header{border-color:var(--yellow);background:var(--yellow-l);}
-.col-expedicao .col-header{border-color:var(--blue);background:var(--blue-l);}
-.col-entrega   .col-header{border-color:var(--green);background:var(--green-l);}
+.col-aguardando .col-header{border-color:#94A3B8;background:rgba(148,163,184,.15);}
+.col-producao   .col-header{border-color:var(--yellow);background:var(--yellow-l);}
+.col-expedicao  .col-header{border-color:var(--blue);background:var(--blue-l);}
+.col-entrega    .col-header{border-color:#7C3AED;background:rgba(124,58,237,.15);}
+.col-entregue   .col-header{border-color:var(--green);background:var(--green-l);}
 .col-body{flex:1;overflow:hidden;padding:6px;display:flex;flex-direction:column;gap:5px;min-height:0;}
 .col-body::-webkit-scrollbar{display:none;}
 
@@ -262,11 +264,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
   </div>
 
   <div id="columns">
+    <div class="col col-aguardando">
+      <div class="col-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:20px;">📋</span>
+          <div><div class="col-title" style="color:#94A3B8;">Aguardando Montagem</div><div class="col-sub">Pedidos recebidos</div></div>
+        </div>
+        <div class="col-count" id="count-aguard" style="color:#94A3B8;">0</div>
+      </div>
+      <div class="col-body" id="col-aguardando"></div>
+    </div>
     <div class="col col-producao">
       <div class="col-header">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:20px;">🌿</span>
-          <div><div class="col-title" style="color:var(--yellow);">Produção</div><div class="col-sub">Aguardando · Em preparo</div></div>
+          <div><div class="col-title" style="color:var(--yellow);">Em Produção</div><div class="col-sub">Em preparo</div></div>
         </div>
         <div class="col-count" id="count-prod" style="color:var(--yellow);">0</div>
       </div>
@@ -276,7 +288,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
       <div class="col-header">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:20px;">📦</span>
-          <div><div class="col-title" style="color:var(--blue);">Expedição</div><div class="col-sub" id="sub-exp">Pronto entrega · Pronto retirada</div></div>
+          <div><div class="col-title" style="color:var(--blue);">Em Expedição</div><div class="col-sub" id="sub-exp">Pronto entrega · Pronto retirada</div></div>
         </div>
         <div class="col-count" id="count-exp" style="color:var(--blue);">0</div>
       </div>
@@ -286,11 +298,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
       <div class="col-header">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:20px;">🚚</span>
-          <div><div class="col-title" style="color:var(--green);">Em Entrega</div><div class="col-sub">Saiu p/ entrega</div></div>
+          <div><div class="col-title" style="color:#7C3AED;">Saiu para Entrega</div><div class="col-sub">Em rota</div></div>
         </div>
-        <div class="col-count" id="count-entr" style="color:var(--green);">0</div>
+        <div class="col-count" id="count-entr" style="color:#7C3AED;">0</div>
       </div>
       <div class="col-body" id="col-entrega"></div>
+    </div>
+    <div class="col col-entregue">
+      <div class="col-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:20px;">✅</span>
+          <div><div class="col-title" style="color:var(--green);">Entregue</div><div class="col-sub">Concluído hoje</div></div>
+        </div>
+        <div class="col-count" id="count-entregue" style="color:var(--green);">0</div>
+      </div>
+      <div class="col-body" id="col-entregue"></div>
     </div>
   </div>
 </div>
@@ -580,7 +602,8 @@ function turnosElegiveis() {
 function processOrders(raw){
   window._allOrders = raw || [];
   let list=(raw||[]).filter(o=>{
-    if(o.status==='Cancelado'||o.status==='Entregue') return false;
+    // Cancelado sai sempre. Entregue entra mas so do dia atual (5a coluna).
+    if(o.status==='Cancelado') return false;
     return isOrderForCurrentDay(o);
   });
 
@@ -605,9 +628,11 @@ function processOrders(raw){
 // ── CLASSIFIERS ──────────────────────────────────────
 function getCol(o){
   const s=o.status||'';
-  if(s==='Aguardando'||s==='Em preparo') return 'producao';
-  if(s==='Pronto') return 'expedicao';
-  if(s==='Saiu p/ entrega') return 'entrega';
+  if(s==='Aguardando')       return 'aguardando';
+  if(s==='Em preparo')       return 'producao';
+  if(s==='Pronto')           return 'expedicao';
+  if(s==='Saiu p/ entrega')  return 'entrega';
+  if(s==='Entregue')         return 'entregue';
   return 'done';
 }
 function getSub(o){
@@ -622,6 +647,8 @@ function getSub(o){
   return 'done';
 }
 function getLate(o){
+  // Pedido ja entregue nunca e tratado como atrasado
+  if(o.status==='Entregue') return 'ok';
   // New alert logic — specific time / period based
   if(getOrderAlert(o)==='late') return 'late';
   // Never mark as late if already out for delivery
@@ -832,10 +859,12 @@ function turnoClass(t){
 
 // ── RENDER ───────────────────────────────────────────
 function renderPanel(){
-  const producao  = orders.filter(o=>getCol(o)==='producao');
-  const expedicao = orders.filter(o=>getCol(o)==='expedicao');
-  const entrega   = orders.filter(o=>getCol(o)==='entrega');
-  const done      = orders.filter(o=>getCol(o)==='done');
+  const aguardando = orders.filter(o=>getCol(o)==='aguardando');
+  const producao   = orders.filter(o=>getCol(o)==='producao');
+  const expedicao  = orders.filter(o=>getCol(o)==='expedicao');
+  const entrega    = orders.filter(o=>getCol(o)==='entrega');
+  const entregue   = orders.filter(o=>getCol(o)==='entregue');
+  const done       = entregue; // alias p/ KPI "Entregues"
 
   // ── Avaliar alertas por coluna e disparar sons uma unica vez ──
   const fireAlerts = (list, col, sndFn) => {
@@ -893,22 +922,27 @@ function renderPanel(){
   });
 
   document.getElementById('kpi-total').textContent=orders.length;
-  document.getElementById('kpi-prod').textContent =producao.length;
+  document.getElementById('kpi-prod').textContent =producao.length + aguardando.length;
   document.getElementById('kpi-exp').textContent  =expedicao.length;
   document.getElementById('kpi-entr').textContent =entrega.length;
   document.getElementById('kpi-done').textContent =done.length;
   document.getElementById('kpi-late').textContent =lateCount;
-  document.getElementById('count-prod').textContent=producao.length;
-  document.getElementById('count-exp').textContent =expedicao.length;
-  document.getElementById('count-entr').textContent=entrega.length;
+  // Contadores das 5 colunas
+  document.getElementById('count-aguard')  .textContent=aguardando.length;
+  document.getElementById('count-prod')    .textContent=producao.length;
+  document.getElementById('count-exp')     .textContent=expedicao.length;
+  document.getElementById('count-entr')    .textContent=entrega.length;
+  document.getElementById('count-entregue').textContent=entregue.length;
 
   const pe=expedicao.filter(o=>getSub(o)==='pronto-entrega').length;
   const pr=expedicao.filter(o=>getSub(o)==='pronto-retirada').length;
   document.getElementById('sub-exp').textContent=pe+' entrega · '+pr+' retirada';
 
-  renderCol('col-producao', sort(producao), 'producao');
-  renderCol('col-expedicao',sort(expedicao),'expedicao');
-  renderCol('col-entrega',  sort(entrega),  'entrega');
+  renderCol('col-aguardando', sort(aguardando), 'aguardando');
+  renderCol('col-producao',   sort(producao),   'producao');
+  renderCol('col-expedicao',  sort(expedicao),  'expedicao');
+  renderCol('col-entrega',    sort(entrega),    'entrega');
+  renderCol('col-entregue',   sort(entregue),   'entregue');
 
   const upcoming=[...orders].filter(o=>o.scheduledDate||o.scheduledTime).sort((a,b)=>new Date(a.scheduledDate||0)-new Date(b.scheduledDate||0)).slice(0,10);
   const mq=document.getElementById('marquee-bar');
