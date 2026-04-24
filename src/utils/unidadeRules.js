@@ -67,7 +67,9 @@ export function podeCriarPedido(user, tipo, destino) {
 
   if (unidade === 'cdle') {
     if (t === 'delivery') return { ok: true };
-    return { ok: false, reason: 'CDLE: apenas delivery é permitido' };
+    // CDLE pode cadastrar retirada em qualquer uma das 3 unidades
+    if (t === 'retirada' && (dest === 'cdle' || dest === 'novo_aleixo' || dest === 'allegro')) return { ok: true };
+    return { ok: false, reason: `CDLE: ${t}/${dest} não permitido` };
   }
 
   return { ok: false, reason: `Unidade desconhecida: ${unidade}` };
@@ -132,9 +134,12 @@ export function opcoesPermitidas(user) {
   }
   if (unidade === 'cdle') {
     return {
-      tipos: ['delivery'],
-      destinos: ['cdle'],
+      tipos: ['retirada','delivery'],
+      destinos: ['cdle','novo_aleixo','allegro'],
       combinacoes: [
+        {tipo:'retirada', destino:'cdle'},
+        {tipo:'retirada', destino:'novo_aleixo'},
+        {tipo:'retirada', destino:'allegro'},
         {tipo:'delivery', destino:'cdle'},
       ],
     };
