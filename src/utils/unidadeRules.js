@@ -45,18 +45,24 @@ export function podeCriarPedido(user, tipo, destino) {
     return { ok: false, reason: 'Tipo de pedido inválido' };
   }
 
+  // Delivery sempre sai do CDLE (regra de negocio)
+  if (t === 'delivery' && dest !== 'cdle') {
+    return { ok: false, reason: 'Delivery sempre sai do CDLE' };
+  }
+
   if (unidade === 'novo_aleixo') {
-    if (t === 'delivery') return { ok: true };
+    if (t === 'delivery') return { ok: true }; // cdle
     if (t === 'retirada' && (dest === 'novo_aleixo' || dest === 'allegro')) return { ok: true };
     if (t === 'balcao' && dest === 'novo_aleixo') return { ok: true };
-    if (t === 'balcao' && dest === 'allegro') return { ok: false, reason: 'Novo Aleixo não pode criar balcão de Allegro' };
     return { ok: false, reason: `Novo Aleixo: ${t}/${dest} não permitido` };
   }
 
   if (unidade === 'allegro') {
-    if (t === 'retirada' && dest === 'allegro') return { ok: true };
+    if (t === 'delivery') return { ok: true }; // cdle
+    // Allegro tambem pode escolher Novo Aleixo como local de retirada
+    if (t === 'retirada' && (dest === 'allegro' || dest === 'novo_aleixo')) return { ok: true };
     if (t === 'balcao' && dest === 'allegro') return { ok: true };
-    return { ok: false, reason: 'Allegro: só pode criar balcão ou retirada na própria loja' };
+    return { ok: false, reason: `Allegro: ${t}/${dest} não permitido` };
   }
 
   if (unidade === 'cdle') {
@@ -103,22 +109,24 @@ export function opcoesPermitidas(user) {
   if (unidade === 'novo_aleixo') {
     return {
       tipos: ['balcao','retirada','delivery'],
-      destinos: ['novo_aleixo','allegro'],
+      destinos: ['novo_aleixo','allegro','cdle'],
       combinacoes: [
         {tipo:'balcao',   destino:'novo_aleixo'},
         {tipo:'retirada', destino:'novo_aleixo'},
         {tipo:'retirada', destino:'allegro'},
-        {tipo:'delivery', destino:'novo_aleixo'},
+        {tipo:'delivery', destino:'cdle'}, // Delivery sempre sai do CDLE
       ],
     };
   }
   if (unidade === 'allegro') {
     return {
-      tipos: ['balcao','retirada'],
-      destinos: ['allegro'],
+      tipos: ['balcao','retirada','delivery'],
+      destinos: ['allegro','novo_aleixo','cdle'],
       combinacoes: [
         {tipo:'balcao',   destino:'allegro'},
         {tipo:'retirada', destino:'allegro'},
+        {tipo:'retirada', destino:'novo_aleixo'}, // Allegro pode agendar retirada no Aleixo
+        {tipo:'delivery', destino:'cdle'},        // Delivery sempre sai do CDLE
       ],
     };
   }

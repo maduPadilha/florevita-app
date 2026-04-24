@@ -591,9 +591,24 @@ export async function _finalizePDV(){
   const addr=[PDV.street,PDV.number,PDV.neighborhood,PDV.city,
     PDV.isCondominium?`${PDV.condName?PDV.condName+', ':''}Bloco ${PDV.block} Ap ${PDV.apt}`:'',
     PDV.reference].filter(Boolean).join(', ');
-  // Determina unidade correta — nunca envia 'Todas'
+  // Determina unidade correta — regras de negocio:
+  //  - Delivery sempre sai do CDLE
+  //  - Retirada: unidade escolhida no select (PDV.pickupUnit)
+  //  - Balcao: unidade de venda (atendente/usuario)
   const validUnits = ['Loja Novo Aleixo','Loja Allegro Mall','CDLE'];
-  const orderUnit = validUnits.includes(S.user.unit) ? S.user.unit : (PDV.saleUnit||'Loja Novo Aleixo');
+  const userBaseUnit = validUnits.includes(S.user.unit) ? S.user.unit : (PDV.saleUnit||'Loja Novo Aleixo');
+  let orderUnit;
+  if (PDV.type === 'Delivery') {
+    orderUnit = 'CDLE';
+  } else if (PDV.type === 'Retirada' && PDV.pickupUnit) {
+    // pickupUnit ja vem como slug (novo_aleixo/allegro) — converte p/ label
+    const pu = String(PDV.pickupUnit).toLowerCase();
+    orderUnit = pu.includes('allegro') ? 'Loja Allegro Mall'
+              : pu.includes('aleixo')  ? 'Loja Novo Aleixo'
+              : userBaseUnit;
+  } else {
+    orderUnit = userBaseUnit;
+  }
   const data={
     ...(PDV.clientId ? {client:PDV.clientId} : {}),
     clientName: PDV.clientName||undefined,

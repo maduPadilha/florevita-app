@@ -113,7 +113,7 @@ const MODULOS_COLABS = [
 ];
 
 const CARGOS_COLABS=['Gerente','Atendimento','Producao','Expedicao','Financeiro','Entregador'];
-const UNIDADES_COLABS=['Loja Novo Aleixo','Loja Allegro Mall','CDLE'];
+const UNIDADES_COLABS=['Loja Novo Aleixo','Loja Allegro Mall','CDLE','Todas'];
 
 // ── Fetch collaborators from API with localStorage fallback ───
 // Triggers a ONE-TIME background merge from /api/collaborators
@@ -488,10 +488,44 @@ export async function showColabModal(colabId=null, overrideCargo=null){
     const newCargo = document.getElementById('cl-cargo')?.value;
     if(colabId){
       const all=getColabs(); const i=all.findIndex(c=>c.id===colabId);
-      if(i>=0){ all[i]={...all[i],cargo:newCargo}; saveColabs(all); }
+      if(i>=0){
+        const update = {...all[i], cargo:newCargo};
+        // Gerente: acesso automatico a TODAS unidades + TODOS modulos
+        if(newCargo === 'Gerente'){
+          update.unidade = 'Todas';
+          update.modulos = {};
+          MODULOS_COLABS.forEach(m => { update.modulos[m.k] = true; });
+        }
+        all[i] = update;
+        saveColabs(all);
+      }
     }
     showColabModal(colabId, newCargo);
   });
+
+  // Quando a tela renderiza e e Gerente, mostra dica visual
+  (function(){
+    const curCargo = document.getElementById('cl-cargo')?.value;
+    if(curCargo === 'Gerente'){
+      // Marca todos os checkboxes de modulos por padrao
+      document.querySelectorAll('.cl-cb').forEach(cb=>{
+        cb.checked = true;
+        window.styleClLbl?.(cb.closest('label'), true);
+      });
+      // Sugere unidade Todas se nao tem ainda
+      const sel = document.getElementById('cl-unidade');
+      if(sel && !sel.value) sel.value = 'Todas';
+      // Banner visual
+      const cargoEl = document.getElementById('cl-cargo');
+      if(cargoEl && !document.getElementById('cl-gerente-hint')){
+        const hint = document.createElement('div');
+        hint.id = 'cl-gerente-hint';
+        hint.style.cssText = 'font-size:11px;color:#065F46;background:#D1FAE5;padding:6px 10px;border-radius:6px;margin-top:4px;border:1px solid #6EE7B7;';
+        hint.innerHTML = '👑 <strong>Gerente:</strong> acesso total a todas unidades e módulos. Você pode ajustar manualmente se quiser restringir.';
+        cargoEl.parentElement.appendChild(hint);
+      }
+    }
+  })();
 
   // Estilo dos checkboxes ao mudar
   document.querySelectorAll('.cl-cb').forEach(cb=>{

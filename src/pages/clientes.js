@@ -927,11 +927,27 @@ export async function saveTierOverride(clientId, tierKey){
 
 // ── BIND EVENTS (chamado apos render) ─────────────────────────
 export function bindClientesEvents(){
-  // Search
-  document.getElementById('cli-search')?.addEventListener('input', e=>{
-    S._clientSearch = e.target.value;
-    render();
-  });
+  // Busca com debounce — evita re-render a cada tecla (perde foco do input)
+  const _si = document.getElementById('cli-search');
+  if (_si) {
+    let _searchTimer = null;
+    _si.addEventListener('input', e => {
+      S._clientSearch = e.target.value;
+      clearTimeout(_searchTimer);
+      _searchTimer = setTimeout(() => {
+        render();
+        // Restaura foco + cursor no final apos o render
+        setTimeout(() => {
+          const el = document.getElementById('cli-search');
+          if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+        }, 10);
+      }, 300);
+    });
+    _si.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { S._clientSearch = ''; render(); }
+      if (e.key === 'Enter')  { clearTimeout(_searchTimer); render(); }
+    });
+  }
 
   // Novo cliente
   document.getElementById('btn-new-cli')?.addEventListener('click',()=>showClientModal());
