@@ -2460,7 +2460,28 @@ function bindPageActions(){
 
   // ── Colaboradores ─────────────────────────────────────────────
   if(S.page==='colaboradores'){
-    document.getElementById('colab-search')?.addEventListener('input', e=>{ S._colabSearch=e.target.value; render(); });
+    // Busca com debounce 300ms + foco preservado (evita perder cursor ao digitar)
+    {
+      const _si = document.getElementById('colab-search');
+      if (_si) {
+        let _searchTimer = null;
+        _si.addEventListener('input', e => {
+          S._colabSearch = e.target.value;
+          clearTimeout(_searchTimer);
+          _searchTimer = setTimeout(() => {
+            render();
+            setTimeout(() => {
+              const el = document.getElementById('colab-search');
+              if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+            }, 10);
+          }, 300);
+        });
+        _si.addEventListener('keydown', e => {
+          if (e.key === 'Escape') { S._colabSearch = ''; render(); }
+          if (e.key === 'Enter')  { clearTimeout(_searchTimer); render(); }
+        });
+      }
+    }
     document.querySelectorAll('[data-sync-colab]').forEach(b=>{b.onclick=()=>syncColabToBackend(b.dataset.syncColab);});
     {const _el=document.getElementById('btn-sync-all-colabs');if(_el)_el.onclick=syncAllColabs;}
   }
