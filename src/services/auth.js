@@ -4,9 +4,11 @@ import { toast } from '../utils/helpers.js';
 
 // ── SESSION ──────────────────────────────────────────────────
 export function saveSession(token, user){
-  // Limpa caches que podem ter permissões antigas/obsoletas
+  // Limpa caches de permissoes (user_extra/perms) mas PRESERVA fv_colabs
+  // para nao quebrar features que dependem de colaboradores (ex: listagem
+  // de entregadores em Expedicao). O fetchAndMergeColabs rodando em
+  // loadData() ja atualiza os dados sem precisar limpar.
   try{
-    localStorage.removeItem('fv_colabs');
     localStorage.removeItem('fv_user_extra');
     localStorage.removeItem('fv_perms');
   }catch(e){}
@@ -263,6 +265,9 @@ export async function doLogin(email, pass){
       import('./deliveryFeesSync.js').then(m => {
         if(m.loadDeliveryFeesFromBackend) m.loadDeliveryFeesFromBackend().catch(()=>{});
       }).catch(()=>{});
+      // Colaboradores: sincroniza do backend imediatamente para que
+      // Expedicao/listagens de entregadores funcionem logo no 1o carregamento
+      fetchAndMergeColabs().catch(e => console.warn('[login] fetchColabs skipped:', e.message));
       S.loading=false; S._loginMsg=null;
       _redirectAfterLogin(user, colab);
       import('../main.js').then(m => m.render());
