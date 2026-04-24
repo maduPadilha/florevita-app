@@ -182,8 +182,26 @@ export function printCard(orderId){
 
 // ── PRINT COMANDA ───────────────────────────────────────────────
 export function printComanda(orderId){
+  console.log('[printComanda] chamado com orderId=', orderId);
+  try {
+    return _printComandaInternal(orderId);
+  } catch (err) {
+    console.error('[printComanda] ERRO:', err);
+    try {
+      const msg = (err?.message || err || 'erro desconhecido');
+      if (typeof toast === 'function') toast('❌ Erro ao imprimir: ' + msg, true);
+      else alert('Erro ao imprimir: ' + msg);
+    } catch(_){}
+  }
+}
+
+function _printComandaInternal(orderId){
   const o = S.orders.find(x=>x._id===orderId);
-  if(!o) return;
+  if(!o) {
+    console.warn('[printComanda] pedido nao encontrado:', orderId, 'total em S.orders=', S.orders?.length);
+    try { if (typeof toast === 'function') toast('❌ Pedido não encontrado', true); } catch(_){}
+    return;
+  }
   const cfg    = JSON.parse(localStorage.getItem('fv_config')||'{}');
   const layout = JSON.parse(localStorage.getItem('fv_print_layout')||'{}');
   const cor    = layout.comandaCor||'#8B2252';
@@ -214,8 +232,13 @@ export function printComanda(orderId){
     }
   }
 
-  // Detecta se e "Horario Especifico" (janela de horario)
-  const isHorarioEspecifico = /hor[aá]rio espec[ií]fico/i.test(o.scheduledPeriod || '')
+  // Detecta se e "Horario Especifico" (janela de horario) — sem regex
+  // para evitar possiveis problemas de transpile com caracteres unicode
+  const periodoLow = String(o.scheduledPeriod || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, ''); // remove acentos
+  const isHorarioEspecifico = periodoLow.includes('horario especifico')
     || (o.scheduledTimeEnd && o.scheduledTimeEnd !== '00:00' && o.scheduledTimeEnd !== o.scheduledTime);
   // Badge GRANDE para destacar na comanda (fundo amarelo alerta)
   const horarioEspecificoBadge = isHorarioEspecifico && horario
