@@ -501,6 +501,19 @@ export function renderConfig(){
     </div>
 
     ${(S.user?.cargo==='admin'||S.user?.role==='Administrador') ? `
+    <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#FEF3C7,#FEF9E7);border:1px solid #F59E0B;">
+      <div class="card-title">🔧 Manutenção — Corrigir Pedidos Antigos</div>
+      <div style="font-size:11px;color:#78350F;margin-bottom:10px;line-height:1.5;">
+        Varre todos os pedidos do tipo <strong>Retirada</strong> e corrige a unidade operacional
+        para bater com o local de retirada (pickupUnit). Útil apenas para pedidos antigos
+        lançados antes da regra atual. <strong>Não afeta pedidos novos.</strong>
+      </div>
+      <button class="btn btn-primary" id="btn-migrate-retirada-units" style="background:#F59E0B;">
+        🔧 Executar Correção
+      </button>
+      <div id="migrate-retirada-result" style="margin-top:10px;font-size:12px;"></div>
+    </div>
+
     <div class="card" style="margin-bottom:14px;">
       <div class="card-title">🖼️ Logo da Tela de Login</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">
@@ -1002,6 +1015,31 @@ export function bindConfigActions(){
       });
     }
   }
+
+  // Botao de migracao de retiradas antigas (ADM only)
+  {const _el=document.getElementById('btn-migrate-retirada-units');if(_el)_el.onclick=async()=>{
+    if(S.user?.cargo!=='admin' && S.user?.role!=='Administrador'){ toast('Sem permissão'); return; }
+    const out = document.getElementById('migrate-retirada-result');
+    if(!confirm('Varrer pedidos de retirada antigos e corrigir a unidade operacional?\n\nEssa operação é segura — só atualiza pedidos onde o local de retirada não bate com a unidade atual.')) return;
+    _el.disabled = true;
+    _el.textContent = '🔧 Processando...';
+    try {
+      const { POST } = await import('../services/api.js');
+      const r = await POST('/orders/admin/migrate-retirada-units', {});
+      out.innerHTML = `<div style="padding:10px;background:#D1FAE5;border:1px solid #10B981;border-radius:8px;color:#065F46;">
+        ✅ Correção concluída!<br>
+        <strong>${r.analisados}</strong> pedidos de retirada analisados,
+        <strong>${r.corrigidos}</strong> corrigidos.
+      </div>`;
+      toast(`✅ ${r.corrigidos} pedidos corrigidos`);
+    } catch(err){
+      out.innerHTML = `<div style="padding:10px;background:#FEE2E2;border:1px solid #EF4444;border-radius:8px;color:#991B1B;">❌ Erro: ${err.message}</div>`;
+      toast('❌ Erro na migração: '+err.message, true);
+    } finally {
+      _el.disabled = false;
+      _el.textContent = '🔧 Executar Correção';
+    }
+  };}
 
   // Save config (migrated to API)
   {const _el=document.getElementById('btn-save-cfg');if(_el)_el.onclick=async()=>{
