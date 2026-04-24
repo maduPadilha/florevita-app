@@ -5,6 +5,7 @@ import { toast } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
 import { emoji } from '../utils/formatters.js';
 import { searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
+import { filtrarPedidosParaProducao } from '../utils/unidadeRules.js';
 
 // ── Helper: render() via dynamic import ───────────────────────
 async function render(){
@@ -123,7 +124,12 @@ export function renderProducao(){
   // "Ag. Pagamento na Entrega" é liberado (cliente vai pagar ao receber)
   const LIBERADOS_PAG = ['Aprovado','Pago','Pago na Entrega','Ag. Pagamento na Entrega'];
 
-  const allQueue = S.orders.filter(o=>{
+  // Filtro STRICT por unidade: cada produção vê apenas pedidos que serão
+  // produzidos/retirados na sua unidade. Delivery vai pra CDLE; retiradas
+  // vão para a loja de destino; balcão fica na loja onde foi vendido.
+  const ordersParaProducao = filtrarPedidosParaProducao(S.user, S.orders);
+
+  const allQueue = ordersParaProducao.filter(o=>{
     if(!['Aguardando','Em preparo','Pronto'].includes(o.status)) return false;
     const payStatus = o.paymentStatus || 'Ag. Pagamento';
     const payMethod = o.payment || o.pagamento?.metodo || '';
@@ -134,7 +140,7 @@ export function renderProducao(){
   });
 
   // Pedidos aguardando pagamento (em status de produção mas sem liberação)
-  const aguardandoPgto = S.orders.filter(o=>{
+  const aguardandoPgto = ordersParaProducao.filter(o=>{
     if(!['Aguardando','Em preparo','Pronto'].includes(o.status)) return false;
     const payStatus = o.paymentStatus || 'Ag. Pagamento';
     const payMethod = o.payment || o.pagamento?.metodo || '';

@@ -104,6 +104,22 @@ export function filtrarPedidosPorUnidade(user, pedidos) {
   });
 }
 
+// Filtro STRICT para tela de Producao: cada unidade so monta seus pedidos.
+//  - Delivery fica APENAS em CDLE (onde sai a entrega)
+//  - Retirada Novo Aleixo fica APENAS em Novo Aleixo
+//  - Retirada Allegro fica APENAS em Allegro
+//  - Balcao fica na unidade onde foi vendido
+// Como pedidos de delivery ja tem unit=CDLE (regra de criacao), basta
+// filtrar estritamente por unidade do pedido == unidade do colaborador.
+export function filtrarPedidosParaProducao(user, pedidos) {
+  if (isAdmin(user)) return pedidos || [];
+  const unidade = normalizeUnidade(user?.unidade || user?.unit);
+  if (!unidade) return [];
+  return (pedidos || []).filter(p =>
+    normalizeUnidade(p.unidade || p.unit) === unidade
+  );
+}
+
 export function opcoesPermitidas(user) {
   if (isAdmin(user)) {
     return {
