@@ -4,6 +4,7 @@ import { PUT, PATCH, DELETE } from '../services/api.js';
 import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
 import { invalidateCache } from '../services/cache.js';
+import { getTurnoPedido } from '../utils/zonasManaus.js';
 
 // ── PRIORIDADE por antecedencia ──────────────────────────────
 // Quanto mais antigo o pedido (diff entre createdAt e scheduledDate),
@@ -161,7 +162,19 @@ export function renderPedidos(){
   let filtered = S.orders.filter(o=>{
     if(fStatus!=='Todos' && o.status!==fStatus) return false;
     if(fBairro && !(o.deliveryNeighborhood||o.deliveryZone||'').toLowerCase().includes(fBairro)) return false;
-    if(fTurno  && o.scheduledPeriod!==fTurno) return false;
+    if(fTurno) {
+      // Filtro de turno considera scheduledTime (horario especifico cai
+      // no turno correto conforme o relogio). 'Horario especifico' como
+      // filtro: mostra so pedidos com scheduledTime preenchido.
+      if (fTurno === 'Horário específico') {
+        if (!o.scheduledTime || o.scheduledTime === '00:00') return false;
+      } else {
+        const tKey = fTurno.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        const tMap = { 'manha':'manha', 'tarde':'tarde', 'noite':'noite' };
+        const alvo = tMap[tKey];
+        if (alvo && getTurnoPedido(o) !== alvo) return false;
+      }
+    }
     if(fUnidade && o.unit!==fUnidade) return false;
     if(fCanal){
       const src=(o.source||'PDV').toLowerCase();

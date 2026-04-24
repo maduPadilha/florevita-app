@@ -5,7 +5,7 @@ import { PATCH, PUT } from '../services/api.js';
 import { can, getColabs, findColab } from '../services/auth.js';
 import { recarregarDados, invalidateCache } from '../services/cache.js';
 import { normalizeUnidade, labelUnidade } from '../utils/unidadeRules.js';
-import { ZONAS_MANAUS, bairrosAgrupados, agruparEroteirizar, agruparPorTurnoEZona, resolveZona, TURNOS } from '../utils/zonasManaus.js';
+import { ZONAS_MANAUS, bairrosAgrupados, agruparEroteirizar, agruparPorTurnoEZona, resolveZona, TURNOS, getTurnoPedido } from '../utils/zonasManaus.js';
 
 async function render(){ const { render:r } = await import('../main.js'); r(); }
 
@@ -106,11 +106,13 @@ export function renderDashboard(){
     { key:'Sem turno', icon:'\uD83D\uDCCB', color:'#6B7280', orders:[] }
   ];
   filtered.forEach(o=>{
-    const p = (o.scheduledPeriod||'').toLowerCase();
-    if(p.includes('manh')) shifts[0].orders.push(o);
-    else if(p.includes('tard')) shifts[1].orders.push(o);
-    else if(p.includes('noit')) shifts[2].orders.push(o);
-    else shifts[3].orders.push(o);
+    // Classifica por turno — horario especifico tem prioridade sobre o periodo
+    // (ex: scheduledTime=14:30 vai pra TARDE mesmo se scheduledPeriod estiver vazio)
+    const t = getTurnoPedido(o);
+    if(t === 'manha')      shifts[0].orders.push(o);
+    else if(t === 'tarde') shifts[1].orders.push(o);
+    else if(t === 'noite') shifts[2].orders.push(o);
+    else                   shifts[3].orders.push(o);
   });
 
   // Ordena dentro de cada turno: horario especifico primeiro (por hora crescente),

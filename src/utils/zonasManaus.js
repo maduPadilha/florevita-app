@@ -225,23 +225,29 @@ export function agruparEroteirizar(pedidos) {
 //   Manha: 07:00 - 12:00
 //   Tarde: 12:01 - 18:00
 //   Noite: 18:01 - 20:00
-// Prioriza scheduledPeriod (manha/tarde/noite). Se nao tiver,
-// tenta inferir pelo scheduledTime.
+//
+// PRIORIDADE:
+//   1. scheduledTime (quando especifico e dentro das faixas)
+//      → um pedido com horario 14:30 E' tarde, mesmo que o periodo
+//        venha como 'Horario Especifico' ou errado
+//   2. scheduledPeriod (manha/tarde/noite)
+//   3. 'sem' (nao classificado)
 export function getTurnoPedido(pedido) {
+  // 1) Horario especifico PRIORITARIO — determina o turno pelo relogio
+  const t = String(pedido?.scheduledTime || '');
+  if (t && t !== '00:00') {
+    const [hh, mm] = t.split(':').map(Number);
+    const mins = hh * 60 + (mm || 0);
+    if (mins >= 7*60  && mins <= 12*60) return 'manha';   // 07:00 - 12:00
+    if (mins >  12*60 && mins <= 18*60) return 'tarde';   // 12:01 - 18:00
+    if (mins >  18*60 && mins <= 20*60) return 'noite';   // 18:01 - 20:00
+  }
+  // 2) scheduledPeriod como fallback (turno generico)
   const p = String(pedido?.scheduledPeriod || '').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   if (p.includes('manh')) return 'manha';
   if (p.includes('tard')) return 'tarde';
   if (p.includes('noit')) return 'noite';
-  // Fallback: infere pelo horario (scheduledTime HH:MM)
-  const t = String(pedido?.scheduledTime || '');
-  if (t && t !== '00:00') {
-    const [hh, mm] = t.split(':').map(Number);
-    const mins = hh * 60 + (mm || 0);
-    if (mins >= 7*60  && mins <= 12*60) return 'manha';     // 07:00 - 12:00
-    if (mins >  12*60 && mins <= 18*60) return 'tarde';     // 12:01 - 18:00
-    if (mins >  18*60 && mins <= 20*60) return 'noite';     // 18:01 - 20:00
-  }
   return 'sem';
 }
 
