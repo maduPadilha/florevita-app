@@ -112,17 +112,19 @@ async function sendDeliveryNotification(order){
 // ── Helper: printComanda via dynamic import ───────────────────
 async function printComanda(orderId){
   try{
-    const mod = await import('../utils/helpers.js');
+    const mod = await import('./impressao.js');
     if(typeof mod.printComanda === 'function') mod.printComanda(orderId);
-  }catch(e){ console.warn('printComanda nao disponivel'); }
+    else console.error('[pedidos] printComanda nao exportado em impressao.js');
+  }catch(e){ console.error('[pedidos] erro ao carregar printComanda:', e); }
 }
 
 // ── Helper: printCard via dynamic import ──────────────────────
 async function printCard(orderId){
   try{
-    const mod = await import('../utils/helpers.js');
+    const mod = await import('./impressao.js');
     if(typeof mod.printCard === 'function') mod.printCard(orderId);
-  }catch(e){ console.warn('printCard nao disponivel'); }
+    else console.error('[pedidos] printCard nao exportado em impressao.js');
+  }catch(e){ console.error('[pedidos] erro ao carregar printCard:', e); }
 }
 
 // Expor helpers no window para onclick inline
