@@ -249,19 +249,19 @@ export function renderDashboard(){
         const showDest = (tipoRaw === 'retirada' || tipoRaw === 'retirada na loja' || tipoRaw === 'balcao' || tipoRaw === 'balc\u00e3o')
                       && destLabel && destSlug !== sellSlug;
 
-        // DELIVERY: quando unit=CDLE mas foi vendido por outra loja,
-        // mostra 'Vendido por: <saleUnit>' para rastreabilidade
-        const isDeliv = tipoRaw === 'delivery';
-        const saleUnit = o.saleUnit || '';
-        const showSaleUnit = isDeliv && saleUnit && saleUnit !== sellUnit;
+        // SEMPRE mostra unidade que realizou a venda + atendente que lancou
+        // (rastreabilidade completa, vale para todas as unidades)
+        const saleUnit = o.saleUnit || sellUnit || '';
         const saleBg = unitColors[saleUnit] || '#64748B';
+        const atendente = o.createdByName || '';
 
         return `
           <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">
             <span style="background:${sellBg};color:#fff;border-radius:20px;padding:2px 10px;font-size:10px;font-weight:600;white-space:nowrap;" title="Unidade que montará/retirada">${esc(sellUnit)}</span>
             <span style="background:${tp.color}15;color:${tp.color};border:1px solid ${tp.color}40;border-radius:20px;padding:1px 8px;font-size:9px;font-weight:700;white-space:nowrap;" title="Tipo de pedido">${tp.icon} ${tp.label}</span>
             ${showDest ? `<span style="font-size:9px;color:#64748B;white-space:nowrap;" title="Local de retirada/balc\u00e3o">\uD83C\uDFEA Em: ${esc(destLabel)}</span>` : ''}
-            ${showSaleUnit ? `<span style="font-size:9px;color:${saleBg};font-weight:700;white-space:nowrap;" title="Unidade que realizou a venda">\uD83D\uDECD\uFE0F Vendido por: ${esc(saleUnit)}</span>` : ''}
+            ${saleUnit ? `<span style="font-size:9px;color:${saleBg};font-weight:700;white-space:nowrap;" title="Unidade que realizou a venda">\uD83D\uDECD\uFE0F Vendido por: ${esc(saleUnit)}</span>` : ''}
+            ${atendente ? `<span style="font-size:9px;color:#4F46E5;font-weight:600;white-space:nowrap;" title="Atendente que lançou o pedido">\uD83D\uDC64 ${esc(atendente)}</span>` : ''}
           </div>
         `;
       })()}</td>

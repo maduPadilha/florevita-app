@@ -303,14 +303,17 @@ export function renderPedidos(){
         <td>
           <span class="tag t-gray" style="font-size:9px">${o.unit||'—'}</span>
           ${(() => {
-            // Delivery vendido por outra loja: mostra 'Vendido por: X'
-            const tipoRaw = String(o.tipo || o.type || '').toLowerCase();
-            const isDeliv = tipoRaw === 'delivery';
-            const saleUnit = o.saleUnit || '';
-            if (isDeliv && saleUnit && saleUnit !== o.unit) {
-              return `<div style="font-size:9px;color:#7C3AED;font-weight:700;margin-top:2px;" title="Unidade que realizou a venda">🛍️ Vendido: ${saleUnit}</div>`;
+            // SEMPRE mostra 'Vendido por: X' + atendente (vale para todas unidades)
+            const saleUnit = o.saleUnit || o.unit || '';
+            const atendente = o.createdByName || '';
+            let out = '';
+            if (saleUnit) {
+              out += `<div style="font-size:9px;color:#7C3AED;font-weight:700;margin-top:2px;" title="Unidade que realizou a venda">🛍️ Vendido: ${saleUnit}</div>`;
             }
-            return '';
+            if (atendente) {
+              out += `<div style="font-size:9px;color:#4F46E5;font-weight:600;margin-top:1px;" title="Atendente que lançou o pedido">👤 ${atendente}</div>`;
+            }
+            return out;
           })()}
         </td>
         <td style="color:var(--muted);font-size:11px">${(o.items||[]).map(i=>i.name).join(', ').substring(0,22)||'—'}</td>
