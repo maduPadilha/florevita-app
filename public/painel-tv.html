@@ -245,6 +245,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
       <div class="status-dot" id="status-dot"></div>
       <span style="font-size:11px;color:var(--muted);" id="status-label">Conectando...</span>
     </div>
+    <div id="turno-atual-badge" style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);font-size:12px;font-weight:700;">
+      <span id="turno-icon">🌅</span>
+      <span id="turno-label" style="color:var(--yellow);">Manhã</span>
+    </div>
     <div><div id="clock">--:--:--</div><div id="date-str">--</div></div>
   </div>
 
@@ -492,6 +496,18 @@ setInterval(()=>{
   const n=new Date();
   document.getElementById('clock').textContent=n.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   document.getElementById('date-str').textContent=n.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+  // Atualiza badge de turno atual
+  const h = n.getHours();
+  let ico, lbl, col;
+  if (h < 11)      { ico='🌅'; lbl='Manhã (até 11h)'; col='#F59E0B'; }
+  else if (h < 17) { ico='🌤️'; lbl='Tarde (11h-17h)'; col='#3B82F6'; }
+  else             { ico='🌙'; lbl='Noite (17h+)'; col='#7C3AED'; }
+  const icoEl = document.getElementById('turno-icon');
+  const lblEl = document.getElementById('turno-label');
+  const badgeEl = document.getElementById('turno-atual-badge');
+  if (icoEl) icoEl.textContent = ico;
+  if (lblEl) { lblEl.textContent = lbl; lblEl.style.color = col; }
+  if (badgeEl) { badgeEl.style.background = col + '28'; badgeEl.style.borderColor = col + '60'; }
 },1000);
 
 // ── LOGIN ────────────────────────────────────────────
@@ -623,12 +639,58 @@ function getOrderAlert(order) {
   return null;
 }
 
+// ── TURNO ATUAL + ELEGIVEL PARA O PAINEL TV ─────────────────
+// Regras:
+//  - Manha (ate 10:59): mostra so pedidos do turno Manha
+//  - Tarde (11:00-16:59): mostra turno Tarde (mas se tiver pendentes
+//    da manha ainda nao entregues, aparecem tambem com alerta)
+//  - Noite (17:00+): turno Noite + pendentes de tarde/manha
+//  - Pedidos com horario especifico: classificados pelo proprio horario
+function getTurnoAtualTV() {
+  const n = new Date();
+  const h = n.getHours();
+  if (h < 11) return 'manha';
+  if (h < 17) return 'tarde';
+  return 'noite';
+}
+function getTurnoPedidoTV(o) {
+  // Prioriza horario especifico (scheduledTime)
+  const t = String(o?.scheduledTime || '');
+  if (t && t !== '00:00') {
+    const [h] = t.split(':').map(Number);
+    if (h >= 0  && h < 11) return 'manha';
+    if (h >= 11 && h < 17) return 'tarde';
+    if (h >= 17 && h < 23) return 'noite';
+  }
+  // Fallback para scheduledPeriod
+  const p = String(o?.scheduledPeriod || '').toLowerCase();
+  if (p.includes('manh')) return 'manha';
+  if (p.includes('tard')) return 'tarde';
+  if (p.includes('noit')) return 'noite';
+  return 'sem';
+}
+// Turnos ordenados — quais podem aparecer no turno atual
+const TURNO_ORDEM_TV = ['manha', 'tarde', 'noite'];
+function turnosElegiveis() {
+  const atual = getTurnoAtualTV();
+  const idx = TURNO_ORDEM_TV.indexOf(atual);
+  // Mostra turno atual + todos os anteriores (pendentes de turnos antigos)
+  // Ex: tarde → mostra manha (pendentes) + tarde (atual)
+  return TURNO_ORDEM_TV.slice(0, idx + 1).concat('sem');
+}
+
 function processOrders(raw){
   window._allOrders = raw || [];
-  const list=(raw||[]).filter(o=>{
+  let list=(raw||[]).filter(o=>{
     if(o.status==='Cancelado'||o.status==='Entregue') return false;
     return isOrderForCurrentDay(o);
   });
+
+  // FILTRO POR TURNO: mostra so pedidos do turno atual e anteriores
+  // pendentes (nao entregues). Pedidos de turnos futuros ficam ocultos
+  // ate chegar o horario deles.
+  const elegiveis = turnosElegiveis();
+  list = list.filter(o => elegiveis.includes(getTurnoPedidoTV(o)));
 
   const curIds=new Set(list.map(o=>o._id));
   if(prevIds.size>0) list.forEach(o=>{ if(!prevIds.has(o._id)){ showToast('🌸 Novo pedido #'+(o.orderNumber||'—')+' — '+getProduct(o),'new'); sndNew(); } });

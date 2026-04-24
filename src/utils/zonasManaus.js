@@ -219,3 +219,70 @@ export function agruparEroteirizar(pedidos) {
   }
   return result;
 }
+
+// ── TURNO DO PEDIDO ─────────────────────────────────────────
+// Prioriza scheduledPeriod (manha/tarde/noite). Se nao tiver,
+// tenta inferir pelo scheduledTime.
+export function getTurnoPedido(pedido) {
+  const p = String(pedido?.scheduledPeriod || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (p.includes('manh')) return 'manha';
+  if (p.includes('tard')) return 'tarde';
+  if (p.includes('noit')) return 'noite';
+  // Fallback: infere pelo horario
+  const t = String(pedido?.scheduledTime || '');
+  if (t && t !== '00:00') {
+    const [h] = t.split(':').map(Number);
+    if (h >= 6 && h < 12) return 'manha';
+    if (h >= 12 && h < 18) return 'tarde';
+    if (h >= 18 && h < 23) return 'noite';
+  }
+  return 'sem';
+}
+
+// Turno atual baseado na hora de Manaus
+export function getTurnoAtual() {
+  const now = new Date();
+  const h = parseInt(now.toLocaleString('en-US', {
+    timeZone: 'America/Manaus', hour: '2-digit', hour12: false,
+  }), 10);
+  if (h >= 0  && h < 11) return 'manha';   // ate 10:59 = manha
+  if (h >= 11 && h < 17) return 'tarde';   // 11:00-16:59 = tarde
+  if (h >= 17 && h < 23) return 'noite';   // 17:00-22:59 = noite
+  return 'noite'; // madrugada: mantem noite (caso operacao estenda)
+}
+
+// Labels e cores de turnos
+export const TURNOS = {
+  manha: { label: '🌅 Manhã',   color: '#F59E0B', ordem: 0 },
+  tarde: { label: '🌤️ Tarde',  color: '#3B82F6', ordem: 1 },
+  noite: { label: '🌙 Noite',  color: '#7C3AED', ordem: 2 },
+  sem:   { label: '📋 Sem turno', color: '#6B7280', ordem: 3 },
+};
+
+// Agrupa pedidos PRIMEIRO por TURNO, DEPOIS por zona dentro do turno.
+// Retorna: [{ turno, turnoLabel, turnoColor, zonas: [...], totalPedidos }]
+export function agruparPorTurnoEZona(pedidos) {
+  const gruposTurno = { manha: [], tarde: [], noite: [], sem: [] };
+  pedidos.forEach(p => {
+    const t = getTurnoPedido(p);
+    gruposTurno[t].push(p);
+  });
+
+  const result = [];
+  const ordem = ['manha', 'tarde', 'noite', 'sem'];
+  for (const t of ordem) {
+    const lista = gruposTurno[t];
+    if (!lista.length) continue;
+    const zonas = agruparEroteirizar(lista); // reaproveita a zona+rota
+    const turnoMeta = TURNOS[t];
+    result.push({
+      turno: t,
+      turnoLabel: turnoMeta.label,
+      turnoColor: turnoMeta.color,
+      zonas,
+      totalPedidos: lista.length,
+    });
+  }
+  return result;
+}

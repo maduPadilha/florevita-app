@@ -5,7 +5,7 @@ import { PATCH, PUT } from '../services/api.js';
 import { can, getColabs, findColab } from '../services/auth.js';
 import { recarregarDados, invalidateCache } from '../services/cache.js';
 import { normalizeUnidade, labelUnidade } from '../utils/unidadeRules.js';
-import { ZONAS_MANAUS, bairrosAgrupados, agruparEroteirizar, resolveZona } from '../utils/zonasManaus.js';
+import { ZONAS_MANAUS, bairrosAgrupados, agruparEroteirizar, agruparPorTurnoEZona, resolveZona, TURNOS } from '../utils/zonasManaus.js';
 
 async function render(){ const { render:r } = await import('../main.js'); r(); }
 
@@ -113,6 +113,19 @@ export function renderDashboard(){
     else shifts[3].orders.push(o);
   });
 
+  // Ordena dentro de cada turno: horario especifico primeiro (por hora crescente),
+  // depois os sem horario no final
+  shifts.forEach(sh => {
+    sh.orders.sort((a, b) => {
+      const ha = a.scheduledTime && a.scheduledTime !== '00:00' ? a.scheduledTime : '';
+      const hb = b.scheduledTime && b.scheduledTime !== '00:00' ? b.scheduledTime : '';
+      if (!ha && !hb) return 0;
+      if (!ha) return 1;  // sem horario vai pro fim
+      if (!hb) return -1;
+      return ha.localeCompare(hb);
+    });
+  });
+
   // Progress helpers
   const pctRecebidos = 100;
   const pctAguardImp = totalToday ? Math.round((aguardandoImpressao/totalToday)*100) : 0;
@@ -185,11 +198,17 @@ export function renderDashboard(){
       ? `<span style="display:inline-block;background:${opts.zonaColor||'#64748B'};color:#fff;width:20px;height:20px;border-radius:50%;text-align:center;line-height:20px;font-size:10px;font-weight:800;margin-right:4px;vertical-align:middle;">${opts.seq}</span>`
       : '';
 
-    return `<tr style="border-bottom:1px solid #F1F5F9;">
+    // Destaque visual: pedido com HORARIO ESPECIFICO dentro do turno
+    // recebe borda laranja e badge de alerta
+    const hasHora = o.scheduledTime && o.scheduledTime !== '00:00';
+    const rowBg = hasHora ? 'background:linear-gradient(90deg,#FEF3C722,transparent);border-left:3px solid #F59E0B;' : '';
+    const horaBadge = hasHora ? `<span style="background:#F59E0B;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle;" title="Horário específico agendado">⏰ ${o.scheduledTime}</span>` : '';
+
+    return `<tr style="border-bottom:1px solid #F1F5F9;${rowBg}">
       <td style="text-align:center;width:36px;">
         <input type="checkbox" data-check-order="${o._id}" ${isChecked?'checked':''} style="width:15px;height:15px;cursor:pointer;accent-color:#3B82F6;" />
       </td>
-      <td style="color:#E11D48;font-weight:700;font-size:12px;">${seqBadge}${(()=>{const n=o.orderNumber||o.numero||''; const clean=n.replace(/^PED-?/i,''); return clean?'#'+clean:'\u2014';})()}</td>
+      <td style="color:#E11D48;font-weight:700;font-size:12px;">${seqBadge}${(()=>{const n=o.orderNumber||o.numero||''; const clean=n.replace(/^PED-?/i,''); return clean?'#'+clean:'\u2014';})()}${horaBadge}</td>
       <td>
         <div style="font-weight:600;font-size:12px;color:#1E293B;">${esc(buyer)}</div>
         ${phone?`<div style="font-size:10px;color:#94A3B8;">${esc(phone)}</div>`:''}
@@ -258,22 +277,36 @@ export function renderDashboard(){
   // Build sections — 'rota' agrupa por ZONA (Bairros Proximos), 'lista' por TURNO
   let tableContent = '';
   if (viewMode === 'rota') {
-    // Agrupa por zona + roteiriza cada zona (urgencia → turno → horario → bairro)
-    const zonas = agruparEroteirizar(filtered);
-    zonas.forEach((z, zi) => {
+    // Agrupa PRIMEIRO por TURNO (manha/tarde/noite), DEPOIS por ZONA.
+    // Evita misturar pedidos de turnos diferentes na mesma rota
+    // (ex: 10:00 Parque 10 Manha + 15:00 Parque 10 Tarde = 2 rotas).
+    const turnos = agruparPorTurnoEZona(filtered);
+    turnos.forEach((t) => {
+      // Header do TURNO (linha maior, cor do turno)
       tableContent += `<tr>
-        <td colspan="11" style="background:linear-gradient(90deg,${z.color}22,${z.color}08);padding:12px 14px;border-left:4px solid ${z.color};border-bottom:2px solid ${z.color}44;">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <span style="background:${z.color};color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;">${zi+1}</span>
-            <span style="font-weight:800;font-size:14px;color:${z.color};">${z.label}</span>
-            <span style="background:${z.color};color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">${z.count} entrega${z.count>1?'s':''}</span>
-            <span style="font-size:10px;color:var(--muted);font-style:italic;margin-left:auto;">Ordem sugerida: urgência → turno → horário</span>
+        <td colspan="11" style="background:linear-gradient(90deg,${t.turnoColor}38,${t.turnoColor}10);padding:14px 14px;border-left:6px solid ${t.turnoColor};border-bottom:2px solid ${t.turnoColor};">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <span style="font-size:20px;font-weight:900;color:${t.turnoColor};">${t.turnoLabel}</span>
+            <span style="background:${t.turnoColor};color:#fff;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:800;">${t.totalPedidos} entrega${t.totalPedidos>1?'s':''}</span>
+            <span style="font-size:11px;color:${t.turnoColor};font-weight:700;">${t.zonas.length} zona${t.zonas.length>1?'s':''}</span>
+            <span style="font-size:10px;color:var(--muted);font-style:italic;margin-left:auto;">Rota separada por turno para evitar conflito de horários</span>
           </div>
         </td>
       </tr>`;
-      z.pedidos.forEach((o, oi) => {
-        // Adiciona numero de sequencia no row — coloca como pseudo no orderRow
-        tableContent += orderRow(o, { seq: oi + 1, zonaColor: z.color });
+      // Sub-headers por ZONA dentro do turno
+      t.zonas.forEach((z, zi) => {
+        tableContent += `<tr>
+          <td colspan="11" style="background:${z.color}10;padding:8px 14px 8px 36px;border-left:3px solid ${z.color};border-bottom:1px solid ${z.color}33;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="background:${z.color};color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;">${zi+1}</span>
+              <span style="font-weight:700;font-size:13px;color:${z.color};">${z.label}</span>
+              <span style="background:${z.color}22;color:${z.color};border-radius:12px;padding:1px 8px;font-size:10px;font-weight:700;">${z.count}</span>
+            </div>
+          </td>
+        </tr>`;
+        z.pedidos.forEach((o, oi) => {
+          tableContent += orderRow(o, { seq: oi + 1, zonaColor: z.color });
+        });
       });
     });
   } else {
