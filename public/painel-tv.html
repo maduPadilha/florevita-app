@@ -1123,6 +1123,18 @@ function fmtNumPainel(o){
   return '#' + (o._id ? String(o._id).slice(-5).toUpperCase() : '—');
 }
 
+// Abreviacao da unidade de venda (saleUnit) — aparece no card antes do pedido.
+// CDLE / NA (Novo Aleixo) / AL (Allegro Mall) / EC (E-commerce)
+function getUnidadeTag(o){
+  const raw = String(o.saleUnit || o.unit || o.unidade || '').toLowerCase();
+  if (!raw) return '';
+  if (raw.includes('cdle') || raw.includes('distribui')) return { sigla:'CDLE', cor:'#DC2626', bg:'#FEE2E2' };
+  if (raw.includes('aleixo')) return { sigla:'NA',   cor:'#1D4ED8', bg:'#DBEAFE' };
+  if (raw.includes('allegro')) return { sigla:'AL',  cor:'#047857', bg:'#D1FAE5' };
+  if (raw.includes('ecomm') || raw.includes('e-comm')) return { sigla:'EC', cor:'#6D28D9', bg:'#EDE9FE' };
+  return { sigla: raw.slice(0,3).toUpperCase(), cor:'#4B5563', bg:'#F3F4F6' };
+}
+
 // Retorna apenas o turno (sem horario) — usado como fallback
 function getTurnoTxt(o){
   const p = (o.scheduledPeriod||'').toLowerCase()
@@ -1164,10 +1176,13 @@ function cardHTML(o, type){
     entregaVal = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
   }
 
+  const uni = getUnidadeTag(o);
+  const uniHTML = uni ? `<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:${uni.bg};color:${uni.cor};font-size:11px;font-weight:800;letter-spacing:.5px;margin-right:8px;vertical-align:middle;">${uni.sigla}</span>` : '';
+
   return `<div class="order-card ${late}" id="card-${id}">
     <div class="card-alert-bar"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <span class="card-order-num">${num}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${uniHTML}<span class="card-order-num">${num}</span></span>
       <span class="card-time-badge">${hora}</span>
     </div>
     <div class="card-info" style="margin-top:6px;"><span class="lbl">Cliente:</span><span class="val">${cli||'—'}</span></div>
