@@ -158,15 +158,15 @@ export async function pollData(){
   }catch(e){ console.warn('pollData erro:', e); }
 }
 
-export function startPolling(ms=5000){
+export function startPolling(ms=3000){
   stopPolling();
   _pollCount=0;
-  // Entregador: polling mais agressivo (4s) para ver novas designações rápido
-  // Outros colaboradores: 5s (antes 8s — melhora sync entre dispositivos)
+  // Render Starter: servidor sempre warm, pode acelerar polling.
+  // Entregador: 2.5s (agressivo — ve designacoes instantaneas)
+  // Outros: 3s (antes 5s)
   const isDriver = S.user?.role === 'Entregador' || S.user?.cargo === 'entregador';
-  const interval = isDriver ? 4000 : ms;
+  const interval = isDriver ? 2500 : ms;
   _pollTimer = setInterval(pollData, interval);
-  // Primeiro poll imediato (sem esperar o intervalo)
   pollData();
 }
 export function stopPolling(){ if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;} }

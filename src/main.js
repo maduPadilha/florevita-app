@@ -2615,7 +2615,7 @@ async function init(){
     import('./services/deliveryFeesSync.js').then(m => {
       if(m.loadDeliveryFeesFromBackend) m.loadDeliveryFeesFromBackend().catch(()=>{});
     }).catch(()=>{});
-    startPolling(5000);
+    startPolling(3000);
     startAutoBackup();
     startPermissionPolling();  // revalida permissões a cada 60s
 

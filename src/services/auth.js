@@ -198,9 +198,10 @@ export async function doLogin(email, pass){
   let backendOk = false;
   let backendErr = '';
   try{
-    // Tenta acordar o servidor antes (warm-up ping)
+    // Render Starter: servidor sempre warm. Timeout curto (10s) para
+    // detectar rapido erros de rede em vez de esperar cold start.
     const warmup = await fetch(API+'/auth/login', {
-      method:'POST', signal: AbortSignal.timeout(35000),  // 35s para Render acordar
+      method:'POST', signal: AbortSignal.timeout(10000),
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({email:emailClean, password:passClean})
     });
@@ -265,7 +266,7 @@ export async function doLogin(email, pass){
       S.loading=false; S._loginMsg=null;
       _redirectAfterLogin(user, colab);
       import('../main.js').then(m => m.render());
-      import('./polling.js').then(m => m.startPolling(5000));
+      import('./polling.js').then(m => m.startPolling(3000));
       startPermissionPolling();
       if(!colab){
         import('../pages/backup.js').then(m => { if(m.startAutoBackup) m.startAutoBackup(); }).catch(()=>{});
@@ -342,7 +343,7 @@ export async function doLogin(email, pass){
     S.loading=false; S._loginMsg=null;
     _redirectAfterLogin(user, colab);
     import('../main.js').then(m => m.render());
-    import('./polling.js').then(m => m.startPolling(5000));
+    import('./polling.js').then(m => m.startPolling(3000));
     toast('✅ Bem-vindo(a), '+user.name+'!'+(cachedToken?'':' (modo offline)'));
     // Mensagem motivacional do dia
     setTimeout(()=>{
