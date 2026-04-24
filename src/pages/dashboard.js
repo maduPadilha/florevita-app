@@ -5,6 +5,7 @@ import { PATCH, PUT } from '../services/api.js';
 import { can, getColabs, findColab } from '../services/auth.js';
 import { recarregarDados, invalidateCache } from '../services/cache.js';
 import { normalizeUnidade, labelUnidade } from '../utils/unidadeRules.js';
+import { ZONAS_MANAUS, bairrosAgrupados, agruparEroteirizar, resolveZona } from '../utils/zonasManaus.js';
 
 async function render(){ const { render:r } = await import('../main.js'); r(); }
 
@@ -73,6 +74,9 @@ export function renderDashboard(){
   const filterStatus = S._dashStatus||'';
   const filterPayment = S._dashPayment||'';
   const filterUnit = S._dashUnit||'';
+  const filterBairro = S._dashBairro||'';      // bairro especifico
+  const filterZona = S._dashZona||'';          // zona (Bairros Proximos)
+  const viewMode = S._dashView||'lista';       // 'lista' | 'rota'
 
   let filtered = todayOrders;
   if(search){
@@ -86,6 +90,13 @@ export function renderDashboard(){
   if(filterStatus) filtered = filtered.filter(o=>o.status===filterStatus);
   if(filterPayment) filtered = filtered.filter(o=>(o.payment||o.paymentMethod||o.formaPagamento||'')=== filterPayment);
   if(filterUnit) filtered = filtered.filter(o=>o.unit===filterUnit);
+  if(filterBairro) {
+    const fb = filterBairro.toLowerCase();
+    filtered = filtered.filter(o => (o.deliveryNeighborhood||o.deliveryZone||'').toLowerCase() === fb);
+  }
+  if(filterZona) {
+    filtered = filtered.filter(o => resolveZona(o) === filterZona);
+  }
 
   // Group by shift
   const shifts = [
@@ -155,7 +166,7 @@ export function renderDashboard(){
   }
 
   // Render order row
-  function orderRow(o){
+  function orderRow(o, opts = {}){
     const buyer = o.clientName||o.cliente?.nome||'\u2014';
     const phone = o.clientPhone||o.cliente?.telefone||'';
     const recip = o.recipient||'\u2014';
@@ -169,11 +180,16 @@ export function renderDashboard(){
 
     const isChecked = selectedOrders.includes(o._id);
 
+    // Badge de sequencia quando estiver em modo rota
+    const seqBadge = opts.seq
+      ? `<span style="display:inline-block;background:${opts.zonaColor||'#64748B'};color:#fff;width:20px;height:20px;border-radius:50%;text-align:center;line-height:20px;font-size:10px;font-weight:800;margin-right:4px;vertical-align:middle;">${opts.seq}</span>`
+      : '';
+
     return `<tr style="border-bottom:1px solid #F1F5F9;">
       <td style="text-align:center;width:36px;">
         <input type="checkbox" data-check-order="${o._id}" ${isChecked?'checked':''} style="width:15px;height:15px;cursor:pointer;accent-color:#3B82F6;" />
       </td>
-      <td style="color:#E11D48;font-weight:700;font-size:12px;">${(()=>{const n=o.orderNumber||o.numero||''; const clean=n.replace(/^PED-?/i,''); return clean?'#'+clean:'\u2014';})()}</td>
+      <td style="color:#E11D48;font-weight:700;font-size:12px;">${seqBadge}${(()=>{const n=o.orderNumber||o.numero||''; const clean=n.replace(/^PED-?/i,''); return clean?'#'+clean:'\u2014';})()}</td>
       <td>
         <div style="font-weight:600;font-size:12px;color:#1E293B;">${esc(buyer)}</div>
         ${phone?`<div style="font-size:10px;color:#94A3B8;">${esc(phone)}</div>`:''}
@@ -231,21 +247,43 @@ export function renderDashboard(){
     </tr>`;
   }
 
-  // Build shift sections
+  // Build sections — 'rota' agrupa por ZONA (Bairros Proximos), 'lista' por TURNO
   let tableContent = '';
-  shifts.forEach(sh=>{
-    if(sh.orders.length===0) return;
-    tableContent += `<tr>
-      <td colspan="11" style="background:linear-gradient(90deg,${sh.color}15,${sh.color}05);padding:10px 14px;border-left:3px solid ${sh.color};border-bottom:1px solid ${sh.color}22;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;">${sh.icon}</span>
-          <span style="font-weight:700;font-size:13px;color:${sh.color};">${sh.key}</span>
-          <span style="background:${sh.color};color:#fff;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;">${sh.orders.length}</span>
-        </div>
-      </td>
-    </tr>`;
-    sh.orders.forEach(o=>{ tableContent += orderRow(o); });
-  });
+  if (viewMode === 'rota') {
+    // Agrupa por zona + roteiriza cada zona (urgencia → turno → horario → bairro)
+    const zonas = agruparEroteirizar(filtered);
+    zonas.forEach((z, zi) => {
+      tableContent += `<tr>
+        <td colspan="11" style="background:linear-gradient(90deg,${z.color}22,${z.color}08);padding:12px 14px;border-left:4px solid ${z.color};border-bottom:2px solid ${z.color}44;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="background:${z.color};color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;">${zi+1}</span>
+            <span style="font-weight:800;font-size:14px;color:${z.color};">${z.label}</span>
+            <span style="background:${z.color};color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">${z.count} entrega${z.count>1?'s':''}</span>
+            <span style="font-size:10px;color:var(--muted);font-style:italic;margin-left:auto;">Ordem sugerida: urgência → turno → horário</span>
+          </div>
+        </td>
+      </tr>`;
+      z.pedidos.forEach((o, oi) => {
+        // Adiciona numero de sequencia no row — coloca como pseudo no orderRow
+        tableContent += orderRow(o, { seq: oi + 1, zonaColor: z.color });
+      });
+    });
+  } else {
+    // Modo lista padrao: agrupa por turno
+    shifts.forEach(sh=>{
+      if(sh.orders.length===0) return;
+      tableContent += `<tr>
+        <td colspan="11" style="background:linear-gradient(90deg,${sh.color}15,${sh.color}05);padding:10px 14px;border-left:3px solid ${sh.color};border-bottom:1px solid ${sh.color}22;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">${sh.icon}</span>
+            <span style="font-weight:700;font-size:13px;color:${sh.color};">${sh.key}</span>
+            <span style="background:${sh.color};color:#fff;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;">${sh.orders.length}</span>
+          </div>
+        </td>
+      </tr>`;
+      sh.orders.forEach(o=>{ tableContent += orderRow(o); });
+    });
+  }
 
   const hasOrders = filtered.length > 0;
   const selCount = selectedOrders.length;
@@ -323,6 +361,32 @@ export function renderDashboard(){
       <option ${filterUnit==='Loja Novo Aleixo'?'selected':''}>Loja Novo Aleixo</option>
       <option ${filterUnit==='Loja Allegro Mall'?'selected':''}>Loja Allegro Mall</option>
     </select>
+    <!-- Filtro por Bairro especifico -->
+    <select class="fi" id="dash-filter-bairro" style="width:auto;min-width:160px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;">
+      <option value="">📍 Todos os Bairros</option>
+      ${(()=>{
+        const grupos = bairrosAgrupados(todayOrders);
+        return Object.entries(grupos).map(([zona, bairros]) => `
+          <optgroup label="${ZONAS_MANAUS[zona].label}">
+            ${bairros.map(b => `<option value="${b.toLowerCase()}" ${filterBairro.toLowerCase()===b.toLowerCase()?'selected':''}>${b}</option>`).join('')}
+          </optgroup>
+        `).join('');
+      })()}
+    </select>
+    <!-- Filtro por Zona (Bairros Proximos) -->
+    <select class="fi" id="dash-filter-zona" style="width:auto;min-width:180px;border:1px solid var(--rose);border-radius:8px;font-size:12px;font-weight:600;background:#FFF7F7;">
+      <option value="">🗺️ Bairros Próximos (Zona)</option>
+      ${Object.entries(ZONAS_MANAUS).map(([k, z]) => {
+        const count = todayOrders.filter(o => resolveZona(o) === k).length;
+        if (count === 0) return '';
+        return `<option value="${k}" ${filterZona===k?'selected':''}>${z.label} (${count})</option>`;
+      }).join('')}
+    </select>
+    <!-- Toggle Lista/Rota -->
+    <div style="display:inline-flex;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;">
+      <button type="button" class="btn btn-xs" data-dash-view="lista" style="border-radius:0;padding:5px 10px;background:${viewMode==='lista'?'#1E293B':'#fff'};color:${viewMode==='lista'?'#fff':'#64748B'};border:none;font-size:11px;font-weight:600;">📋 Lista</button>
+      <button type="button" class="btn btn-xs" data-dash-view="rota"  style="border-radius:0;padding:5px 10px;background:${viewMode==='rota'?'var(--rose)':'#fff'};color:${viewMode==='rota'?'#fff':'#64748B'};border:none;font-size:11px;font-weight:600;">🗺️ Rota Sugerida</button>
+    </div>
   </div>
 
   <!-- Action bar with bulk buttons -->

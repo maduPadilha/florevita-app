@@ -1396,6 +1396,27 @@ function bindPageActions(){
       S._dashUnit = e.target.value;
       render();
     });
+    // Filtro Bairro especifico (limpa filtro de zona ao usar)
+    document.getElementById('dash-filter-bairro')?.addEventListener('change', e=>{
+      S._dashBairro = e.target.value;
+      S._dashZona = '';
+      render();
+    });
+    // Filtro Zona (Bairros Proximos) — limpa filtro de bairro especifico
+    document.getElementById('dash-filter-zona')?.addEventListener('change', e=>{
+      S._dashZona = e.target.value;
+      S._dashBairro = '';
+      // Quando seleciona uma zona, ativa modo rota automaticamente
+      if (e.target.value) S._dashView = 'rota';
+      render();
+    });
+    // Toggle Lista/Rota
+    document.querySelectorAll('[data-dash-view]').forEach(b=>{
+      b.addEventListener('click', () => {
+        S._dashView = b.dataset.dashView;
+        render();
+      });
+    });
     // Date filter
     document.querySelectorAll('[data-dash-date]').forEach(b => {
       b.addEventListener('click', () => {
