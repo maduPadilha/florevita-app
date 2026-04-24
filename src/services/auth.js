@@ -580,6 +580,9 @@ export function can(mod){
   if(S.user.cargo==='admin') return true;
   if(S.user.role==='Administrador') return true;
 
+  // auditLogs: APENAS admin (ja tratado acima). Se chegou aqui, nega.
+  if(mod === 'auditLogs') return false;
+
   // Entregador: acesso restrito
   if(_isEntregador()) return mod==='delivery' || mod==='ponto' || mod==='rota';
 
