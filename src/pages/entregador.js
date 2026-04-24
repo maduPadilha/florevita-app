@@ -93,6 +93,42 @@ export function renderAppEntregador(){
     ? [...new Set(emRota.map(o=>o.driverName||o.driverId||'?').filter(Boolean))].join(', ')
     : '';
 
+  // ── ENTREGAS CONCLUIDAS HOJE (fuso Manaus) ─────────────────
+  // Reusa isMinha mas aceita status 'Entregue' tambem — filtro de data
+  // baseado em updatedAt (quando virou Entregue).
+  function isMinhaEntregueHoje(o){
+    if(!o || o.status !== 'Entregue') return false;
+    // Mesmo match de driver (inline, pq isMinha exige 'Saiu p/ entrega')
+    let matchDriver = false;
+    if(o.driverId && myIds.has(o.driverId)) matchDriver = true;
+    else if(o.driverBackendId && myIds.has(o.driverBackendId)) matchDriver = true;
+    else if(o.driverEmail && myEmail && o.driverEmail.toLowerCase() === myEmail) matchDriver = true;
+    else {
+      const dn=(o.driverName||'').trim().toLowerCase();
+      if(dn === myName) matchDriver = true;
+      else if(myFirstName.length >= 3 && dn.includes(myFirstName)) matchDriver = true;
+      else if(myFirstName.length >= 3 && myName.includes(dn)) matchDriver = true;
+    }
+    if(!matchDriver) return false;
+    // Entregue hoje? compara data de updatedAt com hoje em Manaus
+    const updatedAt = o.updatedAt || o.deliveredAt || o.createdAt;
+    if(!updatedAt) return false;
+    const d = new Date(updatedAt);
+    const hoje = new Date();
+    const hojeStr = hoje.toLocaleDateString('sv-SE', { timeZone: 'America/Manaus' });
+    const dStr = d.toLocaleDateString('sv-SE', { timeZone: 'America/Manaus' });
+    return dStr === hojeStr;
+  }
+
+  const entreguesHoje = S.orders.filter(isMinhaEntregueHoje);
+  const totalEntregasHoje = entreguesHoje.length;
+  // Valor total a receber = soma das taxas de entrega dos pedidos do dia
+  // (definido no PDV via Zona/Bairro — campo deliveryFee)
+  const totalReceberHoje = entreguesHoje.reduce((s, o) =>
+    s + (Number(o.deliveryFee || o.taxaEntrega || 0)), 0
+  );
+  const fmtBR = (v) => 'R$ ' + Number(v).toFixed(2).replace('.', ',');
+
   return `
 <div style="min-height:100vh;background:#0D0D0D;">
   <div style="position:sticky;top:0;z-index:50;background:rgba(13,13,13,.97);
@@ -211,6 +247,36 @@ export function renderAppEntregador(){
   </div>
 </div>`;
     }).join('')}
+
+    <!-- ── RESUMO DO DIA (entregas concluidas + valor a receber) ── -->
+    ${totalEntregasHoje > 0 ? `
+    <div style="margin-top:20px;background:linear-gradient(135deg,#064E3B,#047857);border:2px solid #10B981;border-radius:16px;padding:18px 20px;box-shadow:0 4px 16px rgba(16,185,129,.25);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span style="font-size:28px;">🏆</span>
+        <div>
+          <div style="font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Resumo do Dia</div>
+          <div style="font-size:15px;color:#fff;font-weight:800;">Suas entregas concluídas hoje</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="background:rgba(255,255,255,.1);border-radius:12px;padding:14px;text-align:center;">
+          <div style="font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Entregues</div>
+          <div style="font-size:36px;font-weight:900;color:#fff;line-height:1;">${totalEntregasHoje}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:4px;">entrega${totalEntregasHoje>1?'s':''}</div>
+        </div>
+        <div style="background:rgba(255,255,255,.15);border-radius:12px;padding:14px;text-align:center;border:2px solid rgba(252,211,77,.5);">
+          <div style="font-size:10px;color:rgba(252,211,77,1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:800;">A Receber</div>
+          <div style="font-size:24px;font-weight:900;color:#FCD34D;line-height:1.1;">${fmtBR(totalReceberHoje)}</div>
+          <div style="font-size:9px;color:rgba(255,255,255,.5);margin-top:4px;">Taxas de entrega</div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.15);font-size:11px;color:rgba(255,255,255,.6);text-align:center;">
+        💚 Parabéns pelo seu trabalho de hoje, ${nome}!
+      </div>
+    </div>
+    ` : ''}
   </div>
 </div>
 ${S.toast?`<div class="toast" style="${S.toast.err?'background:var(--red)':''}">${S.toast.msg}</div>`:''}
