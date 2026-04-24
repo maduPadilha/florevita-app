@@ -300,7 +300,19 @@ export function renderPedidos(){
           ${createdByName?`<div style="font-size:10px;color:#94A3B8;">Lançado: ${createdByName}</div>`:''}
         </td>
         <td style="font-size:11px;font-weight:600">${bairroCell}</td>
-        <td><span class="tag t-gray" style="font-size:9px">${o.unit||'—'}</span></td>
+        <td>
+          <span class="tag t-gray" style="font-size:9px">${o.unit||'—'}</span>
+          ${(() => {
+            // Delivery vendido por outra loja: mostra 'Vendido por: X'
+            const tipoRaw = String(o.tipo || o.type || '').toLowerCase();
+            const isDeliv = tipoRaw === 'delivery';
+            const saleUnit = o.saleUnit || '';
+            if (isDeliv && saleUnit && saleUnit !== o.unit) {
+              return `<div style="font-size:9px;color:#7C3AED;font-weight:700;margin-top:2px;" title="Unidade que realizou a venda">🛍️ Vendido: ${saleUnit}</div>`;
+            }
+            return '';
+          })()}
+        </td>
         <td style="color:var(--muted);font-size:11px">${(o.items||[]).map(i=>i.name).join(', ').substring(0,22)||'—'}</td>
         <td style="font-weight:600">${$c(o.total)}</td>
         <td style="font-size:11px">

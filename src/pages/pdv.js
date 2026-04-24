@@ -655,7 +655,8 @@ export async function _finalizePDV(){
     condName:PDV.condName||undefined,
     block:PDV.block,apt:PDV.apt,
     source:'PDV',
-    unit:orderUnit,
+    unit:orderUnit,           // onde o pedido sera MONTADO/RETIRADO
+    saleUnit: userBaseUnit,   // onde a venda FOI REALIZADA (atendente)
     unidade: destinoSlug,
     tipo: tipoSlug,
     destino: destinoSlug,
