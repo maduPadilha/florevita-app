@@ -221,6 +221,10 @@ export function agruparEroteirizar(pedidos) {
 }
 
 // ── TURNO DO PEDIDO ─────────────────────────────────────────
+// Regras de horario (Floricultura Lacos Eternos):
+//   Manha: 07:00 - 12:00
+//   Tarde: 12:01 - 18:00
+//   Noite: 18:01 - 20:00
 // Prioriza scheduledPeriod (manha/tarde/noite). Se nao tiver,
 // tenta inferir pelo scheduledTime.
 export function getTurnoPedido(pedido) {
@@ -229,27 +233,34 @@ export function getTurnoPedido(pedido) {
   if (p.includes('manh')) return 'manha';
   if (p.includes('tard')) return 'tarde';
   if (p.includes('noit')) return 'noite';
-  // Fallback: infere pelo horario
+  // Fallback: infere pelo horario (scheduledTime HH:MM)
   const t = String(pedido?.scheduledTime || '');
   if (t && t !== '00:00') {
-    const [h] = t.split(':').map(Number);
-    if (h >= 6 && h < 12) return 'manha';
-    if (h >= 12 && h < 18) return 'tarde';
-    if (h >= 18 && h < 23) return 'noite';
+    const [hh, mm] = t.split(':').map(Number);
+    const mins = hh * 60 + (mm || 0);
+    if (mins >= 7*60  && mins <= 12*60) return 'manha';     // 07:00 - 12:00
+    if (mins >  12*60 && mins <= 18*60) return 'tarde';     // 12:01 - 18:00
+    if (mins >  18*60 && mins <= 20*60) return 'noite';     // 18:01 - 20:00
   }
   return 'sem';
 }
 
-// Turno atual baseado na hora de Manaus
+// Turno atual baseado na hora de Manaus (mesmas regras dos pedidos)
 export function getTurnoAtual() {
   const now = new Date();
-  const h = parseInt(now.toLocaleString('en-US', {
-    timeZone: 'America/Manaus', hour: '2-digit', hour12: false,
-  }), 10);
-  if (h >= 0  && h < 11) return 'manha';   // ate 10:59 = manha
-  if (h >= 11 && h < 17) return 'tarde';   // 11:00-16:59 = tarde
-  if (h >= 17 && h < 23) return 'noite';   // 17:00-22:59 = noite
-  return 'noite'; // madrugada: mantem noite (caso operacao estenda)
+  // Pega HH:MM atual de Manaus
+  const str = now.toLocaleString('en-US', {
+    timeZone: 'America/Manaus', hour12: false,
+    hour: '2-digit', minute: '2-digit',
+  }); // '14:32'
+  const [hh, mm] = str.replace(/\D+/g, ':').split(':').map(Number);
+  const mins = hh * 60 + (mm || 0);
+  if (mins >= 7*60  && mins <= 12*60) return 'manha';
+  if (mins >  12*60 && mins <= 18*60) return 'tarde';
+  if (mins >  18*60 && mins <= 20*60) return 'noite';
+  // Antes das 7h ou apos as 20h: mantem ultimo turno conhecido
+  if (mins < 7*60) return 'manha';   // madrugada → prepara manha
+  return 'noite';                     // apos 20h → ainda mostra noite
 }
 
 // Labels e cores de turnos

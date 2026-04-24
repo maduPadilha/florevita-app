@@ -1022,12 +1022,14 @@ function renderTabAltaDemanda(){
   const fSecao  = S._relAltaSecao  || 'resumo'; // resumo | producao | entregas | priorizacao | rota | alertas
 
   // ── HELPERS de turno/priorizacao/rota ──
+  // Turnos oficiais: Manha 07-12, Tarde 12:01-18, Noite 18:01-20
   const getTurno = (hm) => {
     if(!hm || hm==='00:00') return '—';
-    const h = parseInt(hm.slice(0,2),10);
-    if(h >= 6  && h < 12) return 'manha';
-    if(h >= 12 && h < 18) return 'tarde';
-    if(h >= 18 && h < 23) return 'noite';
+    const [hh, mm] = hm.split(':').map(Number);
+    const mins = hh * 60 + (mm || 0);
+    if(mins >= 7*60  && mins <= 12*60) return 'manha';
+    if(mins >  12*60 && mins <= 18*60) return 'tarde';
+    if(mins >  18*60 && mins <= 20*60) return 'noite';
     return '—';
   };
   const turnoLabel = { manha: '🌅 Manhã', tarde: '🌤️ Tarde', noite: '🌙 Noite', '—': 'Sem horário' };
@@ -1215,9 +1217,9 @@ function renderTabAltaDemanda(){
       <label class="fl">⏰ Turno</label>
       <select class="fi" id="rel-alta-turno">
         <option value="">Todos</option>
-        <option value="manha" ${fTurno==='manha'?'selected':''}>🌅 Manhã (06–12h)</option>
-        <option value="tarde" ${fTurno==='tarde'?'selected':''}>🌤️ Tarde (12–18h)</option>
-        <option value="noite" ${fTurno==='noite'?'selected':''}>🌙 Noite (18–23h)</option>
+        <option value="manha" ${fTurno==='manha'?'selected':''}>🌅 Manhã (07h–12h)</option>
+        <option value="tarde" ${fTurno==='tarde'?'selected':''}>🌤️ Tarde (12h–18h)</option>
+        <option value="noite" ${fTurno==='noite'?'selected':''}>🌙 Noite (18h–20h)</option>
       </select>
     </div>
     <div class="fg">

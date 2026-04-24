@@ -496,12 +496,14 @@ setInterval(()=>{
   const n=new Date();
   document.getElementById('clock').textContent=n.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   document.getElementById('date-str').textContent=n.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
-  // Atualiza badge de turno atual
-  const h = n.getHours();
+  // Atualiza badge de turno atual (07-12 / 12:01-18 / 18:01-20)
+  const mins = n.getHours() * 60 + n.getMinutes();
   let ico, lbl, col;
-  if (h < 11)      { ico='🌅'; lbl='Manhã (até 11h)'; col='#F59E0B'; }
-  else if (h < 17) { ico='🌤️'; lbl='Tarde (11h-17h)'; col='#3B82F6'; }
-  else             { ico='🌙'; lbl='Noite (17h+)'; col='#7C3AED'; }
+  if (mins >= 7*60  && mins <= 12*60) { ico='🌅'; lbl='Manhã (07h-12h)';   col='#F59E0B'; }
+  else if (mins > 12*60 && mins <= 18*60) { ico='🌤️'; lbl='Tarde (12h-18h)';   col='#3B82F6'; }
+  else if (mins > 18*60 && mins <= 20*60) { ico='🌙'; lbl='Noite (18h-20h)';   col='#7C3AED'; }
+  else if (mins < 7*60)                   { ico='🌙'; lbl='Fora do expediente'; col='#64748B'; }
+  else                                    { ico='🌙'; lbl='Fora do expediente'; col='#64748B'; }
   const icoEl = document.getElementById('turno-icon');
   const lblEl = document.getElementById('turno-label');
   const badgeEl = document.getElementById('turno-atual-badge');
@@ -640,27 +642,30 @@ function getOrderAlert(order) {
 }
 
 // ── TURNO ATUAL + ELEGIVEL PARA O PAINEL TV ─────────────────
-// Regras:
-//  - Manha (ate 10:59): mostra so pedidos do turno Manha
-//  - Tarde (11:00-16:59): mostra turno Tarde (mas se tiver pendentes
-//    da manha ainda nao entregues, aparecem tambem com alerta)
-//  - Noite (17:00+): turno Noite + pendentes de tarde/manha
-//  - Pedidos com horario especifico: classificados pelo proprio horario
+// Regras oficiais de horario (Floricultura Lacos Eternos):
+//   Manha: 07:00 - 12:00
+//   Tarde: 12:01 - 18:00
+//   Noite: 18:01 - 20:00
+// - Pedidos com horario especifico sao classificados pelo proprio horario
+// - No turno atual, mostra o turno + pendentes dos turnos anteriores
 function getTurnoAtualTV() {
   const n = new Date();
-  const h = n.getHours();
-  if (h < 11) return 'manha';
-  if (h < 17) return 'tarde';
-  return 'noite';
+  const mins = n.getHours() * 60 + n.getMinutes();
+  if (mins >= 7*60  && mins <= 12*60) return 'manha';
+  if (mins >  12*60 && mins <= 18*60) return 'tarde';
+  if (mins >  18*60 && mins <= 20*60) return 'noite';
+  if (mins < 7*60) return 'manha'; // madrugada → prepara manha
+  return 'noite';                   // apos 20h → ainda noite
 }
 function getTurnoPedidoTV(o) {
   // Prioriza horario especifico (scheduledTime)
   const t = String(o?.scheduledTime || '');
   if (t && t !== '00:00') {
-    const [h] = t.split(':').map(Number);
-    if (h >= 0  && h < 11) return 'manha';
-    if (h >= 11 && h < 17) return 'tarde';
-    if (h >= 17 && h < 23) return 'noite';
+    const [hh, mm] = t.split(':').map(Number);
+    const mins = hh * 60 + (mm || 0);
+    if (mins >= 7*60  && mins <= 12*60) return 'manha';
+    if (mins >  12*60 && mins <= 18*60) return 'tarde';
+    if (mins >  18*60 && mins <= 20*60) return 'noite';
   }
   // Fallback para scheduledPeriod
   const p = String(o?.scheduledPeriod || '').toLowerCase();
