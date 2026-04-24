@@ -1,42 +1,62 @@
 // ── SYNC DE TAXAS DE ENTREGA COM BACKEND ─────────────────────
-// Arquivo separado para evitar dependencia circular em state.js.
-// state.js eh o modulo mais importado do app e NAO pode importar
-// api.js diretamente (api.js ja importa state.js → ciclo).
-//
-// Estrategia: registramos window._syncDeliveryFeesToBackend() para
-// state.saveDeliveryFees() chamar. Aqui e o unico lugar que conhece
-// a API + o state simultaneamente.
-import { GET, PUT } from './api.js';
-import { DELIVERY_FEES } from '../state.js';
-
+// Modulo ISOLADO (zero imports internos) para eliminar qualquer
+// dependencia circular. Usa apenas fetch + localStorage + window.
+// state.saveDeliveryFees() chama window._syncDeliveryFeesToBackend.
 const KEY = 'delivery-fees';
+const LS_KEY = 'fv_delivery_fees';
 
-// Fire-and-forget: envia objeto atual para o backend
-function syncToBackend(feesObj) {
+// Busca token de sessao (mesma logica do api.js, inline para nao importar)
+function getToken() {
   try {
-    PUT('/settings/' + KEY, { value: feesObj }).catch(e => {
-      console.warn('[delivery-fees sync] falha:', e.message || e);
-    });
+    return localStorage.getItem('fv2_token') || localStorage.getItem('fv_backend_token') || '';
+  } catch(_) { return ''; }
+}
+function getApiBase() {
+  // Hardcoded pra evitar import de state.js
+  return 'https://florevita-backend-2-0.onrender.com/api';
+}
+
+// Fire-and-forget: envia objeto para o backend
+function syncToBackend(feesObj) {
+  const token = getToken();
+  if (!token) return; // nao logado, nada a fazer
+  try {
+    fetch(getApiBase() + '/settings/' + KEY, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token,
+      },
+      body: JSON.stringify({ value: feesObj }),
+    }).catch(e => console.warn('[delivery-fees sync] falha:', e.message));
   } catch (e) { console.warn('[delivery-fees sync] throw:', e.message); }
 }
 
 // Carrega do backend e sobrescreve cache local. Backend vence conflitos.
 export async function loadDeliveryFeesFromBackend() {
+  const token = getToken();
+  if (!token) return null;
   try {
-    const resp = await GET('/settings/' + KEY).catch(()=>null);
+    const res = await fetch(getApiBase() + '/settings/' + KEY, {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    if (!res.ok) return null;
+    const resp = await res.json().catch(() => null);
     const remote = (resp && typeof resp === 'object')
       ? (resp.value || resp.data || resp)
       : null;
     if (remote && typeof remote === 'object' && !Array.isArray(remote)) {
-      // Substitui in-place para preservar a referencia exportada
-      Object.keys(DELIVERY_FEES).forEach(k => delete DELIVERY_FEES[k]);
-      Object.assign(DELIVERY_FEES, remote);
-      try { localStorage.setItem('fv_delivery_fees', JSON.stringify(DELIVERY_FEES)); } catch(_){}
+      try { localStorage.setItem(LS_KEY, JSON.stringify(remote)); } catch(_){}
+      // Notifica state.js (que ja leu o localStorage) a recarregar
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('fv:delivery-fees-updated', { detail: remote }));
+      }
+      return remote;
     }
   } catch (e) {
     console.warn('[delivery-fees] offline:', e.message || e);
   }
-  return DELIVERY_FEES;
+  return null;
 }
 
 // Registra a ponte no window para state.saveDeliveryFees() chamar

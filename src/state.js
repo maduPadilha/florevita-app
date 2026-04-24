@@ -63,12 +63,22 @@ export let S = {
 export let DELIVERY_FEES = JSON.parse(localStorage.getItem('fv_delivery_fees')||'{}');
 export function saveDeliveryFees(){
   localStorage.setItem('fv_delivery_fees', JSON.stringify(DELIVERY_FEES));
-  // Sync backend — lazy, via modulo externo (sem criar ciclo com api.js)
   if (typeof window !== 'undefined' && window._syncDeliveryFeesToBackend) {
     try { window._syncDeliveryFeesToBackend(DELIVERY_FEES); } catch(_){}
   }
 }
 export function setDeliveryFees(fees){ DELIVERY_FEES = fees; saveDeliveryFees(); }
+
+// Escuta eventos do sync do backend e atualiza DELIVERY_FEES in-place
+if (typeof window !== 'undefined') {
+  window.addEventListener('fv:delivery-fees-updated', (e) => {
+    const remote = e.detail;
+    if (remote && typeof remote === 'object') {
+      Object.keys(DELIVERY_FEES).forEach(k => delete DELIVERY_FEES[k]);
+      Object.assign(DELIVERY_FEES, remote);
+    }
+  });
+}
 
 export let PDV = {
   cart:[], discount:0, payment:'Pix',
