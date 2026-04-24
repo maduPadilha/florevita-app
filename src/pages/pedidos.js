@@ -128,11 +128,13 @@ async function printCard(orderId){
 }
 
 // Expor helpers no window para onclick inline
+// IMPORTANTE: NAO sobrescreve window.printComanda/printCard — essas sao
+// setadas no main.js com a referencia DIRETA de impressao.js (sincrona).
+// Se sobrescrevessemos aqui com o wrapper async local, quebrava os
+// onclick="printComanda('id')" dos botoes inline.
 if(typeof window !== 'undefined'){
   window.showOrderViewModal = showOrderViewModal;
   window.showEditOrderModal = showEditOrderModal;
-  window.printComanda = printComanda;
-  window.printCard = printCard;
   window.setPage = window.setPage || function(pg){ setPage(pg); };
 }
 
