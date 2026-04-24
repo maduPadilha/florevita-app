@@ -531,7 +531,13 @@ export async function _finalizePDV(){
   const tipoSlug = PDV.type === 'Balc\u00E3o' ? 'balcao'
                  : PDV.type === 'Retirada' ? 'retirada'
                  : 'delivery';
-  const destinoSlug = normalizeUnidade(PDV.pickupUnit || S.user?.unidade || S.user?.unit);
+  // Delivery SEMPRE sai do CDLE (nao depende de pickupUnit nem da unidade
+  // do usuario). Retirada usa pickupUnit escolhida pelo atendente. Balcao
+  // usa a unidade do proprio usuario.
+  let destinoSlug;
+  if (tipoSlug === 'delivery') destinoSlug = 'cdle';
+  else if (tipoSlug === 'retirada') destinoSlug = normalizeUnidade(PDV.pickupUnit || S.user?.unidade || S.user?.unit);
+  else destinoSlug = normalizeUnidade(S.user?.unidade || S.user?.unit);
   const checkUnidade = podeCriarPedido(S.user, tipoSlug, destinoSlug);
   if(!checkUnidade.ok){
     toast('\u274C ' + checkUnidade.reason, true);
