@@ -204,8 +204,24 @@ export function printComanda(orderId){
     ? new Date(o.scheduledDate).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'}).toUpperCase()
     : '\u2014';
   const turno   = UC(o.scheduledPeriod||'');
-  const horario = o.scheduledTime ? UC(o.scheduledTime) : '';
-  const dtLabel = [dataEntrega, turno, horario].filter(Boolean).join(' \u00b7 ');
+  // Monta exibicao do horario considerando janela (Horario Especifico)
+  // Retorna so os horarios (sem emoji) — o template ja coloca o ⏰
+  let horario = '';
+  if (o.scheduledTime && o.scheduledTime !== '00:00') {
+    horario = UC(o.scheduledTime);
+    if (o.scheduledTimeEnd && o.scheduledTimeEnd !== '00:00' && o.scheduledTimeEnd !== o.scheduledTime) {
+      horario = `${UC(o.scheduledTime)} \u00E0S ${UC(o.scheduledTimeEnd)}`;
+    }
+  }
+
+  // Detecta se e "Horario Especifico" (janela de horario)
+  const isHorarioEspecifico = /hor[aá]rio espec[ií]fico/i.test(o.scheduledPeriod || '')
+    || (o.scheduledTimeEnd && o.scheduledTimeEnd !== '00:00' && o.scheduledTimeEnd !== o.scheduledTime);
+  // Badge GRANDE para destacar na comanda (fundo amarelo alerta)
+  const horarioEspecificoBadge = isHorarioEspecifico && horario
+    ? `<div style="background:#FEF3C7;border:3px solid #F59E0B;border-radius:8px;padding:10px 14px;text-align:center;font-size:16px;font-weight:900;color:#92400E;margin:8px 0;box-shadow:0 2px 6px rgba(245,158,11,.3);">
+        \u23F0 HOR\u00C1RIO ESPEC\u00CDFICO: ${horario}
+       </div>` : '';
 
   // ── ENTREGADOR ─────────────────────────────────────────────
   const entregador = UC(o.driverName||'A DEFINIR');
@@ -317,6 +333,9 @@ export function printComanda(orderId){
     ${o.cardMessage?`<div style="background:#FDF4F7;border-left:4px solid ${cor};padding:5px 10px;border-radius:0 6px 6px 0;font-size:11px;text-transform:none;">
       \u{1F48C} <strong>CART\u00c3O:</strong> "${o.cardMessage}" ${o.identifyClient!==false?'\u2014 DE: '+UC(o.client?.name||o.clientName||''):'\u2014 AN\u00d4NIMO'}</div>`:''}
 
+    <!-- Horario Especifico (destaque se aplicavel) -->
+    ${horarioEspecificoBadge}
+
     <!-- Cobranca -->
     ${cobrancaBlock}
 
@@ -386,6 +405,9 @@ export function printComanda(orderId){
       ${cond?`<div style="font-size:14px;font-weight:700;color:#333;margin-top:3px;">\u{1F3E2} ${UC(cond)}</div>`:''}
       ${ref?`<div style="font-size:13px;color:#555;margin-top:3px;">\u{1F4CD} REF: ${UC(ref)}</div>`:''}
     </div>
+
+    <!-- Horario Especifico (destaque se aplicavel) -->
+    ${horarioEspecificoBadge}
 
     <!-- Cobranca -->
     ${cobrancaBlock}
