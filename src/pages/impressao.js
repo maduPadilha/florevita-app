@@ -231,6 +231,8 @@ function _printComandaInternal(orderId){
       horario = `${UC(o.scheduledTime)} \u00E0S ${UC(o.scheduledTimeEnd)}`;
     }
   }
+  // Label combinado (compatibilidade com templates antigos)
+  const dtLabel = [dataEntrega, turno, horario].filter(Boolean).join(' \u00B7 ');
 
   // Detecta se e "Horario Especifico" (janela de horario) — sem regex
   // para evitar possiveis problemas de transpile com caracteres unicode
