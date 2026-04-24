@@ -1268,7 +1268,7 @@ function renderApp(){
     {k:'expedicao',l:'Expedição',i:'📤',m:'delivery',s:'Operação',hide:['Entregador']},
     {k:'ponto',l:'Ponto Eletrônico',i:'🕐',m:'ponto',s:'Operação'},
     {k:'financeiro',l:'Financeiro',i:'💰',m:'financial',s:'Financeiro'},
-    {k:'notasFiscais',l:'Notas Fiscais',i:'🧾',m:'financial',s:'Financeiro'},
+    {k:'notasFiscais',l:'Notas Fiscais',i:'🧾',m:'notasFiscais',s:'Financeiro'},
     {k:'relatorios',l:'Relatórios',i:'📈',m:'reports',s:'Financeiro'},
     {k:'alertas',l:'Alertas',i:'🔔',m:'alertas',s:'Sistema'},
     {k:'whatsapp',l:'WhatsApp',i:'💬',m:'whatsapp',s:'Sistema'},
@@ -1292,6 +1292,7 @@ function renderApp(){
     alertas:'alertas', whatsapp:'whatsapp', usuarios:'users',
     colaboradores:'users', impressao:'impressao', backup:'backup',
     config:'config', ecommerce:'ecommerce', orcamento:'orcamentos',
+    notasFiscais:'notasFiscais',
     entregador:'delivery',
   };
   const currentMod = pageToMod[S.page];

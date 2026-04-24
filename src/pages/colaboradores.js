@@ -483,6 +483,11 @@ export async function showColabModal(colabId=null, overrideCargo=null){
     lbl.style.background =on?'var(--rose-l)':'#fff';
   };
 
+  // Modulos PROIBIDOS para Gerente (apenas admin acessa):
+  // whatsapp, backup (estao no modal); users, config, ecommerce, notasFiscais
+  // (fora do modal — controlados por can() e PERMS_DEFAULT)
+  const GERENTE_BLOCKED_MODS = ['whatsapp','backup'];
+
   // Ao mudar cargo: re-abre modal preservando dados digitados
   document.getElementById('cl-cargo')?.addEventListener('change',()=>{
     const newCargo = document.getElementById('cl-cargo')?.value;
@@ -490,11 +495,15 @@ export async function showColabModal(colabId=null, overrideCargo=null){
       const all=getColabs(); const i=all.findIndex(c=>c.id===colabId);
       if(i>=0){
         const update = {...all[i], cargo:newCargo};
-        // Gerente: acesso automatico a TODAS unidades + TODOS modulos
+        // Gerente: acesso a todas unidades + modulos operacionais
+        // (exclui whatsapp e backup). Usuarios/Config/E-commerce/Notas Fiscais
+        // ja sao bloqueados por PERMS_DEFAULT/can()
         if(newCargo === 'Gerente'){
           update.unidade = 'Todas';
           update.modulos = {};
-          MODULOS_COLABS.forEach(m => { update.modulos[m.k] = true; });
+          MODULOS_COLABS.forEach(m => {
+            if(!GERENTE_BLOCKED_MODS.includes(m.k)) update.modulos[m.k] = true;
+          });
         }
         all[i] = update;
         saveColabs(all);
@@ -503,25 +512,24 @@ export async function showColabModal(colabId=null, overrideCargo=null){
     showColabModal(colabId, newCargo);
   });
 
-  // Quando a tela renderiza e e Gerente, mostra dica visual
+  // Quando a tela renderiza e e Gerente, aplica a politica de acesso
   (function(){
     const curCargo = document.getElementById('cl-cargo')?.value;
     if(curCargo === 'Gerente'){
-      // Marca todos os checkboxes de modulos por padrao
       document.querySelectorAll('.cl-cb').forEach(cb=>{
-        cb.checked = true;
-        window.styleClLbl?.(cb.closest('label'), true);
+        const mod = cb.dataset.mod;
+        const allow = !GERENTE_BLOCKED_MODS.includes(mod);
+        cb.checked = allow;
+        window.styleClLbl?.(cb.closest('label'), allow);
       });
-      // Sugere unidade Todas se nao tem ainda
       const sel = document.getElementById('cl-unidade');
       if(sel && !sel.value) sel.value = 'Todas';
-      // Banner visual
       const cargoEl = document.getElementById('cl-cargo');
       if(cargoEl && !document.getElementById('cl-gerente-hint')){
         const hint = document.createElement('div');
         hint.id = 'cl-gerente-hint';
-        hint.style.cssText = 'font-size:11px;color:#065F46;background:#D1FAE5;padding:6px 10px;border-radius:6px;margin-top:4px;border:1px solid #6EE7B7;';
-        hint.innerHTML = '👑 <strong>Gerente:</strong> acesso total a todas unidades e módulos. Você pode ajustar manualmente se quiser restringir.';
+        hint.style.cssText = 'font-size:11px;color:#065F46;background:#D1FAE5;padding:8px 10px;border-radius:6px;margin-top:4px;border:1px solid #6EE7B7;line-height:1.5;';
+        hint.innerHTML = '👑 <strong>Gerente — Acesso Operacional:</strong> todas unidades · Dashboard · PDV · Pedidos (inclusive emissão NFC-e/NF-e) · Caixa · Clientes · Produtos · Estoque · Produção · Expedição · Financeiro · Relatórios · Ponto.<br><br>🚫 <strong>Sem acesso:</strong> Usuários · Colaboradores · Configurações · E-commerce · Backup · WhatsApp · Notas Fiscais (menu) · Alertas.';
         cargoEl.parentElement.appendChild(hint);
       }
     }

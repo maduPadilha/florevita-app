@@ -507,9 +507,11 @@ export async function cancelarNotaFiscal(notaId) {
 
 // ── RENDER PÁGINA ─────────────────────────────────────────────
 export function renderNotasFiscais() {
-  // Acesso à tela: admin, ou colaborador com modulo financial/reports/orders
-  if (!isAdmin() && !can('financial') && !can('reports') && !can('orders')) {
-    return '<div class="empty card"><div class="empty-icon">🚫</div><p>Sem permissão para Notas Fiscais</p></div>';
+  // Acesso a TELA completa: admin ou quem tem modulo 'notasFiscais' explicito.
+  // Gerente NAO acessa a tela (pode emitir pelos botoes em Pedidos).
+  // Para emitir via PDV/Pedidos, ver check em emitirNotaFiscal() abaixo.
+  if (!isAdmin() && !can('notasFiscais')) {
+    return '<div class="empty card"><div class="empty-icon">🚫</div><p>Sem permissão para a tela de Notas Fiscais.<br><small>Use os botões <strong>📄 NFC-e</strong> / <strong>📑 NF-e</strong> no módulo Pedidos para emitir.</small></p></div>';
   }
 
   if (!_fetchedOnce) {
