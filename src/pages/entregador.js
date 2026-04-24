@@ -346,59 +346,233 @@ export function pedirAjudaEntrega(orderId){
 // Origem fixa: R. Galiléia, 42 - Novo Aleixo, Manaus - AM, 69098-026
 const ORIGEM_ROTA = 'R. Galiléia, 42 - Novo Aleixo, Manaus - AM, 69098-026';
 
-export function abrirRotaCompleta(){
+// ── INTEGRACAO GOOGLE MAPS — rota multi-stop otimizada ──────
+// Usa o URL scheme oficial do Google Maps (gratuito, sem API key).
+// Formato:
+//   https://www.google.com/maps/dir/?api=1
+//     &origin=LAT,LNG                   (GPS atual ou endereco fallback)
+//     &destination=<ultimo endereco>
+//     &waypoints=optimize:true|A|B|C    (Google REORDENA automaticamente)
+//     &travelmode=driving
+//
+// Google Maps URL scheme aceita ate 9 waypoints (10 paradas totais).
+// Se houver mais, dividimos em chunks e abrimos multiplas rotas.
+const MAX_WAYPOINTS = 9;  // limite do Google Maps URL scheme
+const MAX_STOPS_PER_URL = MAX_WAYPOINTS + 1; // +1 destination
+
+function enderecoPedido(o) {
+  return o.deliveryAddress ||
+    [o.deliveryStreet, o.deliveryNumber, o.deliveryNeighborhood, o.deliveryCity||'Manaus', 'AM']
+      .filter(Boolean).join(', ');
+}
+
+// Monta URL do Google Maps para uma sequencia de paradas
+// com optimize:true — o Google reordena automaticamente pelo menor trajeto
+function montarUrlRotaOtimizada(origin, paradas) {
+  if (!paradas.length) return null;
+  const destino = paradas[paradas.length - 1];
+  const waypoints = paradas.slice(0, -1);
+  let url = `https://www.google.com/maps/dir/?api=1`
+    + `&origin=${encodeURIComponent(origin)}`
+    + `&destination=${encodeURIComponent(destino)}`
+    + `&travelmode=driving`;
+  if (waypoints.length > 0) {
+    // optimize:true = Google reordena waypoints pela rota mais curta
+    url += `&waypoints=optimize:true|${waypoints.map(w => encodeURIComponent(w)).join('|')}`;
+  }
+  return url;
+}
+
+// Coleta pedidos do entregador logado em "Saiu p/ entrega"
+function minhasEntregas() {
   const myEmail = (S.user?.email||'').trim().toLowerCase();
   const myName  = (S.user?.name||'').trim().toLowerCase();
   const myFirst = myName.split(' ')[0];
   const myIds   = new Set([S.user?._id, S.user?.id, S.user?.colabId].filter(Boolean));
 
-  const minhas = S.orders.filter(o => {
-    if(o.status !== 'Saiu p/ entrega') return false;
-    if(o.driverId && myIds.has(o.driverId)) return true;
-    if(o.driverEmail && myEmail && o.driverEmail.toLowerCase() === myEmail) return true;
+  return S.orders.filter(o => {
+    if (o.status !== 'Saiu p/ entrega') return false;
+    if (o.driverId && myIds.has(o.driverId)) return true;
+    if (o.driverEmail && myEmail && o.driverEmail.toLowerCase() === myEmail) return true;
     const dn = (o.driverName||'').trim().toLowerCase();
-    if(!dn) return false;
-    if(dn === myName) return true;
-    if(myFirst.length >= 3 && dn.includes(myFirst)) return true;
+    if (!dn) return false;
+    if (dn === myName) return true;
+    if (myFirst.length >= 3 && dn.includes(myFirst)) return true;
     return false;
   });
+}
 
-  // Respeita a ordem definida pela expedição (deliveryOrder), senão usa sortOrdersByPriority
-  const ordered = [...minhas].sort((a,b) => {
+// Ordena usando (1) deliveryOrder da expedicao, (2) horario agendado,
+// (3) urgencia. Google ainda vai re-otimizar via optimize:true — isso
+// eh so um primeiro ordenamento para exibicao no modal.
+function ordenarParaRota(pedidos) {
+  return [...pedidos].sort((a, b) => {
     const oa = (typeof a.deliveryOrder === 'number') ? a.deliveryOrder : 999;
     const ob = (typeof b.deliveryOrder === 'number') ? b.deliveryOrder : 999;
-    if(oa !== ob) return oa - ob;
-    return 0;
+    if (oa !== ob) return oa - ob;
+    const ha = a.scheduledTime || '99:99';
+    const hb = b.scheduledTime || '99:99';
+    return ha.localeCompare(hb);
   });
+}
 
-  if(ordered.length === 0){
+// Abre a rota com preview: modal mostra ordem, tempo estimado, destinos.
+// Entregador clica "Iniciar Rota" e abre Google Maps com optimize:true.
+export function abrirRotaCompleta() {
+  const minhas = minhasEntregas();
+  if (minhas.length === 0) {
     toast('❌ Nenhuma entrega designada para você');
     return;
   }
+  const ordered = ordenarParaRota(minhas);
 
-  // Monta URL do Google Maps com waypoints
-  const enderecos = ordered.map(o =>
-    o.deliveryAddress ||
-    [o.deliveryStreet, o.deliveryNumber, o.deliveryNeighborhood, o.deliveryCity||'Manaus','AM']
-      .filter(Boolean).join(', ')
-  ).filter(Boolean);
+  // Dispara o preview modal (que captura GPS e abre Google Maps no click)
+  showRotaPreview(ordered);
+}
 
-  if(enderecos.length === 0){
+// Modal de preview da rota
+function showRotaPreview(ordered) {
+  // Remove modal existente
+  const existing = document.getElementById('rota-preview-modal');
+  if (existing) existing.remove();
+
+  const totalParadas = ordered.length;
+  const precisaDividir = totalParadas > MAX_STOPS_PER_URL;
+  const numRotas = Math.ceil(totalParadas / MAX_STOPS_PER_URL);
+
+  const urgentes = ordered.filter(o => {
+    const r = (typeof getDeliveryRisk === 'function') ? getDeliveryRisk(o) : 'ok';
+    return r === 'late' || r === 'critical';
+  }).length;
+
+  const modal = document.createElement('div');
+  modal.id = 'rota-preview-modal';
+  modal.style.cssText = `
+    position:fixed;inset:0;z-index:10000;
+    background:rgba(0,0,0,.85);
+    display:flex;align-items:center;justify-content:center;
+    padding:16px;
+  `;
+
+  modal.innerHTML = `
+    <div style="background:#0D0D0D;border:1px solid rgba(232,145,122,.35);border-radius:16px;max-width:500px;width:100%;max-height:92vh;overflow-y:auto;color:#F5C0B5;">
+
+      <!-- Header -->
+      <div style="padding:16px;border-bottom:1px solid rgba(232,145,122,.25);display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-size:17px;font-weight:800;">🗺️ Rota Otimizada</div>
+          <div style="font-size:11px;color:rgba(245,192,181,.55);">Google Maps vai reorganizar pela menor distância</div>
+        </div>
+        <button id="rota-close" style="background:none;border:none;color:rgba(245,192,181,.6);font-size:24px;cursor:pointer;line-height:1;">×</button>
+      </div>
+
+      <!-- KPIs -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px;">
+        <div style="background:rgba(124,58,237,.18);border:1px solid rgba(124,58,237,.4);border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:22px;font-weight:800;color:#A78BFA;">${totalParadas}</div>
+          <div style="font-size:10px;color:rgba(245,192,181,.6);">entregas</div>
+        </div>
+        <div style="background:rgba(234,88,12,.15);border:1px solid rgba(234,88,12,.4);border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:22px;font-weight:800;color:#FB923C;">${urgentes}</div>
+          <div style="font-size:10px;color:rgba(245,192,181,.6);">urgentes</div>
+        </div>
+        <div style="background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.4);border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:22px;font-weight:800;color:#4ADE80;">${numRotas}</div>
+          <div style="font-size:10px;color:rgba(245,192,181,.6);">rota${numRotas>1?'s':''}</div>
+        </div>
+      </div>
+
+      ${precisaDividir ? `
+        <div style="margin:0 14px 10px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);color:#FCD34D;border-radius:10px;padding:10px 12px;font-size:11px;">
+          ⚠️ Google Maps aceita no máximo 10 paradas por rota. Suas ${totalParadas} entregas serão divididas em ${numRotas} rotas.
+        </div>
+      ` : ''}
+
+      <!-- Lista de paradas -->
+      <div style="padding:0 14px;max-height:350px;overflow-y:auto;">
+        <div style="font-size:11px;font-weight:700;color:rgba(245,192,181,.6);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">📍 Ordem inicial (Maps vai otimizar)</div>
+        ${ordered.map((o, i) => {
+          const risk = (typeof getDeliveryRisk === 'function') ? getDeliveryRisk(o) : 'ok';
+          const isUrg = risk === 'late' || risk === 'critical';
+          const bairro = o.deliveryNeighborhood || '';
+          const rua = o.deliveryStreet || '';
+          const num = o.deliveryNumber || '';
+          const hora = o.scheduledTime || '';
+          return `
+            <div style="display:flex;gap:10px;padding:9px;background:rgba(255,255,255,.03);border-radius:8px;margin-bottom:6px;align-items:center;border-left:3px solid ${isUrg ? '#EF4444' : '#C8736A'};">
+              <div style="background:${isUrg ? '#EF4444' : '#C8736A'};color:#fff;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex-shrink:0;">${i+1}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:12px;color:#F5C0B5;">${o.recipient || o.clientName || '—'}</div>
+                <div style="font-size:10px;color:rgba(245,192,181,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                  ${rua}${num ? ', '+num : ''}${bairro ? ' · '+bairro : ''}
+                </div>
+              </div>
+              ${hora ? `<div style="font-size:11px;font-weight:700;color:${isUrg ? '#FCA5A5' : '#FCD34D'};white-space:nowrap;">⏰ ${hora}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- Botoes -->
+      <div style="padding:14px;border-top:1px solid rgba(232,145,122,.2);">
+        <button id="btn-iniciar-rota" style="width:100%;background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;padding:16px;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(16,185,129,.35);">
+          🚀 Iniciar Rota no Google Maps
+        </button>
+        <div style="text-align:center;margin-top:10px;font-size:10px;color:rgba(245,192,181,.45);">
+          Navegação passo a passo · Captura sua localização atual como ponto de partida
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.querySelector('#rota-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  modal.querySelector('#btn-iniciar-rota').addEventListener('click', () => {
+    iniciarNavegacaoGoogleMaps(ordered, () => modal.remove());
+  });
+}
+
+// Captura GPS e abre Google Maps com optimize:true
+function iniciarNavegacaoGoogleMaps(ordered, onDone) {
+  const enderecos = ordered.map(enderecoPedido).filter(Boolean);
+  if (enderecos.length === 0) {
     toast('❌ Endereços das entregas não disponíveis');
     return;
   }
 
-  // Último endereço = destino final. Demais = waypoints.
-  const destino = enderecos[enderecos.length - 1];
-  const waypoints = enderecos.slice(0, -1);
-
-  let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(ORIGEM_ROTA)}&destination=${encodeURIComponent(destino)}&travelmode=driving`;
-  if(waypoints.length > 0){
-    url += `&waypoints=${waypoints.map(w => encodeURIComponent(w)).join('|')}`;
+  // Divide em lotes de 10 paradas se ultrapassar o limite do Google Maps URL
+  const lotes = [];
+  for (let i = 0; i < enderecos.length; i += MAX_STOPS_PER_URL) {
+    lotes.push(enderecos.slice(i, i + MAX_STOPS_PER_URL));
   }
 
-  window.open(url, '_blank');
-  toast(`🗺️ Abrindo rota com ${ordered.length} entrega(s)...`);
+  const abrirLotes = (origin) => {
+    lotes.forEach((lote, idx) => {
+      const url = montarUrlRotaOtimizada(origin, lote);
+      if (!url) return;
+      // Delay entre aberturas para nao ser bloqueado pelo popup blocker
+      setTimeout(() => window.open(url, '_blank'), idx * 600);
+      // Para os proximos lotes, origem e o ultimo endereco do lote anterior
+      if (idx < lotes.length - 1) origin = lote[lote.length - 1];
+    });
+    toast(`🗺️ Abrindo ${lotes.length > 1 ? lotes.length + ' rotas' : 'rota'} no Google Maps...`);
+    if (onDone) onDone();
+  };
+
+  // Tenta GPS, senao usa floricultura como origem
+  if (navigator.geolocation) {
+    toast('📍 Capturando sua localização...');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => abrirLotes(pos.coords.latitude + ',' + pos.coords.longitude),
+      () => abrirLotes(ORIGEM_ROTA),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+    );
+  } else {
+    abrirLotes(ORIGEM_ROTA);
+  }
 }
 
 if(typeof window !== 'undefined'){
