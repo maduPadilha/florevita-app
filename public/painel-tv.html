@@ -524,24 +524,13 @@ function getOrderAlert(order) {
   const curM = manausNow.getMinutes();
   const curMins = curH * 60 + curM;
 
-  // Specific time — 45min warning
-  if (order.scheduledTime && order.scheduledTime !== '00:00') {
-    const [h, m] = order.scheduledTime.split(':').map(Number);
-    const targetMins = h * 60 + m;
-    const diff = targetMins - curMins;
-    if (diff > 0 && diff <= 45) return 'late';
-    if (diff <= 0 && diff >= -60) return 'late'; // already past
-  }
-
-  // Period — 1h30 warning before end
-  const periodEnds = { 'Manhã': 12, 'Manha': 12, 'manhã': 12, 'manha': 12, 'Tarde': 18, 'tarde': 18, 'Noite': 20, 'noite': 20 };
-  const endH = periodEnds[order.scheduledPeriod];
-  if (endH) {
-    const endMins = endH * 60;
-    const diff = endMins - curMins;
-    if (diff > 0 && diff <= 90) return 'late';
-  }
-
+  // Alerta baseado no DEADLINE DE EXPEDICAO (1h30 antes da entrega).
+  // Regras: manha→10:30, tarde→16:30, noite→18:30, especifico→HH:MM-1h30.
+  const deadMins = getExpedDeadlineMins(order);
+  if (deadMins === null) return null;
+  const diff = deadMins - curMins;
+  // Se ja passou do deadline, ou faltam <= 30min, entra em alerta
+  if (diff <= 30) return 'late';
   return null;
 }
 
@@ -672,26 +661,29 @@ function getColumnAlert(o, column){
   }
 
   if(column === 'entrega'){
-    // Horario esperado via scheduledTime (HH:MM) ou scheduledDate
-    let targetMins = null;
-    if(o.scheduledTime && o.scheduledTime !== '00:00'){
-      const [h,m] = o.scheduledTime.split(':').map(Number);
-      targetMins = h*60 + m;
-    } else if(o.scheduledDate){
-      const d = new Date(o.scheduledDate);
-      const dM = new Date(d.getTime() + (manausOffset - d.getTimezoneOffset()) * 60000);
-      targetMins = dM.getHours()*60 + dM.getMinutes();
-    }
-    if(targetMins === null) return null;
+    // Usa o DEADLINE DE EXPEDICAO (1h30 antes do horario/turno prometido)
+    // - manha: deadline 10:30, tarde: 16:30, noite: 18:30
+    // - horario especifico HH:MM: deadline HH:MM - 1h30
+    const deadMins = getExpedDeadlineMins(o);
+    if (deadMins === null) return null;
     const curMins = nowManaus.getHours()*60 + nowManaus.getMinutes();
-    const diff = targetMins - curMins;       // minutos ate horario (negativo = passou)
-    if(diff < 0)   return 'late';
-    if(diff <= 20) return 'warn';
+    const diff = deadMins - curMins;
+    if(diff < 0)   return 'late';   // passou do deadline → vermelho
+    if(diff <= 30) return 'warn';   // faltando 30min → amarelo
     return null;
   }
 
-  // Producao — marcacao manual (order.priorityAlert) ou nao alerta
-  if(column === 'producao' && o.priorityAlert) return 'warn';
+  // Producao — alerta automatico baseado no deadline de expedicao
+  if(column === 'producao'){
+    if(o.priorityAlert) return 'warn'; // marcacao manual mantem prioridade
+    const deadMins = getExpedDeadlineMins(o);
+    if (deadMins === null) return null;
+    const curMins = nowManaus.getHours()*60 + nowManaus.getMinutes();
+    const diff = deadMins - curMins;
+    if(diff < 0)   return 'late';   // ja passou do deadline e ainda em producao!
+    if(diff <= 45) return 'warn';   // falta 45min para o deadline → comeca a alertar
+    return null;
+  }
   return null;
 }
 
@@ -781,17 +773,49 @@ function getProductImg(o){
   return null;
 }
 
-// Prefer horário específico (scheduledTime [- scheduledTimeEnd]), fallback to scheduledDate time
+// ── DEADLINE DE EXPEDICAO ──────────────────────────────────
+// O pedido DEVE estar pronto (expedicao/em entrega) ate este horario.
+// Regra da Florevita:
+//   Turno Manha  (entrega ate 12:00) → pronto ate 10:30  (1h30 antes)
+//   Turno Tarde  (entrega ate 18:00) → pronto ate 16:30
+//   Turno Noite  (entrega ate 20:00) → pronto ate 18:30
+//   Horario Especifico HH:MM         → pronto ate HH:MM menos 1h30
+// Retorna minutos desde 00:00 (null se nao classificavel)
+function getExpedDeadlineMins(o){
+  // 1) Horario especifico tem prioridade
+  const t = String(o?.scheduledTime || '').trim();
+  if (t && t !== '00:00') {
+    const [h, m] = t.split(':').map(Number);
+    const targetMins = h * 60 + (m || 0);
+    return targetMins - 90; // 1h30 antes
+  }
+  // 2) Turno → deadline = fim do turno menos 1h30
+  const p = String(o?.scheduledPeriod || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (p.includes('manh')) return 12*60 - 90;  // 10:30
+  if (p.includes('tard')) return 18*60 - 90;  // 16:30
+  if (p.includes('noit')) return 20*60 - 90;  // 18:30
+  return null;
+}
+
+// Formata deadline em "HH:MM"
+function getExpedDeadline(o){
+  const mins = getExpedDeadlineMins(o);
+  if (mins === null) return '';
+  const hh = String(Math.floor(mins/60)).padStart(2,'0');
+  const mm = String(mins%60).padStart(2,'0');
+  return `${hh}:${mm}`;
+}
+
+// Badge ⏰ do card: mostra DEADLINE DE EXPEDICAO (nao o horario de entrega).
+// Ex: pedido para entrega ate 12:00 (turno manha) → ⏰ Pronto ate 10:30
 function getTime(o){
-  const t1 = (o.scheduledTime||'').trim();
-  const t2 = (o.scheduledTimeEnd||'').trim();
-  if(t1 && t2) return t1 + ' - ' + t2;
-  if(t1) return t1;
-  if(t2) return t2;
+  const dead = getExpedDeadline(o);
+  if (dead) return 'Pronto ' + dead;
+  // Fallback: se nao tem turno nem horario, tenta scheduledDate
   if(o.scheduledDate){
     const d = new Date(o.scheduledDate);
     const hhmm = d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-    // Só mostra se não for meia-noite (data sem hora vem como 00:00)
     if(hhmm && hhmm!=='00:00') return hhmm;
   }
   return '';
