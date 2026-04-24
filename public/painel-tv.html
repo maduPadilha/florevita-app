@@ -132,19 +132,19 @@ body{font-family:'DM Sans',sans-serif;background:linear-gradient(135deg,#FFF2F5 
 .late .card-alert-bar{background:var(--red);}
 
 /* ORDER NUMBER — GRANDE */
-.card-order-num{font-size:18px;font-weight:800;letter-spacing:.5px;}
+.card-order-num{font-size:24px;font-weight:800;letter-spacing:.5px;}
 .col-aguardando .card-order-num{color:var(--c-aguard);}
 .col-producao   .card-order-num{color:var(--c-prod);}
 .col-expedicao  .card-order-num{color:var(--c-exp);}
 .col-entrega    .card-order-num{color:var(--c-rota);}
 .col-entregue   .card-order-num{color:var(--c-done);}
-.card-time-badge{font-size:11px;font-weight:700;color:#8B6978;background:transparent;padding:0;}
+.card-time-badge{font-size:14px;font-weight:700;color:#8B6978;background:transparent;padding:0;}
 .time-late{color:var(--red);font-weight:800;}
-.card-product{font-size:13px;font-weight:600;color:#2D1A20;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
-.card-info{font-size:12px;color:#6B5763;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;}
-.card-info .lbl{color:#8B6978;}
-.card-info .val{color:#2D1A20;font-weight:500;}
-.status-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;}
+.card-product{font-size:16px;font-weight:600;color:#2D1A20;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+.card-info{font-size:15px;color:#6B5763;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;line-height:1.3;}
+.card-info .lbl{color:#8B6978;font-weight:500;}
+.card-info .val{color:#2D1A20;font-weight:600;}
+.status-pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;}
 .status-normal{background:#FCE7F0;color:#C8436A;}
 .status-prior{background:#FEF3C7;color:#B45309;}
 .status-exp{background:#DBEAFE;color:#1D4ED8;}
@@ -1166,8 +1166,8 @@ function cardHTML(o, type){
     <div class="card-info"><span class="lbl">Produto:</span><span class="val" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;display:inline-block;vertical-align:bottom;" title="${produto}">${produto||'—'}</span></div>
     <div class="card-info"><span class="lbl">Bairro:</span><span class="val">${bairro||'—'}</span></div>
     ${turno && entregaVal !== turno ? `<div class="card-info"><span class="lbl">Turno:</span><span class="val">${turno}</span></div>` : ''}
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:8px;">
-      <div style="font-size:12px;"><span class="lbl">${entregaLbl}:</span> <span class="val" style="font-weight:700;">${entregaVal}</span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:8px;">
+      <div style="font-size:15px;"><span class="lbl" style="color:#8B6978;">${entregaLbl}:</span> <span class="val" style="font-weight:700;color:#2D1A20;">${entregaVal}</span></div>
       ${statusBadge(o, type)}
     </div>
   </div>`;
