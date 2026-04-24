@@ -256,6 +256,10 @@ export async function doLogin(email, pass){
       // Sincroniza config do servidor (certificado, CSC, tokens, logo, etc)
       // para garantir que admin vê os mesmos dados em qualquer dispositivo
       import('../pages/config.js').then(m => m.loadConfig()).catch(()=>{});
+      // Taxas de entrega: sempre pega do backend ao logar (evita sumir)
+      import('../state.js').then(m => {
+        if(m.loadDeliveryFeesFromBackend) m.loadDeliveryFeesFromBackend().catch(()=>{});
+      }).catch(()=>{});
       S.loading=false; S._loginMsg=null;
       _redirectAfterLogin(user, colab);
       import('../main.js').then(m => m.render());

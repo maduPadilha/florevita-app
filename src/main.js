@@ -2573,6 +2573,10 @@ async function init(){
     refreshUserFromBackend(true).catch(()=>{});
     // 3. Busca dados frescos em background — NÃO espera
     loadData();            // não-bloqueante: fase crítica + background interno
+    // Taxas de entrega: sincroniza do backend (evita sumir em outro dispositivo)
+    import('./state.js').then(m => {
+      if(m.loadDeliveryFeesFromBackend) m.loadDeliveryFeesFromBackend().catch(()=>{});
+    }).catch(()=>{});
     startPolling(5000);
     startAutoBackup();
     startPermissionPolling();  // revalida permissões a cada 60s
