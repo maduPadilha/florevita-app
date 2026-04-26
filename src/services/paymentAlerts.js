@@ -47,6 +47,22 @@ function fmtNumOrder(o){
   return '#' + (o._id ? String(o._id).slice(-5).toUpperCase() : '—');
 }
 
+// Mensagens padrao (humanizadas) ja prontas para o WhatsApp.
+// Pega o primeiro nome do cliente (mais natural).
+function primeiroNome(nomeCompleto){
+  return String(nomeCompleto||'').trim().split(/\s+/)[0] || '';
+}
+
+function mensagemWhatsAppSite(cli, num){
+  const nome = primeiroNome(cli) || 'tudo bem';
+  return `Oi ${nome}! 🌸\n\nAqui é da Floricultura Laços Eternos. Vimos que você fez o pedido ${num} no nosso site, mas o pagamento ainda não consta como confirmado. 💛\n\nGostaríamos de te ajudar a finalizar a compra! Posso te enviar o link do Pix ou tirar alguma dúvida que esteja te impedindo de concluir? 🌷\n\nEstamos por aqui pra te atender com todo carinho!`;
+}
+
+function mensagemWhatsAppPdv(cli, num){
+  const nome = primeiroNome(cli) || 'tudo bem';
+  return `Olá ${nome}! 🌸\n\nAqui é da Floricultura Laços Eternos. Estamos com o pedido ${num} reservado no seu nome, mas o pagamento ainda não foi confirmado por aqui. 💛\n\nVocê já conseguiu efetuar o Pix/transferência? Se precisar do comprovante ou de qualquer ajuda, é só nos avisar — estamos aqui para te atender com carinho! 🌷`;
+}
+
 function showNotification(o){
   const container = ensureContainer();
   const num = fmtNumOrder(o);
@@ -63,6 +79,11 @@ function showNotification(o){
   const corpo = fromSite
     ? `Cliente <strong>${cli}</strong> fez um pedido no site (R$ ${total}) e ainda não pagou. Entre em contato para confirmar interesse e oferecer ajuda no pagamento.`
     : `Pedido de <strong>${cli}</strong> (R$ ${total}) está há mais de 10 minutos sem confirmação. Confira se o pagamento foi realizado ou entre em contato com o cliente para verificar.`;
+
+  // Mensagem WhatsApp pre-preenchida (humanizada)
+  const wppMsg = fromSite ? mensagemWhatsAppSite(cli, num) : mensagemWhatsAppPdv(cli, num);
+  const wppPhone = String(phone).replace(/\D/g,'');
+  const wppHref = `https://wa.me/55${wppPhone}?text=${encodeURIComponent(wppMsg)}`;
 
   const corHeader = fromSite ? '#7C3AED' : '#D97706';
   const corBg     = fromSite ? '#F5F3FF' : '#FFFBEB';
@@ -94,10 +115,10 @@ function showNotification(o){
     </div>
     <div style="padding:12px 14px;font-size:12px;color:#1F2937;line-height:1.5;">
       ${corpo}
-      ${phone ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-        <a href="https://wa.me/55${String(phone).replace(/\\D/g,'')}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;">📱 WhatsApp</a>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+        ${phone ? `<a href="${wppHref}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;">📱 WhatsApp</a>` : ''}
         <button data-fv-open-order="${o._id}" style="background:#fff;color:${corHeader};border:1px solid ${corBorder};padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">📋 Ver pedido</button>
-      </div>` : ''}
+      </div>
     </div>
   `;
   container.appendChild(card);
@@ -107,8 +128,21 @@ function showNotification(o){
     setTimeout(() => card.remove(), 240);
   });
   card.querySelector('[data-fv-open-order]')?.addEventListener('click', () => {
+    // Limpa TODOS os filtros para garantir que o pedido apareca
     S.page = 'pedidos';
-    S._orderSearch = num.replace('#','');
+    S._fStatus = 'Todos';
+    S._fBairro = '';
+    S._fTurno = '';
+    S._fUnidade = '';
+    S._fCanal = '';
+    S._fPrioridade = '';
+    S._fDate1 = '';
+    S._fDate2 = '';
+    // Busca pelo numero (sem zeros a esquerda — o searchOrders ja lida com isso)
+    const numClean = num.replace(/^#/,'').replace(/^0+/,'') || num.replace(/^#/,'');
+    S._orderSearch = numClean;
+    // Garante que o pedido esta em S.orders (mescla via fetch backend)
+    import('../utils/helpers.js').then(m => m.triggerServerOrderSearch?.(numClean)).catch(()=>{});
     import('../main.js').then(m => m.render());
     card.remove();
   });
