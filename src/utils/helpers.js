@@ -43,12 +43,14 @@ const SLUG_TO_PAGE = Object.fromEntries(Object.entries(PAGE_SLUGS).map(([k,v])=>
 SLUG_TO_PAGE['pdv'] = 'pdv'; // redirect legado
 
 // Mapeamento de página → módulo de permissão
+// 'alertas' (Notificacoes) NAO requer permissao especifica — qualquer
+// usuario logado pode ver suas proprias notificacoes operacionais.
 const PAGE_TO_MOD = {
   dashboard:'dashboard', pdv:'pdv', caixa:'caixa', pedidos:'orders',
   clientes:'clients', produtos:'products', categorias:'products',
   estoque:'stock', producao:'production', expedicao:'delivery',
   ponto:'ponto', financeiro:'financial', relatorios:'reports',
-  alertas:'alertas', whatsapp:'whatsapp', usuarios:'users',
+  whatsapp:'whatsapp', usuarios:'users',
   colaboradores:'users', impressao:'impressao', backup:'backup',
   config:'config', ecommerce:'ecommerce', orcamento:'orcamentos',
   entregador:'delivery', notasFiscais:'financial',
