@@ -212,6 +212,11 @@ export async function assignDriver(orderId, driverId, opts = {}){
 
 // ── RENDER EXPEDIÇÃO ─────────────────────────────────────────
 export function renderExpedicao(){
+  // Restaura checklist persistido em sessionStorage
+  if (!S._expChecklist) {
+    try { S._expChecklist = JSON.parse(sessionStorage.getItem('fv_exp_checklist') || '{}'); }
+    catch(_) { S._expChecklist = {}; }
+  }
   const today = new Date();
   today.setHours(0,0,0,0);
   const selectedDate = S._expDate || today.toISOString().split('T')[0];
@@ -306,15 +311,29 @@ ${emProducao.length>0?`
         ${o.recipient?`<div style="font-size:12px;color:var(--muted)">👤 Para: ${o.recipient}</div>`:''}
         <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">📍 ${o.deliveryAddress||'Retirada'}</div>
 
-        <!-- FOTOS DOS PRODUTOS -->
+        <!-- CHECKLIST DE PRODUTOS (obrigatorio antes de expedir) -->
+        ${(() => {
+          const checked = (S._expChecklist?.[o._id]) || {};
+          const total = (o.items||[]).length;
+          const okCount = Object.values(checked).filter(Boolean).length;
+          const allChecked = okCount === total && total > 0;
+          return `<div style="background:rgba(255,255,255,.6);border:1px dashed ${allChecked?'var(--leaf)':'var(--rose)'};border-radius:8px;padding:6px 10px;margin-bottom:6px;font-size:11px;font-weight:700;color:${allChecked?'var(--leaf)':'var(--rose)'};display:flex;align-items:center;gap:6px;">
+            ${allChecked?'✅':'☐'} Conferência: ${okCount}/${total} ${allChecked?'— Pronto para expedir!':'(marque cada item ao conferir)'}
+          </div>`;
+        })()}
         <div style="margin-bottom:10px;">
-          ${(o.items||[]).map(i=>{
+          ${(o.items||[]).map((i, idx)=>{
             const prod=S.products.find(p=>p._id===i.product||p.name===i.name);
-            return`<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--cream);border-radius:var(--r);margin-bottom:6px;">
+            const isChecked = !!(S._expChecklist?.[o._id]?.[idx]);
+            return`<div style="display:flex;align-items:center;gap:10px;padding:8px;background:${isChecked?'var(--leaf-l)':'var(--cream)'};border-radius:var(--r);margin-bottom:6px;border:1px solid ${isChecked?'rgba(45,106,79,.3)':'transparent'};transition:all .2s;">
+              <label style="cursor:pointer;display:flex;align-items:center;flex-shrink:0;">
+                <input type="checkbox" data-exp-check="${o._id}|${idx}" ${isChecked?'checked':''}
+                  style="width:22px;height:22px;cursor:pointer;accent-color:var(--leaf);"/>
+              </label>
               ${prod?.images?.[0]
                 ?`<img src="${prod.images[0]}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)"/>`
                 :`<div style="width:52px;height:52px;border-radius:8px;background:var(--rose-l);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${emoji(prod?.category||'')}</div>`}
-              <div>
+              <div style="flex:1;${isChecked?'text-decoration:line-through;opacity:.6;':''}">
                 <div style="font-size:13px;font-weight:600">${i.qty}x ${i.name}</div>
                 ${prod?.productionNotes?`<div style="font-size:11px;color:var(--muted)">${prod.productionNotes}</div>`:''}
               </div>
@@ -349,7 +368,16 @@ ${emProducao.length>0?`
             <option value="">⚠️ Escolher entregador *</option>
             ${entregadores.map(u=>`<option value="${u.id}" data-name="${u.name}">${u.name}${u.fonte==='colab'?' 📋':''}</option>`).join('')}
           </select>
-          <button class="btn btn-primary btn-sm" data-expedir="${o._id}">🚚 Expedir</button>
+          ${(() => {
+            const checked = (S._expChecklist?.[o._id]) || {};
+            const total = (o.items||[]).length;
+            const okCount = Object.values(checked).filter(Boolean).length;
+            const allChecked = okCount === total && total > 0;
+            return `<button class="btn btn-primary btn-sm" data-expedir="${o._id}"
+              ${allChecked?'':'disabled'}
+              title="${allChecked?'Pronto para expedir':'Marque todos os itens conferidos para expedir'}"
+              style="${allChecked?'':'opacity:.4;cursor:not-allowed;'}">🚚 Expedir</button>`;
+          })()}
         </div>
       </div>`).join('')}
     </div>
@@ -397,7 +425,9 @@ ${emProducao.length>0?`
             </div>` : ''}
           </div>
           ${g.orders.map((o, idx) => `
-          <div style="background:var(--purple-l);border-radius:var(--r);padding:12px;margin-bottom:8px;border:1px solid rgba(124,58,237,.2);position:relative;">
+          <div class="rota-card" draggable="true" data-driver-key="${driverKey}" data-order-id="${o._id}" data-rota-idx="${idx}"
+            style="background:var(--purple-l);border-radius:var(--r);padding:12px;margin-bottom:8px;border:1px solid rgba(124,58,237,.2);position:relative;cursor:grab;transition:all .15s;">
+            <div title="Arraste para reordenar" style="position:absolute;right:8px;top:8px;color:#9CA3AF;font-size:14px;cursor:grab;user-select:none;">⠿</div>
             <div style="position:absolute;left:-8px;top:-8px;background:#5B21B6;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;box-shadow:0 2px 6px rgba(124,58,237,.35);">${idx+1}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;margin-left:24px;">
               <span style="font-weight:700;color:var(--rose)">${fmtOrderNum(o)}</span>
@@ -757,9 +787,102 @@ export function bindExpedicaoEvents(){
   document.querySelectorAll('[data-print-card]').forEach(b=>{b.onclick=()=>printCard(b.dataset.printCard);});
   document.querySelectorAll('[data-print-comanda]').forEach(b=>{b.onclick=()=>printComanda(b.dataset.printComanda);});
 
+  // ── DRAG & DROP nos cards de Em Rota ─────────────────────
+  // Permite reordenar manualmente as entregas dentro da rota de cada
+  // entregador. Persiste a nova ordem (deliveryOrder) no backend.
+  let dragSrc = null;
+  document.querySelectorAll('.rota-card').forEach(card => {
+    card.addEventListener('dragstart', (e) => {
+      dragSrc = card;
+      card.style.opacity = '.4';
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', card.dataset.orderId); } catch(_){}
+    });
+    card.addEventListener('dragend', () => {
+      card.style.opacity = '';
+      document.querySelectorAll('.rota-card').forEach(c => { c.style.borderTop=''; c.style.borderBottom=''; });
+    });
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      // Visual: linha indicando onde vai cair (acima ou abaixo)
+      if (!dragSrc || dragSrc === card) return;
+      if (dragSrc.dataset.driverKey !== card.dataset.driverKey) return; // so reordena dentro do mesmo entregador
+      const r = card.getBoundingClientRect();
+      const isBelow = (e.clientY - r.top) > r.height / 2;
+      card.style.borderTop    = isBelow ? '' : '3px solid #5B21B6';
+      card.style.borderBottom = isBelow ? '3px solid #5B21B6' : '';
+    });
+    card.addEventListener('dragleave', () => {
+      card.style.borderTop = ''; card.style.borderBottom = '';
+    });
+    card.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      card.style.borderTop = ''; card.style.borderBottom = '';
+      if (!dragSrc || dragSrc === card) return;
+      const driverKey = card.dataset.driverKey;
+      if (dragSrc.dataset.driverKey !== driverKey) {
+        toast('⚠️ Só pode reordenar dentro da mesma rota');
+        return;
+      }
+      const r = card.getBoundingClientRect();
+      const isBelow = (e.clientY - r.top) > r.height / 2;
+
+      // Reconstroi a ordem dos pedidos do entregador
+      const cardsInGroup = Array.from(document.querySelectorAll(`.rota-card[data-driver-key="${CSS.escape(driverKey)}"]`));
+      const ids = cardsInGroup.map(c => c.dataset.orderId);
+      const srcId = dragSrc.dataset.orderId;
+      const tgtId = card.dataset.orderId;
+      const srcIdx = ids.indexOf(srcId);
+      ids.splice(srcIdx, 1); // remove do lugar atual
+      let tgtIdx = ids.indexOf(tgtId);
+      if (isBelow) tgtIdx += 1;
+      ids.splice(tgtIdx, 0, srcId); // insere na nova posicao
+
+      // Atualiza S.orders + persiste no backend
+      toast('⏳ Reordenando rota...');
+      try {
+        const { PUT } = await import('../services/api.js');
+        for (let i = 0; i < ids.length; i++) {
+          const oid = ids[i];
+          S.orders = S.orders.map(x => x._id === oid ? {...x, deliveryOrder: i+1} : x);
+          PUT('/orders/'+oid, { deliveryOrder: i+1 }).catch(()=>{});
+        }
+        const { render: r } = await import('../main.js');
+        r();
+        toast('✅ Ordem da rota atualizada!');
+      } catch (err) {
+        toast('❌ Erro ao salvar nova ordem: ' + err.message, true);
+      }
+    });
+  });
+
+  // Checklist: marca/desmarca item conferido
+  document.querySelectorAll('[data-exp-check]').forEach(cb => {
+    cb.onclick = (e) => {
+      e.stopPropagation();
+      const [orderId, idx] = cb.dataset.expCheck.split('|');
+      if (!S._expChecklist) S._expChecklist = {};
+      if (!S._expChecklist[orderId]) S._expChecklist[orderId] = {};
+      S._expChecklist[orderId][idx] = cb.checked;
+      // Persiste em sessionStorage para manter entre re-renders
+      try { sessionStorage.setItem('fv_exp_checklist', JSON.stringify(S._expChecklist)); } catch(_){}
+      render();
+    };
+  });
+
   // Botao Expedir — usa assignDriver (recalcula taxa automaticamente)
   document.querySelectorAll('[data-expedir]').forEach(b=>{b.onclick=async()=>{
     const orderId = b.dataset.expedir;
+    // Validacao: todos os itens precisam estar conferidos no checklist
+    const order = S.orders.find(o => o._id === orderId);
+    const total = (order?.items||[]).length;
+    const checked = S._expChecklist?.[orderId] || {};
+    const okCount = Object.values(checked).filter(Boolean).length;
+    if (total > 0 && okCount < total) {
+      toast(`☐ Confira todos os itens antes de expedir (${okCount}/${total})`, true);
+      return;
+    }
     const driverSelect = document.getElementById('exp-driver-'+orderId);
     const driverId = driverSelect?.value;
     if(!driverId){
@@ -779,6 +902,11 @@ export function bindExpedicaoEvents(){
       if(order){
         order.status = 'Saiu p/ entrega';
         logActivity('expedicao', order);
+      }
+      // Limpa checklist deste pedido (ja expedido)
+      if (S._expChecklist) {
+        delete S._expChecklist[orderId];
+        try { sessionStorage.setItem('fv_exp_checklist', JSON.stringify(S._expChecklist)); } catch(_){}
       }
       render();
       const driverName = order?.driverName || '';
