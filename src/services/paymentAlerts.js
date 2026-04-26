@@ -6,9 +6,11 @@
 // Mensagem varia conforme a origem (PDV vs Site/E-commerce).
 
 import { S } from '../state.js';
-import { addNotification } from './notifications.js';
+import { addNotification, markSeenByCurrentUser, recordClick } from './notifications.js';
 
-const ALREADY_NOTIFIED = new Set(); // orderId — evita notificar 2x o mesmo
+// Map<orderId, lastShownAtMs> — controla cooldown de re-exibicao (5min)
+const SHOWN_AT = new Map();
+const RE_SHOW_INTERVAL_MS = 5 * 60 * 1000; // 5 min ate reaparecer
 // Status considerados pendentes (cobre variacoes salvas pelo PDV/iFood/site).
 // 'Ag. Pagamento na Entrega' NAO entra — pagamento e legitimamente
 // pendente ate a entrega chegar ao cliente.
@@ -73,7 +75,7 @@ function mensagemWhatsAppPdv(cli, num){
   return `Olá ${nome}! 🌸\n\nAqui é da Floricultura Laços Eternos. Estamos com o pedido ${num} reservado no seu nome, mas o pagamento ainda não foi confirmado por aqui. 💛\n\nVocê já conseguiu efetuar o Pix/transferência? Se precisar do comprovante ou de qualquer ajuda, é só nos avisar — estamos aqui para te atender com carinho! 🌷`;
 }
 
-function showNotification(o){
+function showNotification(o, opts = {}){
   const container = ensureContainer();
   const num = fmtNumOrder(o);
   const cli = o.clientName || o.client?.name || 'Cliente';
@@ -90,16 +92,19 @@ function showNotification(o){
     ? `Cliente <strong>${cli}</strong> fez um pedido no site (R$ ${total}) e ainda não pagou. Entre em contato para confirmar interesse e oferecer ajuda no pagamento.`
     : `Pedido de <strong>${cli}</strong> (R$ ${total}) está há mais de 10 minutos sem confirmação. Confira se o pagamento foi realizado ou entre em contato com o cliente para verificar.`;
 
-  // Persiste no store de notificacoes (sino + central de alertas)
+  const notifId = 'pay-pending:' + o._id;
+  // Persiste no store + marca firstSeenAt + dispara evento 'seen'
   try {
     addNotification({
-      id: 'pay-pending:' + o._id,
+      id: notifId,
       type: 'payment-pending',
       title: titulo,
       body: corpo,
       ts: Date.now(),
       meta: { orderId: o._id, orderNumber: num, clientPhone: phone, clientName: cli, fromSite },
     });
+    markSeenByCurrentUser(notifId);
+    if (opts.isReshow) recordClick(notifId, 'auto-shown');
   } catch(_){}
 
   // Mensagem WhatsApp pre-preenchida (humanizada)
@@ -138,7 +143,7 @@ function showNotification(o){
     <div style="padding:12px 14px;font-size:12px;color:#1F2937;line-height:1.5;">
       ${corpo}
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-        ${phone ? `<a href="${wppHref}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;">📱 WhatsApp</a>` : ''}
+        ${phone ? `<a href="${wppHref}" target="_blank" rel="noopener" data-fv-track-wpp style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;">📱 WhatsApp</a>` : ''}
         <button data-fv-open-order="${o._id}" style="background:#fff;color:${corHeader};border:1px solid ${corBorder};padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">📋 Ver pedido</button>
       </div>
     </div>
@@ -146,10 +151,15 @@ function showNotification(o){
   container.appendChild(card);
 
   card.querySelector('[data-fv-close]')?.addEventListener('click', () => {
+    recordClick(notifId, 'dismissed');
     card.style.animation = 'fv-slide-in .25s cubic-bezier(.4,0,.6,1) reverse';
     setTimeout(() => card.remove(), 240);
   });
+  card.querySelector('[data-fv-track-wpp]')?.addEventListener('click', () => {
+    recordClick(notifId, 'whatsapp');
+  });
   card.querySelector('[data-fv-open-order]')?.addEventListener('click', () => {
+    recordClick(notifId, 'open-order');
     // Limpa TODOS os filtros para garantir que o pedido apareca
     S.page = 'pedidos';
     S._fStatus = 'Todos';
@@ -169,13 +179,13 @@ function showNotification(o){
     card.remove();
   });
 
-  // Auto-dismiss apos 60s (notificacao continua valida — voltara em 30s)
+  // Auto-dismiss apos 20s (reaparece em 5min se ainda pendente)
   setTimeout(() => {
     if (document.body.contains(card)) {
       card.style.animation = 'fv-slide-in .3s reverse';
       setTimeout(() => card.remove(), 290);
     }
-  }, 60000);
+  }, 20000);
 }
 
 function check(){
@@ -189,21 +199,29 @@ function check(){
     if (!o || !o._id) continue;
     scanned++;
     if (!STATUS_PENDENTE.includes(o.paymentStatus)) {
-      ALREADY_NOTIFIED.delete(o._id);
+      // Pagamento aprovado/cancelado/etc — para de notificar
+      SHOWN_AT.delete(o._id);
       continue;
     }
     candidatos++;
-    if (ALREADY_NOTIFIED.has(o._id)) continue;
     const created = new Date(o.createdAt || 0).getTime();
     if (!created || isNaN(created)) continue;
     const ageMs = now - created;
-    if (ageMs >= TEN_MIN_MS) {
-      ALREADY_NOTIFIED.add(o._id);
-      notified++;
-      try { showNotification(o); } catch(e) { console.warn('[paymentAlerts]', e); }
-    }
+    if (ageMs < TEN_MIN_MS) continue; // ainda dentro do prazo de 10min
+
+    // Cooldown: so re-exibe se ja passou 5min desde a ultima exibicao
+    const lastShown = SHOWN_AT.get(o._id) || 0;
+    if (lastShown && (now - lastShown) < RE_SHOW_INTERVAL_MS) continue;
+
+    SHOWN_AT.set(o._id, now);
+    notified++;
+    try {
+      // Marca se e re-exibicao para registrar evento diferente
+      const isReshow = lastShown > 0;
+      showNotification(o, { isReshow });
+    } catch(e) { console.warn('[paymentAlerts]', e); }
   }
-  console.log(`[paymentAlerts] scan: ${scanned} pedidos, ${candidatos} pendentes, ${notified} notificados (status aceitos: ${STATUS_PENDENTE.join('|')})`);
+  console.log(`[paymentAlerts] scan: ${scanned} pedidos, ${candidatos} pendentes, ${notified} notificados/re-exibidos`);
 }
 
 export function startPaymentAlerts(){

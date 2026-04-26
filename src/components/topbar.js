@@ -1,7 +1,7 @@
 import { S } from '../state.js';
 import { ini } from '../utils/formatters.js';
 
-const titles={dashboard:'Dashboard',impressao:'Módulo de Impressão',pdv:'PDV (Vendas)',pedidos:'Pedidos',clientes:'Clientes',produtos:'Produtos',estoque:'Estoque',producao:'Produção & Montagem',expedicao:'Expedição',entregador:'App Entregador',financeiro:'Financeiro',relatorios:'Relatórios',alertas:'Alertas',usuarios:'Usuários do Sistema',colaboradores:'Colaboradores & Acesso',config:'Configurações',ponto:'Ponto Eletrônico',caixa:'Caixa — Abertura e Fechamento',backup:'Backup do Sistema',whatsapp:'WhatsApp — Notificações',notasFiscais:'🧾 Notas Fiscais',auditLogs:'🔒 Auditoria & Segurança',agenteTI:'🤖 Agente de TI'};
+const titles={dashboard:'Dashboard',impressao:'Módulo de Impressão',pdv:'PDV (Vendas)',pedidos:'Pedidos',clientes:'Clientes',produtos:'Produtos',estoque:'Estoque',producao:'Produção & Montagem',expedicao:'Expedição',entregador:'App Entregador',financeiro:'Financeiro',relatorios:'Relatórios',alertas:'Notificações Recentes',usuarios:'Usuários do Sistema',colaboradores:'Colaboradores & Acesso',config:'Configurações',ponto:'Ponto Eletrônico',caixa:'Caixa — Abertura e Fechamento',backup:'Backup do Sistema',whatsapp:'WhatsApp — Notificações',notasFiscais:'🧾 Notas Fiscais',auditLogs:'🔒 Auditoria & Segurança',agenteTI:'🤖 Agente de TI'};
 
 export function renderTopbar(pendingAlerts = 0){
   const newOrders = S.orders.filter(o=>o.status==='Aguardando').length;

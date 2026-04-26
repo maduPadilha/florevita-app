@@ -1,22 +1,30 @@
 // ── STORE DE NOTIFICACOES (persistente) ──────────────────────
-// Centraliza todas as notificacoes do sistema (pagamentos pendentes,
-// alertas de pedidos, etc). Salva em localStorage para sobreviver a
-// reload e pra alimentar a Central de Alertas (sino).
+// Centraliza todas as notificacoes do sistema. Tempo exibido no card
+// usa firstSeenAt POR USUARIO — assim 'fulana' que loga 16 min depois
+// ve '⏱️ 16 min', enquanto outra usuaria que viu na hora ve '⏱️ agora'.
 //
 // Cada notificacao: {
-//   id:       string  (unico — usado para dedup)
-//   type:     string  (ex: 'payment-pending', 'late-order')
-//   title:    string  (titulo curto)
-//   body:     string  (texto completo, pode conter HTML simples)
-//   ts:       number  (Date.now())
-//   read:     boolean (false ate o usuario clicar 'marcar como lida')
-//   dismissed:boolean (true = oculta de listagens; nao excluida do historico)
-//   meta:     object  (qualquer dado extra: orderId, phone, link, etc)
-//   actions:  array   (botoes inline: [{label, type:'whatsapp'|'open-order', payload}])
+//   id, type, title, body, ts (criacao global),
+//   read, dismissed,
+//   firstSeenAt: { [userId]: number },  // primeira visualizacao por user
+//   meta: { ... }
 // }
 
 const STORAGE_KEY = 'fv_notifications_v1';
 const MAX_NOTIFS  = 200; // limite p/ nao explodir localStorage
+
+// Helper: obtem o usuario logado (lazy import para evitar circular)
+function getCurrentUser(){
+  try {
+    const raw = localStorage.getItem('fv_session');
+    if (!raw) return null;
+    return JSON.parse(raw)?.user || null;
+  } catch(_) { return null; }
+}
+function getCurrentUid(){
+  const u = getCurrentUser();
+  return u ? String(u._id || u.id || u.email || 'anon') : 'anon';
+}
 
 let _cache = null;
 const _listeners = new Set();
@@ -42,8 +50,16 @@ function persist(){
   _listeners.forEach(fn => { try { fn(); } catch(_){} });
 }
 
-// Adiciona uma nova notificacao (se ja existe pelo id, marca como nao-lida
-// e atualiza ts — util para alertas recorrentes do mesmo pedido)
+// Backend: registra evento de notificacao (fire-and-forget)
+async function recordEventBackend(notifId, notifType, action, meta){
+  try {
+    const { POST } = await import('./api.js');
+    POST('/notifications/events', { notifId, notifType, action, meta }).catch(()=>{});
+  } catch(_){}
+}
+
+// Adiciona uma nova notificacao (se ja existe pelo id, mantem firstSeenAt
+// existentes e atualiza ts da ultima exibicao em meta.lastShownAt).
 export function addNotification(n){
   if (!n || !n.id) return;
   const list = load();
@@ -56,19 +72,49 @@ export function addNotification(n){
     ts: n.ts || Date.now(),
     read: false,
     dismissed: false,
+    firstSeenAt: {},
     meta: n.meta || {},
-    actions: Array.isArray(n.actions) ? n.actions : [],
   };
   if (idx >= 0) {
-    // Mantem 'read' se o usuario ja leu antes (evita re-marcar como nova
-    // se a mesma notificacao for re-disparada). Mas atualiza ts.
+    // Preserva firstSeenAt e read entre re-emissoes
+    merged.firstSeenAt = list[idx].firstSeenAt || {};
     merged.read = list[idx].read;
-    merged.dismissed = false; // se foi re-emitida, considera ativa
+    merged.dismissed = false;
+    // Atualiza meta.lastShownAt
+    merged.meta = { ...(list[idx].meta||{}), ...(n.meta||{}), lastShownAt: Date.now() };
     list[idx] = merged;
   } else {
+    merged.meta.lastShownAt = Date.now();
     list.push(merged);
   }
   persist();
+}
+
+// Marca que o usuario ATUAL viu esta notificacao pela primeira vez agora.
+// Se ja tinha firstSeenAt, mantem o valor antigo. Tambem dispara evento
+// 'seen' no backend (apenas na primeira vez).
+export function markSeenByCurrentUser(notifId){
+  const uid = getCurrentUid();
+  const list = load();
+  const it = list.find(n => n.id === notifId);
+  if (!it) return null;
+  if (!it.firstSeenAt) it.firstSeenAt = {};
+  if (!it.firstSeenAt[uid]) {
+    it.firstSeenAt[uid] = Date.now();
+    persist();
+    recordEventBackend(notifId, it.type, 'seen', it.meta);
+  }
+  return it.firstSeenAt[uid];
+}
+
+// Retorna o timestamp que o usuario ATUAL deve usar para calcular '⏱️ X min'
+// — primeira vez que ela viu esta notif (ou agora se nunca viu).
+export function getFirstSeenForCurrent(notifId){
+  const uid = getCurrentUid();
+  const list = load();
+  const it = list.find(n => n.id === notifId);
+  if (!it || !it.firstSeenAt) return Date.now();
+  return it.firstSeenAt[uid] || Date.now();
 }
 
 // Lista todas as notificacoes (mais recentes primeiro)
@@ -84,26 +130,45 @@ export function getUnreadCount(){
   return load().filter(n => !n.dismissed && !n.read).length;
 }
 
-// Marca uma notificacao como lida
+// Marca uma notificacao como lida + grava evento backend
 export function markAsRead(id){
   const list = load();
   const it = list.find(n => n.id === id);
-  if (it && !it.read) { it.read = true; persist(); }
+  if (it && !it.read) {
+    it.read = true; persist();
+    recordEventBackend(id, it.type, 'read', it.meta);
+  }
 }
 
-// Marca TODAS como lidas (sem descartar)
+// Marca TODAS como lidas
 export function markAllAsRead(){
   const list = load();
   let changed = false;
-  list.forEach(n => { if (!n.read) { n.read = true; changed = true; } });
+  list.forEach(n => {
+    if (!n.read) {
+      n.read = true; changed = true;
+      recordEventBackend(n.id, n.type, 'read', n.meta);
+    }
+  });
   if (changed) persist();
 }
 
-// Descartar (oculta da listagem mas mantem no historico)
+// Descartar + grava evento backend
 export function dismissNotification(id){
   const list = load();
   const it = list.find(n => n.id === id);
-  if (it && !it.dismissed) { it.dismissed = true; it.read = true; persist(); }
+  if (it && !it.dismissed) {
+    it.dismissed = true; it.read = true; persist();
+    recordEventBackend(id, it.type, 'dismissed', it.meta);
+  }
+}
+
+// Registra clique (whatsapp / open-order) sem mudar estado da notif
+export function recordClick(id, action){
+  const list = load();
+  const it = list.find(n => n.id === id);
+  if (!it) return;
+  recordEventBackend(id, it.type, action, it.meta);
 }
 
 // Limpar TODAS — esvazia o store

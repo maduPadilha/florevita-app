@@ -5,7 +5,9 @@ import { checkDatasEspeciaisAlertas } from './clientes.js';
 import {
   getNotifications, markAsRead, markAllAsRead,
   dismissNotification, clearAllNotifications,
+  markSeenByCurrentUser, getFirstSeenForCurrent, recordClick,
 } from '../services/notifications.js';
+import { GET } from '../services/api.js';
 
 // ── Helper: render() via dynamic import ───────────────────────
 async function render(){
@@ -27,24 +29,34 @@ function msgWppPay(cli, num, fromSite){
 
 // Wire global das acoes da pagina (bind unico chamado pelo main.js)
 export function bindAlertasActions(){
+  // Tabs admin
+  document.querySelectorAll('[data-notif-tab]').forEach(b => {
+    b.onclick = () => { S._notifTab = b.dataset.notifTab; render(); };
+  });
+
   document.querySelectorAll('[data-notif-mark]').forEach(b => {
     b.onclick = () => { markAsRead(b.dataset.notifMark); render(); };
   });
   document.querySelectorAll('[data-notif-dismiss]').forEach(b => {
     b.onclick = () => { dismissNotification(b.dataset.notifDismiss); render(); };
   });
+  document.querySelectorAll('[data-notif-track-wpp]').forEach(b => {
+    b.addEventListener('click', () => {
+      const id = b.dataset.notifTrackWpp;
+      if (id) recordClick(id, 'whatsapp');
+    });
+  });
   document.querySelectorAll('[data-notif-open-order]').forEach(b => {
     b.onclick = () => {
       const orderId = b.dataset.notifOpenOrder;
       const num = b.dataset.notifNum || '';
+      const notifId = b.dataset.notifId;
+      if (notifId) { recordClick(notifId, 'open-order'); markAsRead(notifId); }
       S.page = 'pedidos';
       S._fStatus = 'Todos'; S._fBairro = ''; S._fTurno = '';
       S._fUnidade = ''; S._fCanal = ''; S._fPrioridade = '';
       S._fDate1 = ''; S._fDate2 = '';
       S._orderSearch = num.replace(/^#/,'').replace(/^0+/,'') || num.replace(/^#/,'');
-      // Marca como lida ao abrir
-      const notifId = b.dataset.notifId;
-      if (notifId) markAsRead(notifId);
       render();
     };
   });
@@ -58,7 +70,42 @@ export function bindAlertasActions(){
       render();
     }
   };
+
+  // Filtros do relatorio admin
+  document.getElementById('rep-from')?.addEventListener('change', e => { S._notifRepFrom = e.target.value; loadReport(); });
+  document.getElementById('rep-to')?.addEventListener('change',   e => { S._notifRepTo   = e.target.value; loadReport(); });
+
+  // Auto-marca como visualizada cada notificacao do usuario logado ao
+  // entrar na pagina (registra firstSeenAt + grava evento 'seen' no backend)
+  setTimeout(() => {
+    getNotifications().forEach(n => markSeenByCurrentUser(n.id));
+  }, 100);
 }
+
+// ── RELATORIO ADMIN ─────────────────────────────────────────
+let _reportLoading = false;
+async function loadReport(){
+  _reportLoading = true; render();
+  const from = S._notifRepFrom || '';
+  const to   = S._notifRepTo   || '';
+  const qs = [];
+  if (from) qs.push('from=' + encodeURIComponent(from));
+  if (to)   qs.push('to='   + encodeURIComponent(to));
+  try {
+    const [summary, events] = await Promise.all([
+      GET('/notifications/events/summary' + (qs.length ? '?'+qs.join('&') : '')),
+      GET('/notifications/events'         + (qs.length ? '?'+qs.join('&') : '')),
+    ]);
+    S._notifRepSummary = summary;
+    S._notifRepEvents = events;
+  } catch(e) {
+    toast('❌ Erro ao carregar relatório: ' + e.message, true);
+  } finally {
+    _reportLoading = false; render();
+  }
+}
+// Expoe para outros modulos chamarem (ex: refresh manual)
+if (typeof window !== 'undefined') window._loadNotifReport = loadReport;
 
 // ── ALERTAS (dados reais) ─────────────────────────────────────
 export function renderAlertas(){
@@ -138,8 +185,11 @@ export function renderAlertas(){
     const wppHref = phone && wppMsg ? `https://wa.me/55${phone}?text=${encodeURIComponent(wppMsg)}` : '';
     const corBorda = n.read ? '#E5E7EB' : (n.meta?.fromSite ? '#C4B5FD' : '#FCD34D');
     const corBg    = n.read ? '#FAFAFA' : (n.meta?.fromSite ? '#F5F3FF' : '#FFFBEB');
+    // Tempo PERSONALIZADO POR USUARIO: usa firstSeenAt[uid] se existir
+    // (assim cada login conta seu proprio tempo desde a primeira visualizacao)
+    const seenAt = getFirstSeenForCurrent(n.id);
     const tempo = (() => {
-      const mins = Math.round((Date.now() - (n.ts||0)) / 60000);
+      const mins = Math.round((Date.now() - (seenAt||n.ts||0)) / 60000);
       if (mins < 1) return 'agora';
       if (mins < 60) return mins + ' min';
       const h = Math.floor(mins / 60);
@@ -154,7 +204,7 @@ export function renderAlertas(){
       </div>
       <div style="font-size:12px;color:#1F2937;line-height:1.5;margin-bottom:8px;">${n.body}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${wppHref ? `<a href="${wppHref}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;">📱 WhatsApp</a>` : ''}
+        ${wppHref ? `<a href="${wppHref}" target="_blank" rel="noopener" data-notif-track-wpp="${n.id}" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;">📱 WhatsApp</a>` : ''}
         ${n.meta?.orderId ? `<button data-notif-open-order="${n.meta.orderId}" data-notif-num="${n.meta.orderNumber||''}" data-notif-id="${n.id}" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">📋 Ver pedido</button>` : ''}
         ${!n.read ? `<button data-notif-mark="${n.id}" style="background:#fff;color:#0891B2;border:1px solid #67E8F9;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">✓ Marcar como lida</button>` : ''}
         <button data-notif-dismiss="${n.id}" style="background:#fff;color:#9CA3AF;border:1px solid #E5E7EB;padding:6px 10px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;margin-left:auto;" title="Descartar">🗑️</button>
@@ -163,11 +213,121 @@ export function renderAlertas(){
   }).join('')}
 </div>`;
 
-  return notifCardHTML + `
-<div class="card">
-  <div class="card-title">\u{1F514} Central de Alertas
-    <span class="tag t-rose">${alertas.filter(a=>!a.lido).length} novos</span>
+  // ── Tabs ───────────────────────────────────────────────────
+  const isAdmin = S.user?.role === 'Administrador' || S.user?.cargo === 'admin';
+  const tab = S._notifTab || 'recentes';
+
+  const tabBar = `
+<div class="tabs" style="margin-bottom:14px;">
+  <button class="tab ${tab==='recentes'?'active':''}" data-notif-tab="recentes">🔔 Notificações Recentes</button>
+  ${isAdmin ? `<button class="tab ${tab==='alertas'?'active':''}" data-notif-tab="alertas">⚠️ Histórico de Alertas</button>` : ''}
+  ${isAdmin ? `<button class="tab ${tab==='relatorio'?'active':''}" data-notif-tab="relatorio">📊 Relatório (Admin)</button>` : ''}
+</div>`;
+
+  // ── Tab Relatorio (admin) ─────────────────────────────────
+  if (tab === 'relatorio' && isAdmin) {
+    if (!S._notifRepSummary && !_reportLoading) {
+      // Carrega no proximo tick (precisa do bind acontecer)
+      setTimeout(() => { if(window._loadNotifReport) window._loadNotifReport(); }, 50);
+    }
+    const sum = S._notifRepSummary || { byType: {}, byUser: {}, totalEvents: 0 };
+    const events = S._notifRepEvents || [];
+    const byTypeRows = Object.entries(sum.byType||{}).map(([t, d]) => {
+      const acts = d.byAction||{};
+      return `<tr>
+        <td><strong>${t}</strong></td>
+        <td>${d.distinctNotifs||0}</td>
+        <td>${acts.seen||0}</td>
+        <td>${acts.read||0}</td>
+        <td>${acts.dismissed||0}</td>
+        <td>${acts.whatsapp||0}</td>
+        <td>${acts['open-order']||0}</td>
+      </tr>`;
+    }).join('');
+    const byUserRows = Object.entries(sum.byUser||{}).sort((a,b)=>b[1].total-a[1].total).slice(0,30).map(([u, d]) => {
+      const acts = d.byAction||{};
+      return `<tr>
+        <td><strong>${u}</strong></td>
+        <td>${d.total}</td>
+        <td>${acts.seen||0}</td>
+        <td>${acts.read||0}</td>
+        <td>${acts.dismissed||0}</td>
+        <td>${acts.whatsapp||0}</td>
+        <td>${acts['open-order']||0}</td>
+      </tr>`;
+    }).join('');
+    const eventRows = events.slice(0, 100).map(e => {
+      const dt = new Date(e.ts).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const actionEmoji = { seen:'👁️', read:'✓', dismissed:'🗑️', whatsapp:'📱', 'open-order':'📋', 'auto-shown':'🔁' }[e.action] || '•';
+      return `<tr>
+        <td style="font-size:11px;color:var(--muted);">${dt}</td>
+        <td>${e.userName||'—'}</td>
+        <td>${actionEmoji} <strong>${e.action}</strong></td>
+        <td style="font-size:11px;">${e.notifType}</td>
+        <td style="font-size:10px;color:var(--muted);">${e.notifId}</td>
+      </tr>`;
+    }).join('');
+
+    return tabBar + `
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">📊 Filtros</div>
+  <div class="fr3" style="align-items:end;">
+    <div class="fg"><label class="fl">De</label><input type="date" class="fi" id="rep-from" value="${S._notifRepFrom||''}"/></div>
+    <div class="fg"><label class="fl">Até</label><input type="date" class="fi" id="rep-to"   value="${S._notifRepTo||''}"/></div>
+    <div class="fg"><div style="font-size:11px;color:var(--muted);">Total de eventos: <strong style="color:var(--ink);font-size:18px;">${sum.totalEvents}</strong></div></div>
   </div>
+  ${_reportLoading ? '<div class="empty">⏳ Carregando relatório...</div>' : ''}
+</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">📈 Por Tipo de Notificação</div>
+  <div style="overflow-x:auto;"><table>
+    <thead><tr>
+      <th>Tipo</th><th>Notif. distintas</th>
+      <th>👁️ Visualizadas</th><th>✓ Lidas</th><th>🗑️ Descartadas</th>
+      <th>📱 WhatsApp</th><th>📋 Ver pedido</th>
+    </tr></thead>
+    <tbody>${byTypeRows || '<tr><td colspan="7" class="empty">Nenhum dado no período</td></tr>'}</tbody>
+  </table></div>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">👥 Por Colaboradora (top 30)</div>
+  <div style="overflow-x:auto;"><table>
+    <thead><tr>
+      <th>Colaboradora</th><th>Total eventos</th>
+      <th>👁️</th><th>✓</th><th>🗑️</th><th>📱</th><th>📋</th>
+    </tr></thead>
+    <tbody>${byUserRows || '<tr><td colspan="7" class="empty">Nenhum dado no período</td></tr>'}</tbody>
+  </table></div>
+</div>
+
+<div class="card">
+  <div class="card-title">🕐 Últimos 100 eventos</div>
+  <div style="overflow-x:auto;"><table>
+    <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Tipo</th><th>Ref.</th></tr></thead>
+    <tbody>${eventRows || '<tr><td colspan="5" class="empty">Nenhum evento</td></tr>'}</tbody>
+  </table></div>
+</div>`;
+  }
+
+  // ── Tab Historico de Alertas (so admin ve) ────────────────
+  if (tab === 'alertas' && isAdmin) {
+    return tabBar + `
+<div class="card">
+  <div class="card-title">⚠️ Central de Alertas Calculados
+    <span class="tag t-rose">${alertas.filter(a=>!a.lido).length} novos</span>
+  </div>` + buildAlertasHTML(alertas) + `</div>`;
+  }
+
+  // ── Tab default: Notificacoes Recentes ────────────────────
+  return tabBar + notifCardHTML;
+}
+
+// Helper: HTML dos alertas calculados (extraido para reuso)
+function buildAlertasHTML(alertas){
+  return `
+<div class="card-content-inner">
   ${alertas.length===0?`<div class="empty"><div class="empty-icon">\u2705</div><p>Nenhum alerta no momento</p></div>`:''}
   ${alertas.map(a=>`
   <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;border-radius:var(--r);margin-bottom:8px;border:1px solid ${a.lido?'var(--border)':'var(--rose-l)'};background:${a.lido?'#fff':'var(--petal)'};">
@@ -188,3 +348,4 @@ export function renderAlertas(){
   </div>`).join('')}
 </div>`;
 }
+
