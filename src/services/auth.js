@@ -13,6 +13,16 @@ export function saveSession(token, user){
     localStorage.removeItem('fv_perms');
   }catch(e){}
 
+  // SEGURANCA: limpa dados em memoria do usuario ANTERIOR para evitar
+  // que colaboradora de Novo Aleixo veja pedidos do CDLE (ou vice-versa)
+  // entre login/logout no mesmo navegador. O loadData proximo recarrega
+  // do backend ja filtrado pelo unit do user atual.
+  S.orders = [];
+  S.clients = [];
+  S.users = [];
+  S.products = [];
+  S.stockMoves = [];
+
   S.token = token; S.user = user;
   localStorage.setItem('fv2_token', token);
   localStorage.setItem('fv2_user', JSON.stringify(user));

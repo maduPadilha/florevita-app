@@ -5,6 +5,7 @@ import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
 import { invalidateCache } from '../services/cache.js';
 import { getTurnoPedido } from '../utils/zonasManaus.js';
+import { isAdmin, normalizeUnidade } from '../utils/unidadeRules.js';
 
 // ── PRIORIDADE por antecedencia ──────────────────────────────
 // Quanto mais antigo o pedido (diff entre createdAt e scheduledDate),
@@ -159,7 +160,30 @@ export function renderPedidos(){
   // Normaliza scheduledDate para so data (YYYY-MM-DD) para comparacao correta
   const orderDate = o => o.scheduledDate ? o.scheduledDate.substring(0,10) : '';
 
-  let filtered = S.orders.filter(o=>{
+  // ── DEFESA EM PROFUNDIDADE: filtro por unidade no FRONTEND ──────
+  // O backend ja filtra por unidade (orderController.getOrders), mas
+  // se houver cache stale ou usuario com unit indefinido, o frontend
+  // pode acabar mostrando pedidos de outras unidades. Esta camada
+  // garante que cada colaboradora ve APENAS os pedidos relevantes.
+  //
+  // Regras:
+  //   Admin / 'Todas'              → ve tudo
+  //   CDLE                         → pedidos com unidade='cdle'
+  //   Loja Novo Aleixo / Allegro   → pedidos com unidade=propria OU
+  //                                    saleUnit=loja (ela vendeu)
+  const userUnit = normalizeUnidade(S.user?.unidade || S.user?.unit || '');
+  const userIsAdminOrTodas = isAdmin(S.user) || userUnit === 'todas';
+  const filtrarUnidade = (lista) => {
+    if (userIsAdminOrTodas || !userUnit) return lista;
+    return lista.filter(o => {
+      const oUnit = normalizeUnidade(o.unidade || o.unit);
+      const oSale = normalizeUnidade(o.saleUnit);
+      // Ve pedidos onde a propria unidade e responsavel OU vendeu
+      return oUnit === userUnit || oSale === userUnit;
+    });
+  };
+
+  let filtered = filtrarUnidade(S.orders).filter(o=>{
     if(fStatus!=='Todos' && o.status!==fStatus) return false;
     if(fBairro && !(o.deliveryNeighborhood||o.deliveryZone||'').toLowerCase().includes(fBairro)) return false;
     if(fTurno) {

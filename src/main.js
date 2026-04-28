@@ -1740,7 +1740,11 @@ function bindPageActions(){
         _pdvSearchTimer = setTimeout(() => {
           const filtered = S.products
             .filter(p => {
-              if(p.active === false || p.activeOnSite === false || p.ativo === false) return false;
+              // Filtra apenas produtos DESATIVADOS na loja fisica/PDV.
+              // 'activeOnSite' e flag exclusiva do E-commerce — NAO deve
+              // afetar a busca do PDV (produto vendido so na loja como
+              // 'Rosa Unidade' fica com activeOnSite=false mas active=true).
+              if(p.active === false || p.ativo === false) return false;
               const name = (p.name || p.nome || '').toLowerCase();
               const sku = String(p.sku || p.code || '').toLowerCase();
               return name.includes(q) || sku.includes(q);
