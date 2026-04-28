@@ -104,13 +104,15 @@ export function filtrarPedidosPorUnidade(user, pedidos) {
   });
 }
 
-// Filtro STRICT para tela de Producao: cada unidade so monta seus pedidos.
-//  - Delivery fica APENAS em CDLE (onde sai a entrega)
-//  - Retirada Novo Aleixo fica APENAS em Novo Aleixo
-//  - Retirada Allegro fica APENAS em Allegro
-//  - Balcao fica na unidade onde foi vendido
-// Como pedidos de delivery ja tem unit=CDLE (regra de criacao), basta
-// filtrar estritamente por unidade do pedido == unidade do colaborador.
+// Filtro STRICT para tela de Producao/Expedicao:
+//   Cada unidade so VE pedidos que ELA vai produzir/entregar/retirar.
+//   - Delivery → unidade='cdle' (CDLE produz e entrega)
+//   - Retirada Novo Aleixo → unidade='novo_aleixo' (Novo Aleixo monta)
+//   - Retirada Allegro → unidade='allegro' (Allegro monta)
+//   - Balcao Novo Aleixo → unidade='novo_aleixo'
+//   - Balcao Allegro → unidade='allegro'
+// Mesmo que a venda tenha sido feita em outra loja (saleUnit diferente
+// de unidade), quem vai PRODUZIR e quem ve aqui.
 export function filtrarPedidosParaProducao(user, pedidos) {
   if (isAdmin(user)) return pedidos || [];
   const unidade = normalizeUnidade(user?.unidade || user?.unit);
@@ -118,6 +120,23 @@ export function filtrarPedidosParaProducao(user, pedidos) {
   return (pedidos || []).filter(p =>
     normalizeUnidade(p.unidade || p.unit) === unidade
   );
+}
+
+// Filtro para tela de Pedidos / Dashboard:
+//   Mostra pedidos onde a unidade VENDEU (saleUnit) OU vai PRODUZIR (unidade).
+//   - Quem vendeu precisa acompanhar e aprovar pagamento
+//   - Quem produz precisa acompanhar status do pedido
+//   - Delivery e visivel para todos (e operacao da rede)
+export function filtrarPedidosParaListagem(user, pedidos) {
+  if (isAdmin(user)) return pedidos || [];
+  const unidade = normalizeUnidade(user?.unidade || user?.unit);
+  if (!unidade || unidade === 'todas') return pedidos || [];
+  return (pedidos || []).filter(p => {
+    if (isDelivery(p)) return true; // delivery operacional para todos
+    const oUnit = normalizeUnidade(p.unidade || p.unit);
+    const oSale = normalizeUnidade(p.saleUnit);
+    return oUnit === unidade || oSale === unidade;
+  });
 }
 
 export function opcoesPermitidas(user) {

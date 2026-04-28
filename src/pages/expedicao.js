@@ -7,6 +7,7 @@ import { saveDriverAssignment, mergeDriverAssignments, invalidateCache } from '.
 import { emoji } from '../utils/formatters.js';
 import { abrirRota } from './entregador.js';
 import { manausDateStr as _manausDateStrSrv } from '../services/serverClock.js';
+import { filtrarPedidosParaProducao } from '../utils/unidadeRules.js';
 
 // ── Helper: render() via dynamic import ───────────────────────
 async function render(){
@@ -224,8 +225,11 @@ export function renderExpedicao(){
   const selectedDate = S._expDate || todayStrSrv;
   const isToday = selectedDate === todayStrSrv;
 
+  // Filtro STRICT por unidade operacional (so quem vai produzir/entregar ve)
+  const ordersOperacional = filtrarPedidosParaProducao(S.user, S.orders);
+
   // Pedidos prontos para expedir na data selecionada (compara YYYY-MM-DD)
-  const forDate = S.orders.filter(o=>{
+  const forDate = ordersOperacional.filter(o=>{
     if(o.status==='Cancelado'||o.type==='Balcão') return false;
     if(o.type!=='Delivery'&&o.type!=='Retirada') return false;
     if(!o.scheduledDate) return isToday;

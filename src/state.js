@@ -34,6 +34,8 @@ export let S = {
   _printedComanda:JSON.parse(localStorage.getItem('fv_printed_comanda')||'{}'),
   _relPeriod:'mes', _relUnit:'', _relTab:'geral', _relDriver:'', _relColab:'',
   _relDate1:'', _relDate2:'',   // filtro 'Por Datas' (YYYY-MM-DD)
+  _relProdFilter:'', _relValMin:'', _relValMax:'',         // Vendas por Unidade
+  _relCaixaUnit:'', _relCaixaPag:'', _relCaixaProd:'',     // Caixa Completo
   _finUnit:'', _finMetaPer:'mes', _relMetaPer:'mes',
   _repView:'list', _repDraft:null, _repEditIdx:null, _repViewIdx:0,
   _iaLoading:false, loading:false, toast:null, sidebarOpen:false,

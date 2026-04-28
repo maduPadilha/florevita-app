@@ -4,7 +4,7 @@ import { toast, searchOrders } from '../utils/helpers.js';
 import { PATCH, PUT } from '../services/api.js';
 import { can, getColabs, findColab } from '../services/auth.js';
 import { recarregarDados, invalidateCache } from '../services/cache.js';
-import { normalizeUnidade, labelUnidade, isAdmin } from '../utils/unidadeRules.js';
+import { normalizeUnidade, labelUnidade, isAdmin, filtrarPedidosParaListagem } from '../utils/unidadeRules.js';
 import { ZONAS_MANAUS, bairrosAgrupados, agruparEroteirizar, agruparPorTurnoEZona, resolveZona, TURNOS, getTurnoPedido } from '../utils/zonasManaus.js';
 import { manausDateStr as _manausDateStrSrv, serverNow as _serverNowSrv } from '../services/serverClock.js';
 
@@ -28,17 +28,11 @@ export function renderDashboard(){
   else if(S._dashDate === 'tomorrow') targetDate = tomorrowStr;
   else targetDate = S._dashDate; // YYYY-MM-DD
 
-  // ── DEFESA EM PROFUNDIDADE: filtro por unidade no FRONTEND ──────
-  // Backend ja filtra, mas se houver cache stale, frontend faz a barreira.
-  const userUnitDash = normalizeUnidade(S.user?.unidade || S.user?.unit || '');
-  const seeAllUnits = isAdmin(S.user) || userUnitDash === 'todas';
-  const ordersBaseDash = seeAllUnits || !userUnitDash
-    ? S.orders
-    : S.orders.filter(o => {
-        const oU = normalizeUnidade(o.unidade || o.unit);
-        const oS = normalizeUnidade(o.saleUnit);
-        return oU === userUnitDash || oS === userUnitDash;
-      });
+  // Filtro de unidade para Dashboard: mostra pedidos da loja que
+  // VENDEU (saleUnit) E os que ela vai PRODUZIR (unidade). Assim a
+  // colaboradora consegue aprovar pagamento dos pedidos que a propria
+  // loja vendeu, mesmo que a producao seja em outra unidade.
+  const ordersBaseDash = filtrarPedidosParaListagem(S.user, S.orders);
 
   // IMPORTANTE: normaliza para YYYY-MM-DD ANTES de comparar.
   // Pedidos do iFood/E-commerce salvam scheduledDate em ISO completo

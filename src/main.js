@@ -1738,26 +1738,43 @@ function bindPageActions(){
           return;
         }
         _pdvSearchTimer = setTimeout(() => {
+          // Normaliza: remove acentos + lowercase + colapsa espacos
+          const norm = (s) => String(s||'')
+            .toLowerCase()
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .replace(/\s+/g, ' ').trim();
+
+          const qNorm = norm(q);
+          // Permite busca por palavras parciais: 'rosa uni' acha 'Rosa Unidade'
+          const qWords = qNorm.split(' ').filter(Boolean);
+
           const filtered = S.products
             .filter(p => {
               // Filtra apenas produtos DESATIVADOS na loja fisica/PDV.
-              // 'activeOnSite' e flag exclusiva do E-commerce — NAO deve
-              // afetar a busca do PDV (produto vendido so na loja como
-              // 'Rosa Unidade' fica com activeOnSite=false mas active=true).
+              // 'activeOnSite' e flag exclusiva do E-commerce.
               if(p.active === false || p.ativo === false) return false;
-              const name = (p.name || p.nome || '').toLowerCase();
-              const sku = String(p.sku || p.code || '').toLowerCase();
-              return name.includes(q) || sku.includes(q);
+              const name = norm(p.name || p.nome);
+              const sku  = norm(p.sku || p.code);
+              const cat  = norm(p.categoria || p.category || (Array.isArray(p.categories) ? p.categories[0] : ''));
+              const desc = norm(p.descricao || p.description);
+              const haystack = name + ' ' + sku + ' ' + cat + ' ' + desc;
+              // TODAS as palavras da busca precisam aparecer no haystack
+              return qWords.every(w => haystack.includes(w));
             })
             .sort((a, b) => {
-              const an = (a.name || a.nome || '').toLowerCase();
-              const bn = (b.name || b.nome || '').toLowerCase();
-              const aExact = an === q ? 0 : (an.startsWith(q) ? 1 : 2);
-              const bExact = bn === q ? 0 : (bn.startsWith(q) ? 1 : 2);
+              const an = norm(a.name || a.nome);
+              const bn = norm(b.name || b.nome);
+              const aExact = an === qNorm ? 0 : (an.startsWith(qNorm) ? 1 : 2);
+              const bExact = bn === qNorm ? 0 : (bn.startsWith(qNorm) ? 1 : 2);
               if(aExact !== bExact) return aExact - bExact;
               return an.localeCompare(bn);
             })
-            .slice(0, 10);
+            .slice(0, 15);
+
+          if (filtered.length === 0) {
+            console.log(`[pdv-search] Nenhum match para "${q}". S.products tem ${S.products.length} produtos. Exemplos:`,
+              S.products.slice(0,3).map(p => ({nome: p.name||p.nome, active: p.active, ativo: p.ativo})));
+          }
           renderSuggestions(filtered);
         }, 300);
       });
@@ -1992,6 +2009,20 @@ function bindPageActions(){
     document.getElementById('rel-date-clear')?.addEventListener('click',()=>{ S._relDate1=''; S._relDate2=''; render(); });
     document.getElementById('rel-driver-filter')?.addEventListener('change',e=>{S._relDriver=e.target.value;render();});
     document.getElementById('rel-colab-filter')?.addEventListener('change',e=>{S._relColab=e.target.value;render();});
+    // Vendas por Unidade
+    document.getElementById('rep-prod-filter')?.addEventListener('input', e => {
+      clearTimeout(window._repProdTimer);
+      window._repProdTimer = setTimeout(() => { S._relProdFilter = e.target.value; render(); }, 350);
+    });
+    document.getElementById('rep-val-min')?.addEventListener('change', e => { S._relValMin = e.target.value; render(); });
+    document.getElementById('rep-val-max')?.addEventListener('change', e => { S._relValMax = e.target.value; render(); });
+    // Caixa Completo
+    document.getElementById('rep-caixa-unit')?.addEventListener('change', e => { S._relCaixaUnit = e.target.value; render(); });
+    document.getElementById('rep-caixa-pag') ?.addEventListener('change', e => { S._relCaixaPag  = e.target.value; render(); });
+    document.getElementById('rep-caixa-prod')?.addEventListener('input', e => {
+      clearTimeout(window._repCaixaTimer);
+      window._repCaixaTimer = setTimeout(() => { S._relCaixaProd = e.target.value; render(); }, 350);
+    });
     {const _el=document.getElementById('btn-export-pdf');if(_el)_el.onclick=()=>window.print();}
     document.querySelectorAll('[data-meta-per]').forEach(b=>{b.onclick=()=>{S._relMetaPer=b.dataset.metaPer;render();};});
 

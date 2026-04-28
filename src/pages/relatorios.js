@@ -619,6 +619,8 @@ export function renderRelatorios(){
   ${tabBtn('entregadores','🚚 Entregadores')}
   ${tabBtn('produtos','🌹 Produtos')}
   ${tabBtn('vendas','💰 Vendas Detail')}
+  ${tabBtn('vendasUnidade','🏪 Vendas por Unidade')}
+  ${tabBtn('caixa','💵 Caixa Completo')}
   ${tabBtn('montagens','🌿 Montagens')}
   ${tabBtn('clientes','👥 Clientes')}
   ${tabBtn('metas','🎯 Metas')}
@@ -883,6 +885,187 @@ ${tab==='vendas'?`
     </tbody>
   </table></div>`}
 </div>`:''}
+
+<!-- TAB: VENDAS POR UNIDADE -->
+${tab==='vendasUnidade'?(()=>{
+  // Agrega vendas por unidade no periodo (ja filtrado em `validos`)
+  const fProdRel  = (S._relProdFilter||'').toLowerCase().trim();
+  const fValMin   = parseFloat(S._relValMin)||0;
+  const fValMax   = parseFloat(S._relValMax)||0;
+
+  const matchesProd = (o) => {
+    if (!fProdRel) return true;
+    return (o.items||[]).some(i => String(i.name||i.nome||'').toLowerCase().includes(fProdRel));
+  };
+  const matchesValor = (o) => {
+    const t = o.total||0;
+    if (fValMin && t < fValMin) return false;
+    if (fValMax && t > fValMax) return false;
+    return true;
+  };
+
+  const lista = validos.filter(o => matchesProd(o) && matchesValor(o));
+  const porUnidade = {};
+  lista.forEach(o => {
+    const uni = o.saleUnit || o.unit || '—';
+    if (!porUnidade[uni]) porUnidade[uni] = { qty:0, total:0, itens:0 };
+    porUnidade[uni].qty++;
+    porUnidade[uni].total += (o.total||0);
+    porUnidade[uni].itens += (o.items||[]).reduce((s,i)=>s+(i.qty||1),0);
+  });
+  const linhas = Object.entries(porUnidade).sort((a,b)=>b[1].total-a[1].total);
+  const totalGeral = linhas.reduce((s,[,d])=>s+d.total, 0);
+
+  return `
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">🏪 Vendas por Unidade — ${periodLabel}</div>
+  <div class="fr3" style="align-items:end;">
+    <div class="fg"><label class="fl">Filtrar por produto</label>
+      <input type="text" class="fi" id="rep-prod-filter" placeholder="Ex: Rosa, Buque..." value="${S._relProdFilter||''}"/>
+    </div>
+    <div class="fg"><label class="fl">Valor mínimo (R$)</label>
+      <input type="number" class="fi" id="rep-val-min" placeholder="0" value="${S._relValMin||''}"/>
+    </div>
+    <div class="fg"><label class="fl">Valor máximo (R$)</label>
+      <input type="number" class="fi" id="rep-val-max" placeholder="9999" value="${S._relValMax||''}"/>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-top:6px;">📅 Para filtro de data, use os botões "Por Datas" no topo. Total geral no período: <strong style="color:var(--leaf);">${$c(totalGeral)}</strong> em ${lista.length} pedidos.</div>
+</div>
+
+<div class="g2">
+  <div class="card">
+    <div class="card-title">📊 Resumo por Unidade</div>
+    ${linhas.length===0 ? `<div class="empty"><p>Nenhuma venda no período.</p></div>` : `
+    <div style="overflow-x:auto;"><table>
+      <thead><tr><th>Unidade</th><th>Pedidos</th><th>Itens</th><th>Faturamento</th><th>%</th></tr></thead>
+      <tbody>
+        ${linhas.map(([uni, d]) => `<tr>
+          <td><strong>${uni}</strong></td>
+          <td>${d.qty}</td>
+          <td>${d.itens}</td>
+          <td style="color:var(--leaf);font-weight:700;">${$c(d.total)}</td>
+          <td>${totalGeral ? Math.round((d.total/totalGeral)*100) : 0}%</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`}
+  </div>
+  <div class="card">
+    <div class="card-title">📋 Pedidos do período (${lista.length})</div>
+    ${lista.length===0 ? `<div class="empty"><p>Nenhum pedido.</p></div>` : `
+    <div style="max-height:400px;overflow-y:auto;"><table>
+      <thead><tr><th>Pedido</th><th>Unidade</th><th>Cliente</th><th>Total</th></tr></thead>
+      <tbody>
+        ${lista.slice(0,200).map(o => `<tr>
+          <td><strong>${o.orderNumber||'—'}</strong></td>
+          <td><span class="tag t-rose" style="font-size:10px;">${o.saleUnit||o.unit||'—'}</span></td>
+          <td style="font-size:11px;">${o.client?.name||o.clientName||'—'}</td>
+          <td style="font-weight:600;">${$c(o.total)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`}
+  </div>
+</div>`;
+})():''}
+
+<!-- TAB: CAIXA COMPLETO -->
+${tab==='caixa'?(()=>{
+  const fUni = (S._relCaixaUnit||'').trim();
+  const fPag = (S._relCaixaPag||'').trim();
+  const fProdC = (S._relCaixaProd||'').toLowerCase().trim();
+
+  const matchesProdC = (o) => !fProdC || (o.items||[]).some(i => String(i.name||i.nome||'').toLowerCase().includes(fProdC));
+
+  const lista = validos.filter(o =>
+    (!fUni || (o.saleUnit||o.unit||'') === fUni) &&
+    (!fPag || (o.payment||o.paymentMethod||'') === fPag) &&
+    matchesProdC(o)
+  );
+
+  const totalGeral = lista.reduce((s,o)=>s+(o.total||0), 0);
+
+  // Agregacoes
+  const porPag = {};
+  const porUni = {};
+  const porProd = {};
+  lista.forEach(o => {
+    const pg = o.payment || o.paymentMethod || '—';
+    porPag[pg] = (porPag[pg] || { qty:0, total:0 });
+    porPag[pg].qty++; porPag[pg].total += (o.total||0);
+
+    const uni = o.saleUnit || o.unit || '—';
+    porUni[uni] = (porUni[uni] || { qty:0, total:0 });
+    porUni[uni].qty++; porUni[uni].total += (o.total||0);
+
+    (o.items||[]).forEach(i => {
+      const nm = i.name || i.nome || '—';
+      porProd[nm] = (porProd[nm] || { qty:0, total:0 });
+      porProd[nm].qty += (i.qty||1);
+      porProd[nm].total += (i.totalPrice || i.unitPrice * (i.qty||1) || 0);
+    });
+  });
+
+  const allUnits = ['CDLE','Loja Novo Aleixo','Loja Allegro Mall','E-commerce'];
+  const allPagamentos = ['Pix','Cartão','Cartao','Cartao Credito','Cartao Debito','Dinheiro','Pagar na Entrega','Boleto'];
+
+  return `
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">💵 Relatório de Caixa — ${periodLabel}</div>
+  <div class="fr3" style="align-items:end;">
+    <div class="fg"><label class="fl">Unidade</label>
+      <select class="fi" id="rep-caixa-unit">
+        <option value="">Todas</option>
+        ${allUnits.map(u => `<option value="${u}" ${fUni===u?'selected':''}>${u}</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Forma de pagamento</label>
+      <select class="fi" id="rep-caixa-pag">
+        <option value="">Todas</option>
+        ${allPagamentos.map(p => `<option value="${p}" ${fPag===p?'selected':''}>${p}</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Produto contém</label>
+      <input type="text" class="fi" id="rep-caixa-prod" placeholder="Ex: Rosa..." value="${S._relCaixaProd||''}"/>
+    </div>
+  </div>
+  <div style="margin-top:10px;padding:10px 14px;background:linear-gradient(135deg,#FDF4F7,#fff);border-radius:8px;">
+    <div style="font-size:11px;color:var(--muted);">Total no período (${lista.length} pedidos)</div>
+    <div style="font-size:22px;font-weight:900;color:var(--leaf);">${$c(totalGeral)}</div>
+  </div>
+</div>
+
+<div class="g2">
+  <div class="card">
+    <div class="card-title">💳 Por Forma de Pagamento</div>
+    ${Object.keys(porPag).length===0 ? `<div class="empty"><p>Sem dados.</p></div>` : `
+    <table><thead><tr><th>Forma</th><th>Pedidos</th><th>Total</th></tr></thead>
+      <tbody>${Object.entries(porPag).sort((a,b)=>b[1].total-a[1].total).map(([k,v])=>`
+        <tr><td><strong>${k}</strong></td><td>${v.qty}</td><td style="color:var(--leaf);font-weight:700;">${$c(v.total)}</td></tr>
+      `).join('')}</tbody>
+    </table>`}
+  </div>
+  <div class="card">
+    <div class="card-title">🏪 Por Unidade</div>
+    ${Object.keys(porUni).length===0 ? `<div class="empty"><p>Sem dados.</p></div>` : `
+    <table><thead><tr><th>Unidade</th><th>Pedidos</th><th>Total</th></tr></thead>
+      <tbody>${Object.entries(porUni).sort((a,b)=>b[1].total-a[1].total).map(([k,v])=>`
+        <tr><td><strong>${k}</strong></td><td>${v.qty}</td><td style="color:var(--leaf);font-weight:700;">${$c(v.total)}</td></tr>
+      `).join('')}</tbody>
+    </table>`}
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="card-title">🌹 Por Produto (top 50)</div>
+  ${Object.keys(porProd).length===0 ? `<div class="empty"><p>Sem dados.</p></div>` : `
+  <div style="max-height:500px;overflow-y:auto;"><table>
+    <thead><tr><th>Produto</th><th>Qtd</th><th>Total</th></tr></thead>
+    <tbody>${Object.entries(porProd).sort((a,b)=>b[1].total-a[1].total).slice(0,50).map(([k,v])=>`
+      <tr><td>${k}</td><td>${v.qty}</td><td style="color:var(--leaf);font-weight:700;">${$c(v.total)}</td></tr>
+    `).join('')}</tbody>
+  </table></div>`}
+</div>`;
+})():''}
 
 <!-- TAB: CLIENTES -->
 ${tab==='clientes'?`
