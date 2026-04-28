@@ -888,10 +888,14 @@ ${tab==='vendas'?`
 
 <!-- TAB: VENDAS POR UNIDADE -->
 ${tab==='vendasUnidade'?(()=>{
-  // Agrega vendas por unidade no periodo (ja filtrado em `validos`)
-  const fProdRel  = (S._relProdFilter||'').toLowerCase().trim();
-  const fValMin   = parseFloat(S._relValMin)||0;
-  const fValMax   = parseFloat(S._relValMax)||0;
+  // Agrega vendas por unidade no periodo (ja filtrado em `validos`).
+  // 'validos' EXCLUI 'Cancelado' — pedidos cancelados nao entram aqui.
+  const fProdRel = (S._relProdFilter||'').toLowerCase().trim();
+  const fValMin  = parseFloat(S._relValMin)||0;
+  const fValMax  = parseFloat(S._relValMax)||0;
+  const fPagRel  = (S._relPagFilter||'').trim();
+  const fDateRel1 = S._relTabDate1||'';
+  const fDateRel2 = S._relTabDate2||'';
 
   const matchesProd = (o) => {
     if (!fProdRel) return true;
@@ -903,8 +907,25 @@ ${tab==='vendasUnidade'?(()=>{
     if (fValMax && t > fValMax) return false;
     return true;
   };
+  const matchesPag = (o) => {
+    if (!fPagRel) return true;
+    const pg = (o.payment || o.paymentMethod || '').toLowerCase();
+    return pg.includes(fPagRel.toLowerCase());
+  };
+  const matchesDate = (o) => {
+    if (!fDateRel1 && !fDateRel2) return true;
+    const d = String(o.scheduledDate || o.createdAt || '').substring(0, 10);
+    if (!d) return false;
+    if (fDateRel1 && d < fDateRel1) return false;
+    if (fDateRel2 && d > fDateRel2) return false;
+    return true;
+  };
 
-  const lista = validos.filter(o => matchesProd(o) && matchesValor(o));
+  // Lista APENAS pedidos validos (sem Cancelados) que passem nos filtros
+  const lista = validos.filter(o =>
+    matchesProd(o) && matchesValor(o) && matchesPag(o) && matchesDate(o)
+  );
+
   const porUnidade = {};
   lista.forEach(o => {
     const uni = o.saleUnit || o.unit || '—';
@@ -916,11 +937,29 @@ ${tab==='vendasUnidade'?(()=>{
   const linhas = Object.entries(porUnidade).sort((a,b)=>b[1].total-a[1].total);
   const totalGeral = linhas.reduce((s,[,d])=>s+d.total, 0);
 
+  const allPagamentos = ['Pix','Cartão','Cartão Crédito','Cartão Débito','Dinheiro','Pagar na Entrega','Boleto'];
+
   return `
 <div class="card" style="margin-bottom:14px;">
-  <div class="card-title">🏪 Vendas por Unidade — ${periodLabel}</div>
+  <div class="card-title">🏪 Vendas por Unidade — ${periodLabel}
+    <span class="tag" style="background:#FEE2E2;color:#991B1B;font-size:10px;margin-left:6px;">⛔ Cancelados não contabilizados</span>
+  </div>
   <div class="fr3" style="align-items:end;">
-    <div class="fg"><label class="fl">Filtrar por produto</label>
+    <div class="fg"><label class="fl">📅 Data inicial</label>
+      <input type="date" class="fi" id="rep-date1" value="${fDateRel1}"/>
+    </div>
+    <div class="fg"><label class="fl">📅 Data final</label>
+      <input type="date" class="fi" id="rep-date2" value="${fDateRel2}"/>
+    </div>
+    <div class="fg"><label class="fl">💳 Forma de pagamento</label>
+      <select class="fi" id="rep-pag-filter">
+        <option value="">Todas</option>
+        ${allPagamentos.map(p => `<option value="${p}" ${fPagRel===p?'selected':''}>${p}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  <div class="fr3" style="align-items:end;margin-top:8px;">
+    <div class="fg"><label class="fl">🌹 Filtrar por produto</label>
       <input type="text" class="fi" id="rep-prod-filter" placeholder="Ex: Rosa, Buque..." value="${S._relProdFilter||''}"/>
     </div>
     <div class="fg"><label class="fl">Valor mínimo (R$)</label>
@@ -930,7 +969,17 @@ ${tab==='vendasUnidade'?(()=>{
       <input type="number" class="fi" id="rep-val-max" placeholder="9999" value="${S._relValMax||''}"/>
     </div>
   </div>
-  <div style="font-size:11px;color:var(--muted);margin-top:6px;">📅 Para filtro de data, use os botões "Por Datas" no topo. Total geral no período: <strong style="color:var(--leaf);">${$c(totalGeral)}</strong> em ${lista.length} pedidos.</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 14px;background:linear-gradient(135deg,#FDF4F7,#fff);border-radius:8px;">
+    <div>
+      <div style="font-size:11px;color:var(--muted);">Total no período</div>
+      <div style="font-size:20px;font-weight:900;color:var(--leaf);">${$c(totalGeral)}</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:var(--muted);">Pedidos válidos (sem Cancelados)</div>
+      <div style="font-size:20px;font-weight:900;color:var(--ink);">${lista.length}</div>
+    </div>
+    ${(fProdRel||fValMin||fValMax||fPagRel||fDateRel1||fDateRel2) ? `<button class="btn btn-ghost btn-sm" id="btn-rep-vu-clear" style="color:var(--red);">🗑️ Limpar filtros</button>` : ''}
+  </div>
 </div>
 
 <div class="g2">

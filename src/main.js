@@ -2016,6 +2016,14 @@ function bindPageActions(){
     });
     document.getElementById('rep-val-min')?.addEventListener('change', e => { S._relValMin = e.target.value; render(); });
     document.getElementById('rep-val-max')?.addEventListener('change', e => { S._relValMax = e.target.value; render(); });
+    document.getElementById('rep-pag-filter')?.addEventListener('change', e => { S._relPagFilter = e.target.value; render(); });
+    document.getElementById('rep-date1')?.addEventListener('change', e => { S._relTabDate1 = e.target.value; render(); });
+    document.getElementById('rep-date2')?.addEventListener('change', e => { S._relTabDate2 = e.target.value; render(); });
+    document.getElementById('btn-rep-vu-clear')?.addEventListener('click', () => {
+      S._relProdFilter = ''; S._relValMin = ''; S._relValMax = '';
+      S._relPagFilter = ''; S._relTabDate1 = ''; S._relTabDate2 = '';
+      render();
+    });
     // Caixa Completo
     document.getElementById('rep-caixa-unit')?.addEventListener('change', e => { S._relCaixaUnit = e.target.value; render(); });
     document.getElementById('rep-caixa-pag') ?.addEventListener('change', e => { S._relCaixaPag  = e.target.value; render(); });

@@ -35,6 +35,7 @@ export let S = {
   _relPeriod:'mes', _relUnit:'', _relTab:'geral', _relDriver:'', _relColab:'',
   _relDate1:'', _relDate2:'',   // filtro 'Por Datas' (YYYY-MM-DD)
   _relProdFilter:'', _relValMin:'', _relValMax:'',         // Vendas por Unidade
+  _relPagFilter:'', _relTabDate1:'', _relTabDate2:'',      // Vendas por Unidade (data + pag)
   _relCaixaUnit:'', _relCaixaPag:'', _relCaixaProd:'',     // Caixa Completo
   _finUnit:'', _finMetaPer:'mes', _relMetaPer:'mes',
   _repView:'list', _repDraft:null, _repEditIdx:null, _repViewIdx:0,
