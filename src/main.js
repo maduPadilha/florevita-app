@@ -1462,7 +1462,10 @@ function bindPageActions(){
       });
     });
     // Actions
-    document.querySelectorAll('[data-edit-order]').forEach(b=>b.addEventListener('click',()=>showEditOrderModal(b.dataset.editOrder)));
+    document.querySelectorAll('[data-edit-order]').forEach(b=>b.addEventListener('click',()=>{
+      if (typeof window._tryEditOrder === 'function') window._tryEditOrder(b.dataset.editOrder);
+      else showEditOrderModal(b.dataset.editOrder);
+    }));
     document.querySelectorAll('[data-print-comanda]').forEach(b=>b.addEventListener('click',()=>printComanda(b.dataset.printComanda)));
     document.querySelectorAll('[data-confirm]').forEach(b=>b.addEventListener('click',()=>showConfirmDeliveryModal(b.dataset.confirm)));
     document.querySelectorAll('[data-print-card]').forEach(b=>b.addEventListener('click',()=>printCard(b.dataset.printCard)));
@@ -2159,7 +2162,10 @@ function bindPageActions(){
       toast('✅ Exportados '+rows.length+' pedidos');
     };}
     document.querySelectorAll('[data-view-order]').forEach(b=>{b.onclick=()=>showOrderViewModal(b.dataset.viewOrder);});
-    document.querySelectorAll('[data-edit-order]').forEach(b=>{b.onclick=()=>showEditOrderModal(b.dataset.editOrder);});
+    document.querySelectorAll('[data-edit-order]').forEach(b=>{b.onclick=()=>{
+      if (typeof window._tryEditOrder === 'function') window._tryEditOrder(b.dataset.editOrder);
+      else showEditOrderModal(b.dataset.editOrder);
+    };});
     document.querySelectorAll('[data-print-comanda]').forEach(b=>{b.onclick=()=>printComanda(b.dataset.printComanda);});
     document.querySelectorAll('[data-nfe]').forEach(b=>{b.onclick=()=>showFiscalModal(b.dataset.nfe,'NF-e');});
     document.querySelectorAll('[data-nfce]').forEach(b=>{b.onclick=()=>showFiscalModal(b.dataset.nfce,'NFC-e');});

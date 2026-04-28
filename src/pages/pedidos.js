@@ -138,6 +138,54 @@ if(typeof window !== 'undefined'){
   window.showOrderViewModal = showOrderViewModal;
   window.showEditOrderModal = showEditOrderModal;
   window.setPage = window.setPage || function(pg){ setPage(pg); };
+
+  // Senha de alteracao de pedido. Senha pode ser configurada via env
+  // ou por settings — por enquanto fixa em '2233' conforme operacao.
+  const PWD_ALTERAR_PEDIDO = '2233';
+
+  // Tenta editar um pedido. Admin/Gerente nao precisa de senha.
+  // Demais usuarios sao desafiados com senha 4 digitos.
+  window._tryEditOrder = (orderId) => {
+    const u = S.user || {};
+    const isAdmin = u.role === 'Administrador' || u.cargo === 'admin' || u.cargo === 'Administrador';
+    const isGerente = u.role === 'Gerente' || u.cargo === 'Gerente';
+    if (isAdmin || isGerente) {
+      S._modal = '';
+      showEditOrderModal(orderId);
+      return;
+    }
+    const pwd = prompt('🔒 Edição de pedido protegida.\n\nDigite a senha de alteração para continuar:');
+    if (pwd === null) return; // cancelou
+    if (String(pwd).trim() !== PWD_ALTERAR_PEDIDO) {
+      toast('❌ Senha incorreta. Edição bloqueada.', true);
+      return;
+    }
+    S._modal = '';
+    showEditOrderModal(orderId);
+  };
+
+  // Excluir pedido — APENAS Administrador
+  window._tryDeleteOrder = async (orderId, orderNumber) => {
+    const u = S.user || {};
+    const isAdmin = u.role === 'Administrador' || u.cargo === 'admin' || u.cargo === 'Administrador';
+    if (!isAdmin) {
+      toast('🔒 Apenas Administrador pode excluir pedidos.', true);
+      return;
+    }
+    const ok = confirm(`Excluir o pedido #${orderNumber || orderId.slice(-5)}?\n\nEsta ação NÃO pode ser desfeita.`);
+    if (!ok) return;
+    try {
+      await DELETE('/orders/' + orderId);
+      S.orders = S.orders.filter(x => x._id !== orderId);
+      invalidateCache('orders');
+      S._modal = '';
+      toast('🗑️ Pedido excluído.');
+      const { render: r } = await import('../main.js');
+      r();
+    } catch (e) {
+      toast('❌ Erro ao excluir: ' + (e.message||''), true);
+    }
+  };
 }
 
 // ── PEDIDOS ──────────────────────────────────────────────────
@@ -564,9 +612,10 @@ export function showOrderViewModal(orderId){
   </div>` : ''}
 
   <div class="mo-foot">
-    <button class="btn btn-primary" onclick="S._modal='';showEditOrderModal('${o._id}')">✏️ Editar Pedido</button>
+    <button class="btn btn-primary" onclick="window._tryEditOrder('${o._id}')">✏️ Editar Pedido</button>
     <button class="btn btn-ghost" onclick="printComanda('${o._id}')">🖨️ Comanda</button>
     <button class="btn btn-ghost" onclick="printCard('${o._id}')">💌 Cartão</button>
+    ${(S.user?.role==='Administrador'||S.user?.cargo==='admin') ? `<button class="btn btn-ghost" style="color:var(--red);border-color:var(--red);" onclick="window._tryDeleteOrder('${o._id}','${(o.orderNumber||'').replace(/'/g,'')}')">🗑️ Excluir</button>` : ''}
     <button class="btn btn-ghost" id="btn-mo-close-view">Fechar</button>
   </div>
   </div></div>`;
