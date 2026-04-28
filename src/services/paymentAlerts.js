@@ -194,6 +194,14 @@ function check(){
     return;
   }
   const now = Date.now();
+  // Limpa entradas antigas do Map (memory leak fix): pedidos que sairam
+  // de S.orders nao precisam ficar marcados.
+  if (SHOWN_AT.size > 200) {
+    const validIds = new Set(S.orders.map(o => o?._id).filter(Boolean));
+    for (const id of SHOWN_AT.keys()) {
+      if (!validIds.has(id)) SHOWN_AT.delete(id);
+    }
+  }
   let scanned = 0, candidatos = 0, notified = 0;
   for (const o of S.orders) {
     if (!o || !o._id) continue;

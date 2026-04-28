@@ -99,25 +99,28 @@ export async function pollData(){
       }
     }
 
-    // A cada 4 ciclos (~32s): atualiza produtos (ou no ciclo 1 se sem produtos)
+    // Hash leve por _id+updatedAt — evita JSON.stringify() de arrays
+    // grandes contendo base64 (foto de produto). JSON.stringify de 200
+    // produtos com base64 trava UI 200-500ms a cada 32s. Hash em ~1ms.
+    const lightSig = (arr) => Array.isArray(arr)
+      ? arr.map(x => `${x?._id||x?.id||''}:${x?.updatedAt||x?.modifiedAt||''}`).join('|')
+      : '';
+
+    // A cada 4 ciclos (~32s): atualiza produtos
     if(_pollCount%4===0 || (_pollCount===1 && S.products.length===0)){
       const [products, stock] = await Promise.all([
         GET('/products').catch(()=>null),
         GET('/stock/moves').catch(()=>null),
       ]);
-      // Produtos: sempre atualiza se o servidor trouxe dados
-      // (nunca ignora mesmo que seja igual — preços podem ter mudado)
       if(products && products.length > 0){
-        const productsStr = JSON.stringify(products);
-        if(productsStr !== JSON.stringify(S.products)){
-          S.products=products;
-          changed=true;
+        if (lightSig(products) !== lightSig(S.products)) {
+          S.products = products;
+          changed = true;
         }
       }
-      if(products && products.length === 0 && S.products.length === 0){ /* genuinamente vazio */ }
-      if(stock && JSON.stringify(stock)!==JSON.stringify(S.stockMoves)){ S.stockMoves=stock; changed=true; }
+      if(stock && lightSig(stock) !== lightSig(S.stockMoves)){ S.stockMoves=stock; changed=true; }
       const fe = JSON.parse(localStorage.getItem('fv_financial')||'[]');
-      if(JSON.stringify(fe)!==JSON.stringify(S.financialEntries)){ S.financialEntries=fe; changed=true; }
+      if(lightSig(fe) !== lightSig(S.financialEntries)){ S.financialEntries=fe; changed=true; }
     }
 
     // A cada 8 ciclos (~64s): atualiza clientes e usuários
@@ -126,12 +129,13 @@ export async function pollData(){
         GET('/clients').catch(()=>null),
         GET('/users').catch(()=>null),
       ]);
-      // Só atualiza se trouxe dados reais
-      if(clients && clients.length > 0 && JSON.stringify(clients)!==JSON.stringify(S.clients)){ S.clients=clients; changed=true; }
+      if(clients && clients.length > 0 && lightSig(clients) !== lightSig(S.clients)){
+        S.clients = clients; changed = true;
+      }
       if(users && users.length > 0){
         const hidden=getHiddenUsers();
         const merged=(users||[]).filter(x=>!hidden.includes(x._id)).map(mergeUserExtra);
-        if(JSON.stringify(merged)!==JSON.stringify(S.users)){ S.users=merged; changed=true; }
+        if(lightSig(merged) !== lightSig(S.users)){ S.users=merged; changed=true; }
       }
     }
 

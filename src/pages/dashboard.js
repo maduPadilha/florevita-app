@@ -6,18 +6,22 @@ import { can, getColabs, findColab } from '../services/auth.js';
 import { recarregarDados, invalidateCache } from '../services/cache.js';
 import { normalizeUnidade, labelUnidade } from '../utils/unidadeRules.js';
 import { ZONAS_MANAUS, bairrosAgrupados, agruparEroteirizar, agruparPorTurnoEZona, resolveZona, TURNOS, getTurnoPedido } from '../utils/zonasManaus.js';
+import { manausDateStr as _manausDateStrSrv, serverNow as _serverNowSrv } from '../services/serverClock.js';
 
 async function render(){ const { render:r } = await import('../main.js'); r(); }
 
 export let selectedOrders = [];
 
 export function renderDashboard(){
-  const now = new Date();
+  // IMPORTANTE: usa relogio do SERVIDOR (Manaus UTC-4) em vez do device.
+  // Antes: device com fuso/data errado fazia 'hoje' do dashboard pular
+  // pro dia errado (pedidos sumiam). Agora serverClock.js neutraliza isso.
+  const now = _serverNowSrv();
   const hh = String(now.getHours()).padStart(2,'0');
   const mm = String(now.getMinutes()).padStart(2,'0');
-  const todayStr = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const todayStr = _manausDateStrSrv();
+  const tomorrowSrv = new Date(now.getTime() + 24*60*60*1000);
+  const tomorrowStr = _manausDateStrSrv(tomorrowSrv);
 
   let targetDate;
   if(!S._dashDate || S._dashDate === 'today') targetDate = todayStr;

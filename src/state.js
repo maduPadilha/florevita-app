@@ -113,7 +113,7 @@ export function resetPDV(){
     street:'', neighborhood:'', number:'', city:'', cep:'',
     reference:'', isCondominium:false, condName:'', block:'', apt:'',
     type:'Delivery', deliveryFee:0, zone:'', clientSearch:'',
-    pickupUnit:'', saleUnit:'', salesChannel:'', notifyClient:true, identifyClient:true,
+    pickupUnit:'', saleUnit:'', salesChannel:'', notifyClient:true, identifyClient:true, recipientPhone:'',
     paymentOnDelivery:'', trocoPara:'',
     _showQuickReg:false
   });

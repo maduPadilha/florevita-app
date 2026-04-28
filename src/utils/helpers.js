@@ -118,6 +118,9 @@ export function triggerServerOrderSearch(q){
       const { GET } = await import('../services/api.js');
       const { S } = await import('../state.js');
       const results = await GET('/orders?q=' + encodeURIComponent(term));
+      // Marca termo como buscado SEMPRE (mesmo se vazio) — evita DDoS
+      // interno se o usuario continuar digitando algo que nao existe.
+      _lastServerSearchQ = term;
       if (!Array.isArray(results) || !results.length) return;
       // Mescla em S.orders (sem duplicar) — novos pedidos sao adicionados
       const known = new Set((S.orders||[]).map(o => String(o._id)));
@@ -125,7 +128,6 @@ export function triggerServerOrderSearch(q){
       for (const o of results) {
         if (!known.has(String(o._id))) { S.orders.push(o); added++; }
       }
-      _lastServerSearchQ = term;
       if (added) {
         console.log(`[search] +${added} pedidos do servidor para termo "${term}"`);
         const { render } = await import('../main.js');

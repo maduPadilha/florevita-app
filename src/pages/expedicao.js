@@ -6,6 +6,7 @@ import { can, findColab, getColabs } from '../services/auth.js';
 import { saveDriverAssignment, mergeDriverAssignments, invalidateCache } from '../services/cache.js';
 import { emoji } from '../utils/formatters.js';
 import { abrirRota } from './entregador.js';
+import { manausDateStr as _manausDateStrSrv } from '../services/serverClock.js';
 
 // ── Helper: render() via dynamic import ───────────────────────
 async function render(){
@@ -217,21 +218,19 @@ export function renderExpedicao(){
     try { S._expChecklist = JSON.parse(sessionStorage.getItem('fv_exp_checklist') || '{}'); }
     catch(_) { S._expChecklist = {}; }
   }
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  const selectedDate = S._expDate || today.toISOString().split('T')[0];
-  const isToday = selectedDate === today.toISOString().split('T')[0];
+  // 'Hoje' baseado no relogio do SERVIDOR (Manaus UTC-4) — neutraliza
+  // device com fuso/data errado.
+  const todayStrSrv = _manausDateStrSrv();
+  const selectedDate = S._expDate || todayStrSrv;
+  const isToday = selectedDate === todayStrSrv;
 
-  // Pedidos prontos para expedir na data selecionada
+  // Pedidos prontos para expedir na data selecionada (compara YYYY-MM-DD)
   const forDate = S.orders.filter(o=>{
     if(o.status==='Cancelado'||o.type==='Balcão') return false;
     if(o.type!=='Delivery'&&o.type!=='Retirada') return false;
     if(!o.scheduledDate) return isToday;
-    const d = new Date(o.scheduledDate);
-    d.setHours(0,0,0,0);
-    const sel = new Date(selectedDate);
-    sel.setHours(0,0,0,0);
-    return d.getTime()===sel.getTime();
+    const dStr = String(o.scheduledDate).substring(0, 10);
+    return dStr === selectedDate;
   });
 
   const emProducao = forDate.filter(o=>['Aguardando','Em preparo'].includes(o.status));
