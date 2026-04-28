@@ -123,11 +123,18 @@ export async function pollData(){
       if(lightSig(fe) !== lightSig(S.financialEntries)){ S.financialEntries=fe; changed=true; }
     }
 
-    // A cada 8 ciclos (~64s): atualiza clientes e usuários
+    // A cada 8 ciclos (~64s): atualiza clientes (e usuários se admin)
     if(_pollCount%8===0){
+      const isAdminUser = S.user && (
+        S.user.role === 'Administrador' ||
+        S.user.cargo === 'admin' ||
+        S.user.cargo === 'Administrador' ||
+        S.user.unidade === 'todas' ||
+        S.user.unit === 'Todas'
+      );
       const [clients, users] = await Promise.all([
         GET('/clients').catch(()=>null),
-        GET('/users').catch(()=>null),
+        isAdminUser ? GET('/users').catch(()=>null) : Promise.resolve(null),
       ]);
       if(clients && clients.length > 0 && lightSig(clients) !== lightSig(S.clients)){
         S.clients = clients; changed = true;

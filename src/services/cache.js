@@ -168,10 +168,20 @@ export async function loadData(){
     S._loginMsg = n===1 ? '🌸 Carregando dados...' : `⏳ Aguardando servidor... (${n}/8)`;
     try{ const { render } = await import('../main.js'); render(); }catch(_){}
 
+    // /users e admin-only — para colaboradora nao-admin, nao tenta
+    // (evita 403 ruidoso no console). A listagem de entregadores
+    // ja vem do endpoint publico /collaborators/public.
+    const isAdminUser = S.user && (
+      S.user.role === 'Administrador' ||
+      S.user.cargo === 'admin' ||
+      S.user.cargo === 'Administrador' ||
+      S.user.unidade === 'todas' ||
+      S.user.unit === 'Todas'
+    );
     [orders, clients, users] = await Promise.all([
       GET('/orders?limit=300').catch(()=>null),
       GET('/clients?limit=500').catch(()=>null),
-      GET('/users').catch(()=>null),
+      isAdminUser ? GET('/users').catch(()=>null) : Promise.resolve([]),
     ]);
 
     const algumOk = [orders, clients, users].some(x => Array.isArray(x));
