@@ -102,24 +102,49 @@ export async function loadPublicBranding(){
       return;
     }
     const data = await res.json();
-    console.log('[branding] recebido:', {
-      hasLogo: !!data?.loginLogo,
-      logoLen: (data?.loginLogo||'').length,
-      hasFavicon: !!data?.favicon,
-      faviconLen: (data?.favicon||'').length,
-    });
+    console.log('[branding] recebido:', { razao: data?.razao, hasLogo: data?.hasLogo, hasFavicon: data?.hasFavicon });
     if(!data || typeof data !== 'object') return;
     const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
-    const merged = {
-      ...existing,
-      loginLogo: data.loginLogo || '',
-      favicon:   data.favicon   || '',
-    };
+    const merged = { ...existing, razao: data.razao || existing.razao || '' };
     localStorage.setItem('fv_config', JSON.stringify(merged));
-    applyFaviconFromConfig();
+
+    // Logo/favicon: lazy load APENAS se nao tem no localStorage e backend
+    // sinalizou que tem. Endpoint separado /branding-images carrega o
+    // base64 (pode ser MB). Nao bloqueia login, roda em background.
+    if ((data.hasLogo && !existing.loginLogo) || (data.hasFavicon && !existing.favicon)) {
+      setTimeout(() => loadPublicBrandingImages().catch(()=>{}), 2000);
+    } else {
+      applyFaviconFromConfig();
+    }
     console.log('[branding] aplicado no localStorage ✅');
   }catch(e){
     console.warn('[branding] fetch erro:', e.name||'', e.message||e);
+  }
+}
+
+// Carrega imagens (logo + favicon) em background — endpoint separado
+// porque pode ser MB de base64 e nao deve bloquear o login.
+export async function loadPublicBrandingImages(){
+  try {
+    const url = API + '/settings/public/branding-images';
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 15000);
+    let res;
+    try { res = await fetch(url, { signal: ctrl.signal }); }
+    finally { clearTimeout(tid); }
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || typeof data !== 'object') return;
+    const existing = JSON.parse(localStorage.getItem('fv_config')||'{}');
+    localStorage.setItem('fv_config', JSON.stringify({
+      ...existing,
+      loginLogo: data.loginLogo || existing.loginLogo || '',
+      favicon:   data.favicon   || existing.favicon   || '',
+    }));
+    applyFaviconFromConfig();
+    console.log('[branding-images] aplicado em background');
+  } catch(e) {
+    console.warn('[branding-images] erro:', e.message);
   }
 }
 
