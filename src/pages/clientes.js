@@ -841,6 +841,9 @@ export async function saveClient(editId=null){
 export async function deleteClient(id){
   const c = S.clients.find(x=>x._id===id);
   if(!c) return;
+  // Validacao de exclusao: admin direto, demais com senha 2233
+  const { autorizaExclusao } = await import('../utils/helpers.js');
+  if (!autorizaExclusao('cliente')) return;
   window._delClientId = id;
   S._modal=`<div class="mo" id="mo" onclick="if(event.target===this){S._modal='';render();}">
   <div class="mo-box" style="max-width:360px;text-align:center;" onclick="event.stopPropagation()">

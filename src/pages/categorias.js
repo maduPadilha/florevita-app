@@ -159,9 +159,12 @@ export function saveCatFromModal(idx){
 }
 
 // ── DELETAR ───────────────────────────────────────────────────
-export function deleteCat(idx){
+export async function deleteCat(idx){
   var cats  = getCategoriasSync();
   var cat   = catName(cats[parseInt(idx)]);
+  // Validacao de exclusao: admin direto, demais com senha 2233
+  var { autorizaExclusao } = await import('../utils/helpers.js');
+  if (!autorizaExclusao('categoria')) return;
   var total = S.products.filter(function(p){
     return Array.isArray(p.categories) ? p.categories.indexOf(cat)>=0 : p.category===cat;
   }).length;

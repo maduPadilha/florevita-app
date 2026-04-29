@@ -164,14 +164,10 @@ if(typeof window !== 'undefined'){
     showEditOrderModal(orderId);
   };
 
-  // Excluir pedido — APENAS Administrador
+  // Excluir pedido — Admin direto, demais com senha 2233
   window._tryDeleteOrder = async (orderId, orderNumber) => {
-    const u = S.user || {};
-    const isAdmin = u.role === 'Administrador' || u.cargo === 'admin' || u.cargo === 'Administrador';
-    if (!isAdmin) {
-      toast('🔒 Apenas Administrador pode excluir pedidos.', true);
-      return;
-    }
+    const { autorizaExclusao } = await import('../utils/helpers.js');
+    if (!autorizaExclusao('pedido')) return;
     const ok = confirm(`Excluir o pedido #${orderNumber || orderId.slice(-5)}?\n\nEsta ação NÃO pode ser desfeita.`);
     if (!ok) return;
     try {
@@ -615,7 +611,7 @@ export function showOrderViewModal(orderId){
     <button class="btn btn-primary" onclick="window._tryEditOrder('${o._id}')">✏️ Editar Pedido</button>
     <button class="btn btn-ghost" onclick="printComanda('${o._id}')">🖨️ Comanda</button>
     <button class="btn btn-ghost" onclick="printCard('${o._id}')">💌 Cartão</button>
-    ${(S.user?.role==='Administrador'||S.user?.cargo==='admin') ? `<button class="btn btn-ghost" style="color:var(--red);border-color:var(--red);" onclick="window._tryDeleteOrder('${o._id}','${(o.orderNumber||'').replace(/'/g,'')}')">🗑️ Excluir</button>` : ''}
+    <button class="btn btn-ghost" style="color:var(--red);border-color:var(--red);" onclick="window._tryDeleteOrder('${o._id}','${(o.orderNumber||'').replace(/'/g,'')}')">🗑️ Excluir</button>
     <button class="btn btn-ghost" id="btn-mo-close-view">Fechar</button>
   </div>
   </div></div>`;

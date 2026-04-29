@@ -139,6 +139,38 @@ export function triggerServerOrderSearch(q){
   }, 400);
 }
 
+// ── EXCLUSAO COM SENHA ──────────────────────────────────────
+// Senha de protecao para colaboradoras nao-admin excluirem registros
+// (Cliente / Pedido / Produto / Categoria). Admin nao precisa.
+export const SENHA_EXCLUSAO = '2233';
+
+// Cache em memoria por sessao: uma vez digitada a senha correta,
+// nao pede de novo no mesmo modulo por 5 minutos (UX — evita prompt
+// a cada exclusao em massa).
+const _exclSessao = new Map(); // module → expiresAt
+
+// Retorna true se pode excluir (admin OU senha correta digitada agora).
+// Mostra prompt nativo se necessario.
+export function autorizaExclusao(modulo = 'item') {
+  const u = S.user || {};
+  const isAdmin = u.role === 'Administrador' || u.cargo === 'admin' || u.cargo === 'Administrador';
+  if (isAdmin) return true;
+
+  // Cache de 5 min
+  const now = Date.now();
+  const exp = _exclSessao.get(modulo) || 0;
+  if (now < exp) return true;
+
+  const pwd = prompt(`🔒 Exclusão protegida.\n\nDigite a senha de alteração para excluir este ${modulo}:`);
+  if (pwd === null) return false; // cancelou
+  if (String(pwd).trim() !== SENHA_EXCLUSAO) {
+    toast('❌ Senha incorreta. Exclusão bloqueada.', true);
+    return false;
+  }
+  _exclSessao.set(modulo, now + 5 * 60 * 1000);
+  return true;
+}
+
 export function searchOrders(orders, q){
   if(!q) return orders;
   const raw = q.trim();

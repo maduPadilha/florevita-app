@@ -539,6 +539,9 @@ export async function saveProduct(editId=null, prodCode=null){
 // ── deleteProduct ────────────────────────────────────────────
 export async function deleteProduct(id){
   const p=S.products.find(x=>x._id===id); if(!p) return;
+  // Validacao de exclusao: admin direto, demais com senha 2233
+  const { autorizaExclusao } = await import('../utils/helpers.js');
+  if (!autorizaExclusao('produto')) return;
   window._delProductId=id;
   S._modal=`<div class="mo" id="mo" onclick="if(event.target===this){S._modal='';render();}">
   <div class="mo-box" style="max-width:360px;text-align:center;" onclick="event.stopPropagation()">
