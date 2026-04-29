@@ -660,8 +660,28 @@ export async function saveProduct(editId=null, prodCode=null){
   try{
     let p;
     if(editId){
-      p = await PUT('/products/'+editId, data).catch(()=>PATCH('/products/'+editId, data));
-      S.products = S.products.map(x=>x._id===editId?{...x,...data,...(p||{})}:x);
+      // Tenta PUT. Se der 404 (id local nao existe no backend) ou 400
+      // (id invalido), faz fallback automatico para POST e cria novo.
+      try {
+        p = await PUT('/products/'+editId, data);
+        S.products = S.products.map(x=>x._id===editId?{...x,...data,...(p||{})}:x);
+      } catch (eUpd) {
+        const msg = String(eUpd?.message || eUpd?.error || '');
+        const is404 = msg.includes('404') || msg.toLowerCase().includes('não encontrado') || msg.toLowerCase().includes('not found');
+        const is400Cast = msg.includes('400') || msg.toLowerCase().includes('cast') || msg.toLowerCase().includes('inválido');
+        if (is404 || is400Cast) {
+          console.warn('[saveProduct] PUT '+editId+' falhou ('+msg+'). Fallback para POST (criar novo).');
+          p = await POST('/products', data);
+          if (p?._id) {
+            // Substitui o item local pelo recem-criado
+            S.products = S.products.map(x => x._id===editId ? p : x);
+            // Se nao tinha no array, adiciona
+            if (!S.products.some(x => x._id === p._id)) S.products.unshift(p);
+          }
+        } else {
+          throw eUpd; // outros erros sobem para o catch externo
+        }
+      }
     } else {
       p = await POST('/products', data);
       if(p?._id) S.products.unshift(p);
@@ -697,6 +717,10 @@ export async function saveProduct(editId=null, prodCode=null){
       msg = '📡 Sem conexão com o servidor. Verifique sua internet.';
     } else if (msg.toLowerCase().includes('timeout')) {
       msg = '⏱️ Servidor demorou para responder. Tente novamente.';
+    } else if (msg.includes('404') || msg.toLowerCase().includes('não encontrado')) {
+      msg = '🔍 Produto não encontrado no servidor. Recarregue a página (F5) e tente novamente.';
+    } else if (msg.includes('SESSAO_EXPIRADA') || msg.toLowerCase().includes('sessão expirada')) {
+      msg = '🔐 Sessão expirada. Saia e entre novamente para continuar.';
     }
     toast('🚨 Erro: ' + msg, true);
   }
