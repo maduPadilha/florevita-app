@@ -14,6 +14,18 @@ export function normalizeUnidade(u) {
   return s.replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 }
 
+// Sigla curta + cor para badges visuais (Dashboard, Pedidos, Painel TV).
+// Recebe a unidade de venda (saleUnit) ou label de unidade.
+export function siglaUnidade(unitOrSlug) {
+  const raw = String(unitOrSlug || '').toLowerCase();
+  if (!raw) return null;
+  if (raw.includes('cdle') || raw.includes('distribui')) return { sigla:'CDLE', cor:'#DC2626', bg:'#FEE2E2' };
+  if (raw.includes('aleixo')) return { sigla:'NA',   cor:'#1D4ED8', bg:'#DBEAFE' };
+  if (raw.includes('allegro')) return { sigla:'AL',  cor:'#047857', bg:'#D1FAE5' };
+  if (raw.includes('ecomm') || raw.includes('e-comm')) return { sigla:'EC', cor:'#6D28D9', bg:'#EDE9FE' };
+  return { sigla: raw.slice(0,3).toUpperCase(), cor:'#4B5563', bg:'#F3F4F6' };
+}
+
 export function labelUnidade(slug) {
   const s = normalizeUnidade(slug);
   return ({

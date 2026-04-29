@@ -5,7 +5,7 @@ import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
 import { invalidateCache } from '../services/cache.js';
 import { getTurnoPedido } from '../utils/zonasManaus.js';
-import { isAdmin, normalizeUnidade, filtrarPedidosParaListagem } from '../utils/unidadeRules.js';
+import { isAdmin, normalizeUnidade, filtrarPedidosParaListagem, siglaUnidade } from '../utils/unidadeRules.js';
 
 // ── PRIORIDADE por antecedencia ──────────────────────────────
 // Quanto mais antigo o pedido (diff entre createdAt e scheduledDate),
@@ -390,8 +390,13 @@ export function renderPedidos(){
             const tipo = String(o.type||o.tipo||'').toLowerCase();
             const unidadeOper = tipo === 'delivery' ? 'CDLE' : (o.unit || '—');
             const atendente = o.createdByName || '';
+            const sale = o.saleUnit ? siglaUnidade(o.saleUnit) : null;
+            const saleHTML = sale
+              ? `<div style="margin-top:3px;"><span style="display:inline-block;background:${sale.bg};color:${sale.cor};border-radius:6px;padding:2px 7px;font-size:9px;font-weight:800;letter-spacing:.5px;" title="Unidade que VENDEU: ${o.saleUnit}">🛒 Vendido: ${sale.sigla}</span></div>`
+              : '';
             return `
               <span class="tag t-gray" style="font-size:9px;font-weight:700;" title="Unidade que vai sair o pedido">${unidadeOper}</span>
+              ${saleHTML}
               ${atendente ? `<div style="font-size:9px;color:#4F46E5;font-weight:600;margin-top:2px;" title="Atendente que lançou o pedido">👤 ${atendente}</div>` : ''}
             `;
           })()}

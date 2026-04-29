@@ -4,7 +4,7 @@ import { toast, searchOrders } from '../utils/helpers.js';
 import { PATCH, PUT } from '../services/api.js';
 import { can, getColabs, findColab } from '../services/auth.js';
 import { recarregarDados, invalidateCache } from '../services/cache.js';
-import { normalizeUnidade, labelUnidade, isAdmin, filtrarPedidosParaListagem } from '../utils/unidadeRules.js';
+import { normalizeUnidade, labelUnidade, isAdmin, filtrarPedidosParaListagem, siglaUnidade } from '../utils/unidadeRules.js';
 import { ZONAS_MANAUS, bairrosAgrupados, agruparEroteirizar, agruparPorTurnoEZona, resolveZona, TURNOS, getTurnoPedido } from '../utils/zonasManaus.js';
 import { manausDateStr as _manausDateStrSrv, serverNow as _serverNowSrv } from '../services/serverClock.js';
 
@@ -288,13 +288,18 @@ export function renderDashboard(){
         const showDest = (tipoRaw === 'retirada' || tipoRaw === 'retirada na loja' || tipoRaw === 'balcao' || tipoRaw === 'balc\u00e3o')
                       && destLabel && destSlug !== sellSlug;
 
-        // Apenas unidade operacional + atendente (sem 'Vendido por')
+        // Unidade operacional + Unidade de venda (saleUnit) + atendente
         const atendente = o.createdByName || '';
+        const saleSigla = o.saleUnit ? siglaUnidade(o.saleUnit) : null;
+        const saleBadge = saleSigla
+          ? `<span style="background:${saleSigla.bg};color:${saleSigla.cor};border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;letter-spacing:.5px;white-space:nowrap;" title="Unidade que VENDEU: ${esc(o.saleUnit)}">🛒 Vendido: ${saleSigla.sigla}</span>`
+          : '';
 
         return `
           <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">
             <span style="background:${sellBg};color:#fff;border-radius:20px;padding:2px 10px;font-size:10px;font-weight:600;white-space:nowrap;" title="Unidade que montará/retirada">${esc(sellUnit)}</span>
             <span style="background:${tp.color}15;color:${tp.color};border:1px solid ${tp.color}40;border-radius:20px;padding:1px 8px;font-size:9px;font-weight:700;white-space:nowrap;" title="Tipo de pedido">${tp.icon} ${tp.label}</span>
+            ${saleBadge}
             ${showDest ? `<span style="font-size:9px;color:#64748B;white-space:nowrap;" title="Local de retirada/balc\u00e3o">\uD83C\uDFEA Em: ${esc(destLabel)}</span>` : ''}
             ${atendente ? `<span style="font-size:9px;color:#4F46E5;font-weight:600;white-space:nowrap;" title="Atendente que lançou o pedido">\uD83D\uDC64 ${esc(atendente)}</span>` : ''}
           </div>
