@@ -86,9 +86,11 @@ export async function loadPublicBranding(){
     // Não espera resposta — só acorda.
     fetch(API + '/health').catch(()=>{});
 
-    // Timeout generoso (60s) — Render pode levar ~30s para acordar
+    // Timeout 8s (era 60s). Render Starter ja nao hiberna; query agora
+    // tem cache 5min no backend. Se demorar mais que 8s, abandonamos
+    // e usamos o branding local (cache do localStorage).
     const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 60000);
+    const tid = setTimeout(() => ctrl.abort(), 8000);
     let res;
     try {
       res = await fetch(url, { method: 'GET', signal: ctrl.signal });
