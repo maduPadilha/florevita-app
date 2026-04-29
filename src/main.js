@@ -2161,6 +2161,7 @@ function bindPageActions(){
   if(S.page==='pedidos'){
     document.querySelectorAll('[data-ped-status]').forEach(b=>{b.onclick=()=>{S._fStatus=b.dataset.pedStatus; render();};});
     document.querySelectorAll('[data-ped-turno]').forEach(b=>{b.onclick=()=>{S._fTurno=b.dataset.pedTurno; render();};});
+    document.querySelectorAll('[data-ped-agrupar]').forEach(b=>{b.onclick=()=>{S._pedAgrupar=b.dataset.pedAgrupar; render();};});
     const todayStr=new Date().toISOString().split('T')[0];
     const tmrw=new Date(); tmrw.setDate(tmrw.getDate()+1);
     const tmrwStr=tmrw.toISOString().split('T')[0];

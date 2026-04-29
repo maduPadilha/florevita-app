@@ -274,89 +274,10 @@ export function renderPedidos(){
 
   const hasFilter = fStatus!=='Todos'||fBairro||fTurno||fUnidade||fCanal||fPrior||fDate1||fDate2||(S._orderSearch||'');
 
-  const cnt = s => S.orders.filter(o=>o.status===s).length;
-  const statuses=['Todos','Aguardando','Em preparo','Pronto','Saiu p/ entrega','Entregue','Reentrega','Cancelado'];
-  const bairros=[...new Set(S.orders.map(o=>(o.deliveryNeighborhood||o.deliveryZone||'').trim()).filter(Boolean))].sort();
-
-  return`
-<div class="tabs" style="flex-wrap:wrap;gap:3px;margin-bottom:10px;">
-  ${statuses.map(s=>`<button class="tab ${fStatus===s?'active':''}" data-ped-status="${s}">
-    ${s}${s!=='Todos'?`<span style="margin-left:4px;background:${fStatus===s?'rgba(255,255,255,.3)':'var(--border)'};border-radius:10px;padding:0 5px;font-size:10px">${cnt(s)}</span>`:''}</button>`).join('')}
-</div>
-
-<div class="card" style="margin-bottom:12px;padding:12px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-    <div style="font-size:11px;font-weight:700;color:var(--ink);">🔍 Filtros${hasFilter?` <span style="background:var(--rose);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;margin-left:4px">${filtered.length} resultado(s)</span>`:''}</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      ${renderOrderSearchBar()}
-      ${hasFilter?`<button id="btn-clear-ped-filters" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--red);">✕ Limpar</button>`:''}
-    </div>
-  </div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center;">
-    <span style="font-size:10px;font-weight:700;color:var(--muted);">📅 DATA:</span>
-    <button class="btn btn-sm ${fDate1===todayStr&&fDate2===todayStr?'btn-primary':'btn-ghost'}" id="btn-ped-hoje">Hoje</button>
-    <button class="btn btn-sm ${fDate1===tmrwStr&&fDate2===tmrwStr?'btn-primary':'btn-ghost'}" id="btn-ped-amanha">Amanhã</button>
-    <input type="date" class="fi" id="ped-date1" value="${fDate1}" style="width:140px;font-size:11px;"/>
-    <span style="font-size:11px;color:var(--muted)">até</span>
-    <input type="date" class="fi" id="ped-date2" value="${fDate2}" style="width:140px;font-size:11px;"/>
-  </div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-    <span style="font-size:10px;font-weight:700;color:var(--muted);">⏰ TURNO:</span>
-    ${['','Manhã','Tarde','Noite','Horário específico'].map(t=>`<button class="btn btn-sm ${fTurno===t&&t?'btn-primary':fTurno===''&&t===''?'btn-ghost':''}" data-ped-turno="${t}">${t||'Todos'}</button>`).join('')}
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:6px;">
-    <div>
-      <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">🏘️ BAIRRO</label>
-      <input class="fi" id="ped-filter-bairro" value="${S._fBairro||''}" placeholder="Digitar bairro..." style="font-size:11px;" list="bairros-list"/>
-      <datalist id="bairros-list">${bairros.map(b=>`<option value="${b}"/>`).join('')}</datalist>
-    </div>
-    <div>
-      <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">🏪 UNIDADE</label>
-      <select class="fi" id="ped-filter-unidade" style="font-size:11px;">
-        <option value="">Todas</option>
-        ${['Loja Novo Aleixo','Loja Allegro Mall','CDLE','E-commerce'].map(u=>`<option value="${u}" ${fUnidade===u?'selected':''}>${u}</option>`).join('')}
-      </select>
-    </div>
-    <div>
-      <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">📲 CANAL</label>
-      <select class="fi" id="ped-filter-canal" style="font-size:11px;">
-        <option value="">Todos</option>
-        ${['WhatsApp/Online','E-commerce','iFood','Balcão'].map(c=>`<option value="${c}" ${fCanal===c?'selected':''}>${c}</option>`).join('')}
-      </select>
-    </div>
-    <div>
-      <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">⭐ PRIORIDADE</label>
-      <select class="fi" id="ped-filter-prioridade" style="font-size:11px;">
-        <option value="">Todas</option>
-        <option value="Alta" ${fPrior==='Alta'?'selected':''}>🔴 Alta</option>
-        <option value="Normal" ${fPrior==='Normal'?'selected':''}>Normal</option>
-      </select>
-    </div>
-  </div>
-</div>
-
-<div class="card">
-  <div class="card-title">Pedidos <span class="notif">${filtered.length}</span>
-    <div style="display:flex;gap:6px">
-      <button class="btn btn-ghost btn-sm" id="btn-rel-orders">🔄</button>
-      ${S.user?.role === 'Administrador' ? `
-        <button class="btn btn-blue btn-sm" id="btn-import-ped">📥 Importar</button>
-        <button class="btn btn-green btn-sm" id="btn-export-ped">📤 Exportar</button>
-        <input type="file" id="file-import-ped" accept=".csv,.json" style="display:none" />
-      ` : ''}
-      <button class="btn btn-primary btn-sm" onclick="setPage('pdv')">+ Novo</button>
-    </div>
-  </div>
-  ${filtered.length===0?`<div class="empty"><div class="empty-icon">📋</div>
-    <p>${hasFilter?'Nenhum pedido com esses filtros.':'Sem pedidos ainda.'}</p>
-    ${hasFilter?`<button class="btn btn-ghost btn-sm" id="btn-clear-ped-filters2" style="margin-top:8px">✕ Limpar filtros</button>`:''}</div>`:`
-  <div style="overflow-x:auto;">
-  <table>
-    <thead><tr>
-      <th>#</th><th>Cliente / Dest.</th><th>Bairro</th><th>Unidade</th>
-      <th>Itens</th><th>Total</th><th>Entrega</th><th>Canal</th><th>Status</th><th></th>
-    </tr></thead>
-    <tbody>${filtered.map(o=>{
+  // Helper: renderiza array de pedidos como linhas <tr>. Extraido para
+  // permitir agrupamento (visualizacao 'Por Unidade' usa esta funcao).
+  // Definido depois do filtered para acesso ao contexto local.
+  const buildOrderRow = (o) => {
       const bairroCell=o.deliveryNeighborhood||o.deliveryZone||'—';
       const canal=o.source||'';
       // Detecta canal e escolhe icone (PNG real da pasta /icones)
@@ -470,9 +391,144 @@ export function renderPedidos(){
           })()}
         </td>
       </tr>`;
-    }).join('')}</tbody>
+};
+  const renderRows = (lista) => lista.map(o => buildOrderRow(o)).join('');
+
+  const cnt = s => S.orders.filter(o=>o.status===s).length;
+  const statuses=['Todos','Aguardando','Em preparo','Pronto','Saiu p/ entrega','Entregue','Reentrega','Cancelado'];
+  const bairros=[...new Set(S.orders.map(o=>(o.deliveryNeighborhood||o.deliveryZone||'').trim()).filter(Boolean))].sort();
+
+  return`
+<div class="tabs" style="flex-wrap:wrap;gap:3px;margin-bottom:10px;">
+  ${statuses.map(s=>`<button class="tab ${fStatus===s?'active':''}" data-ped-status="${s}">
+    ${s}${s!=='Todos'?`<span style="margin-left:4px;background:${fStatus===s?'rgba(255,255,255,.3)':'var(--border)'};border-radius:10px;padding:0 5px;font-size:10px">${cnt(s)}</span>`:''}</button>`).join('')}
+</div>
+
+<div class="card" style="margin-bottom:12px;padding:12px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--ink);">🔍 Filtros${hasFilter?` <span style="background:var(--rose);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;margin-left:4px">${filtered.length} resultado(s)</span>`:''}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      ${renderOrderSearchBar()}
+      ${hasFilter?`<button id="btn-clear-ped-filters" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--red);">✕ Limpar</button>`:''}
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center;">
+    <span style="font-size:10px;font-weight:700;color:var(--muted);">📅 DATA:</span>
+    <button class="btn btn-sm ${fDate1===todayStr&&fDate2===todayStr?'btn-primary':'btn-ghost'}" id="btn-ped-hoje">Hoje</button>
+    <button class="btn btn-sm ${fDate1===tmrwStr&&fDate2===tmrwStr?'btn-primary':'btn-ghost'}" id="btn-ped-amanha">Amanhã</button>
+    <input type="date" class="fi" id="ped-date1" value="${fDate1}" style="width:140px;font-size:11px;"/>
+    <span style="font-size:11px;color:var(--muted)">até</span>
+    <input type="date" class="fi" id="ped-date2" value="${fDate2}" style="width:140px;font-size:11px;"/>
+  </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+    <span style="font-size:10px;font-weight:700;color:var(--muted);">⏰ TURNO:</span>
+    ${['','Manhã','Tarde','Noite','Horário específico'].map(t=>`<button class="btn btn-sm ${fTurno===t&&t?'btn-primary':fTurno===''&&t===''?'btn-ghost':''}" data-ped-turno="${t}">${t||'Todos'}</button>`).join('')}
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:6px;">
+    <div>
+      <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">🏘️ BAIRRO</label>
+      <input class="fi" id="ped-filter-bairro" value="${S._fBairro||''}" placeholder="Digitar bairro..." style="font-size:11px;" list="bairros-list"/>
+      <datalist id="bairros-list">${bairros.map(b=>`<option value="${b}"/>`).join('')}</datalist>
+    </div>
+    <div>
+      <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">🏪 UNIDADE</label>
+      <select class="fi" id="ped-filter-unidade" style="font-size:11px;">
+        <option value="">Todas</option>
+        ${['Loja Novo Aleixo','Loja Allegro Mall','CDLE','E-commerce'].map(u=>`<option value="${u}" ${fUnidade===u?'selected':''}>${u}</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">📲 CANAL</label>
+      <select class="fi" id="ped-filter-canal" style="font-size:11px;">
+        <option value="">Todos</option>
+        ${['WhatsApp/Online','E-commerce','iFood','Balcão'].map(c=>`<option value="${c}" ${fCanal===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">⭐ PRIORIDADE</label>
+      <select class="fi" id="ped-filter-prioridade" style="font-size:11px;">
+        <option value="">Todas</option>
+        <option value="Alta" ${fPrior==='Alta'?'selected':''}>🔴 Alta</option>
+        <option value="Normal" ${fPrior==='Normal'?'selected':''}>Normal</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Pedidos <span class="notif">${filtered.length}</span>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-ghost btn-sm" id="btn-rel-orders">🔄</button>
+      ${S.user?.role === 'Administrador' ? `
+        <button class="btn btn-blue btn-sm" id="btn-import-ped">📥 Importar</button>
+        <button class="btn btn-green btn-sm" id="btn-export-ped">📤 Exportar</button>
+        <input type="file" id="file-import-ped" accept=".csv,.json" style="display:none" />
+      ` : ''}
+      <button class="btn btn-primary btn-sm" onclick="setPage('pdv')">+ Novo</button>
+    </div>
+  </div>
+  <!-- Toggle de agrupamento -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:var(--cream);border-radius:8px;">
+    <span style="font-size:11px;font-weight:700;color:var(--muted);">VISUALIZAÇÃO:</span>
+    <button class="btn btn-sm ${!S._pedAgrupar?'btn-primary':'btn-ghost'}" data-ped-agrupar="">Todos juntos</button>
+    <button class="btn btn-sm ${S._pedAgrupar==='unidade'?'btn-primary':'btn-ghost'}" data-ped-agrupar="unidade">🏪 Por Unidade</button>
+    <span style="margin-left:auto;font-size:11px;color:var(--muted);">${filtered.length} pedido${filtered.length===1?'':'s'}</span>
+  </div>
+  ${filtered.length===0?`<div class="empty"><div class="empty-icon">📋</div>
+    <p>${hasFilter?'Nenhum pedido com esses filtros.':'Sem pedidos ainda.'}</p>
+    ${hasFilter?`<button class="btn btn-ghost btn-sm" id="btn-clear-ped-filters2" style="margin-top:8px">✕ Limpar filtros</button>`:''}</div>`:`
+  ${S._pedAgrupar==='unidade'?(()=>{
+    // Agrupa por unidade operacional (onde produz/sai). Ordem fixa: CDLE,
+    // Loja Novo Aleixo, Loja Allegro Mall, depois outras.
+    const grupos = {};
+    filtered.forEach(o => {
+      const tipo = String(o.type||o.tipo||'').toLowerCase();
+      const uni = tipo === 'delivery' ? 'CDLE' : (o.unit || 'Outras');
+      if (!grupos[uni]) grupos[uni] = [];
+      grupos[uni].push(o);
+    });
+    const ordem = ['CDLE','Loja Novo Aleixo','Loja Allegro Mall'];
+    const todasKeys = ordem.filter(k => grupos[k]).concat(Object.keys(grupos).filter(k => !ordem.includes(k)));
+    const corUni = (u) => {
+      if (u==='CDLE') return '#DC2626';
+      if (u==='Loja Novo Aleixo') return '#1D4ED8';
+      if (u==='Loja Allegro Mall') return '#047857';
+      return '#6B7280';
+    };
+    return todasKeys.map(uni => {
+      const ped = grupos[uni];
+      const totalU = ped.reduce((s,o)=>s+(o.total||0), 0);
+      return `
+      <div style="margin-bottom:18px;border-radius:10px;overflow:hidden;border:1px solid var(--border);">
+        <div style="background:linear-gradient(135deg,${corUni(uni)}22,${corUni(uni)}11);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-left:4px solid ${corUni(uni)};">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <strong style="color:${corUni(uni)};font-size:14px;">🏪 ${uni}</strong>
+            <span style="background:${corUni(uni)};color:#fff;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;">${ped.length} pedido${ped.length===1?'':'s'}</span>
+          </div>
+          <div style="font-weight:700;color:${corUni(uni)};">${$c(totalU)}</div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr>
+              <th>#</th><th>Cliente / Dest.</th><th>Bairro</th><th>Unidade</th>
+              <th>Itens</th><th>Total</th><th>Entrega</th><th>Canal</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody>${renderRows(ped)}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }).join('');
+  })():`
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr>
+      <th>#</th><th>Cliente / Dest.</th><th>Bairro</th><th>Unidade</th>
+      <th>Itens</th><th>Total</th><th>Entrega</th><th>Canal</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>${renderRows(filtered)}</tbody>
   </table>
   </div>`}
+`}
 </div>`;
 }
 
