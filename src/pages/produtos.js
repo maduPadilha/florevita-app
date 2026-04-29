@@ -567,7 +567,17 @@ function collectColors(){
 export async function saveProduct(editId=null, prodCode=null){
   const nameRaw=document.getElementById('mp-name')?.value?.trim();
   const name=normalizeName(nameRaw);
-  if(!name) return toast('❌ Nome obrigatorio');
+  if(!name) return toast('🚨 Nome do produto é obrigatório', true);
+
+  // Validacao adicional: categoria e preco (backend exige)
+  const selCats = Array.isArray(S._prodCats) ? S._prodCats : [];
+  if (selCats.length === 0) {
+    return toast('🚨 Selecione pelo menos uma categoria', true);
+  }
+  const precoVenda = parseFloat(document.getElementById('mp-price')?.value) || 0;
+  if (precoVenda <= 0) {
+    return toast('🚨 Preço de venda é obrigatório (maior que 0)', true);
+  }
 
   // Le CFOP (select ou manual)
   const cfopSel = document.getElementById('mp-cfop')?.value||'';
@@ -619,7 +629,15 @@ export async function saveProduct(editId=null, prodCode=null){
     taxation,
     unit: 'Todas',
   };
-  if(S._prodImg) data.images=[S._prodImg];
+  // Anexa imagem (com checagem de tamanho — base64 aproximadamente 1.37x file size)
+  if (S._prodImg) {
+    const sizeKB = Math.ceil(S._prodImg.length * 0.75 / 1024); // estimativa
+    if (sizeKB > 3500) {
+      return toast(`🚨 Imagem muito grande (${(sizeKB/1024).toFixed(1)}MB). Use foto com menos de 3MB.`, true);
+    }
+    data.images = [S._prodImg];
+    data.imagem = S._prodImg; // schema PT-BR
+  }
 
   // UX: NAO fecha modal antes de confirmar o save. Bloqueia botao e
   // mostra estado de carregamento. Se der erro, modal fica aberto pra
@@ -647,22 +665,33 @@ export async function saveProduct(editId=null, prodCode=null){
     try{ render(); }catch(e){}
     toast(editId?'✅ Produto atualizado com sucesso!':'✅ Produto cadastrado com sucesso!');
   }catch(e){
-    console.error('[saveProduct] erro:', e);
+    console.error('[saveProduct] erro completo:', e);
     // Erro: NAO fecha o modal — usuaria pode corrigir.
     if (btnSave) {
       btnSave.disabled = false;
       btnSave.innerHTML = originalBtnHtml || ('💾 ' + (editId ? 'Atualizar Produto' : 'Cadastrar Produto'));
     }
-    // Mensagem mais descritiva
-    let msg = e?.message || e?.error || 'Verifique os dados e tente novamente.';
-    if (msg.includes('413') || msg.toLowerCase().includes('payload too large')) {
-      msg = 'Imagem muito grande. Use foto com menos de 1MB.';
-    } else if (msg.includes('400')) {
-      msg = 'Dados inválidos. Confira nome, preço e categoria.';
-    } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('failed to fetch')) {
-      msg = 'Sem conexão com o servidor. Verifique sua internet.';
+    // Tenta extrair mensagem ESPECIFICA do erro
+    let msg = '';
+    if (typeof e === 'string') msg = e;
+    else if (e?.error) msg = e.error;
+    else if (e?.message) msg = e.message;
+    else msg = 'Verifique os dados e tente novamente.';
+    // Detalhes de validacao do backend (campo: motivo)
+    if (e?.details && typeof e.details === 'object') {
+      const det = Object.entries(e.details)
+        .map(([k,v]) => `${k}: ${v}`).join(' · ');
+      if (det) msg += ' (' + det + ')';
     }
-    toast('🚨 Erro ao salvar produto: ' + msg, true);
+    // Traducoes amigaveis para erros HTTP comuns
+    if (msg.includes('413') || msg.toLowerCase().includes('payload too large') || msg.toLowerCase().includes('entity too large')) {
+      msg = '🖼️ Imagem muito grande. Use foto com menos de 3MB.';
+    } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('failed to fetch')) {
+      msg = '📡 Sem conexão com o servidor. Verifique sua internet.';
+    } else if (msg.toLowerCase().includes('timeout')) {
+      msg = '⏱️ Servidor demorou para responder. Tente novamente.';
+    }
+    toast('🚨 Erro: ' + msg, true);
   }
 }
 
