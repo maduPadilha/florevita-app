@@ -369,7 +369,7 @@ ${emProducao.length>0?`
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <select class="fi" id="exp-driver-${o._id}" style="flex:1;min-width:160px;padding:6px 10px;font-size:12px;">
             <option value="">⚠️ Escolher entregador *</option>
-            ${entregadores.map(u=>`<option value="${u.id}" data-name="${u.name}">${u.name}${u.fonte==='colab'?' 📋':''}</option>`).join('')}
+            ${entregadores.map(u=>`<option value="${u.id}" data-name="${u.name}" ${(o.driverId===u.id || o.driverBackendId===u.id || o.driverName===u.name)?'selected':''}>${u.name}${u.fonte==='colab'?' 📋':''}</option>`).join('')}
           </select>
           ${(() => {
             const checked = (S._expChecklist?.[o._id]) || {};
@@ -872,6 +872,30 @@ export function bindExpedicaoEvents(){
       try { sessionStorage.setItem('fv_exp_checklist', JSON.stringify(S._expChecklist)); } catch(_){}
       render();
     };
+  });
+
+  // Selecao de entregador: persiste imediatamente no pedido local + cache.
+  // Ao re-render, o select ja vem com o valor selecionado (estado preservado).
+  document.querySelectorAll('select[id^="exp-driver-"]').forEach(sel => {
+    const oid = sel.id.replace('exp-driver-','');
+    // Restaura selecao previamente feita (vinda de S.orders)
+    const ord = S.orders.find(o => o._id === oid);
+    const prevId = ord?.driverId || ord?.driverBackendId;
+    if (prevId && sel.value !== prevId) sel.value = prevId;
+
+    sel.addEventListener('change', () => {
+      const driverId = sel.value;
+      const opt = sel.options[sel.selectedIndex];
+      const driverName = opt?.dataset?.name || opt?.textContent?.trim() || '';
+      // Atualiza S.orders sem render (so o select esta interagindo)
+      const idx = S.orders.findIndex(o => o._id === oid);
+      if (idx >= 0) {
+        S.orders[idx] = { ...S.orders[idx], driverId, driverName };
+      }
+      // Persiste no cache local — sobrevive a reload e re-render
+      try { saveDriverAssignment(oid, { driverId, driverName }); } catch(_){}
+    });
+    sel.addEventListener('focus', e => e.stopPropagation());
   });
 
   // Botao Expedir — usa assignDriver (recalcula taxa automaticamente)

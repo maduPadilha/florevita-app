@@ -146,12 +146,30 @@ export async function pollData(){
       }
     }
 
-    if(changed && !S.loading && POLL_PAGES.includes(S.page) && !S._modal){
+    // Detecta se a usuaria esta interagindo com um campo de formulario
+    // ABERTO (digitando, com select aberto, etc). Re-renderizar nesse
+    // momento destrui o input/select e ela perde o que estava fazendo.
+    // Especificamente: select de entregador na Expedicao "some" porque
+    // o dropdown aberto e re-criado a cada 3s.
+    const ae = document.activeElement;
+    const userInteracting = ae && (
+      ae.tagName === 'INPUT' ||
+      ae.tagName === 'SELECT' ||
+      ae.tagName === 'TEXTAREA' ||
+      ae.isContentEditable
+    );
+
+    if(changed && !S.loading && POLL_PAGES.includes(S.page) && !S._modal && !userInteracting){
       try{ const { render } = await import('../main.js'); render(); }catch(e){ console.error('pollData render:', e); }
       // Atualiza cache local com dados frescos
       saveCachedData();
       const ind=document.getElementById('sync-dot');
       if(ind){ind.style.background='#4ade80';setTimeout(()=>{if(ind)ind.style.background='rgba(255,255,255,.3)';},600);}
+    } else if (changed && userInteracting) {
+      // Usuaria interagindo: marca pendente e re-tenta no proximo ciclo.
+      // Sync-dot pisca laranja para mostrar que tem dado novo aguardando.
+      const ind=document.getElementById('sync-dot');
+      if(ind){ind.style.background='#F59E0B';}
     }
     // Verifica datas especiais no primeiro poll do dia (só se modal não aberto)
     if(_pollCount===1 && !S._modal){

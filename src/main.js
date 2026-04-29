@@ -1788,42 +1788,70 @@ function bindPageActions(){
           return;
         }
         _pdvSearchTimer = setTimeout(() => {
-          // Normaliza: remove acentos + lowercase + colapsa espacos
+          // Normalizacao agressiva: lowercase, remove acentos/diacriticos,
+          // pontuacao, colapsa espacos. 'Rósa-Único!!' → 'rosa unico'
           const norm = (s) => String(s||'')
             .toLowerCase()
-            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos
+            .replace(/[^\w\s]/g, ' ')   // pontuacao -> espaco
             .replace(/\s+/g, ' ').trim();
 
-          const qNorm = norm(q);
-          // Permite busca por palavras parciais: 'rosa uni' acha 'Rosa Unidade'
-          const qWords = qNorm.split(' ').filter(Boolean);
+          // Lemmatizacao basica PT-BR: tira terminacao 's' (plural).
+          // 'rosas' e 'rosa' batem; 'unidades' e 'unidade' batem.
+          const stem = (w) => {
+            if (w.length > 3 && w.endsWith('s')) return w.slice(0, -1);
+            return w;
+          };
+          const tokenize = (s) => norm(s).split(' ').filter(Boolean).map(stem);
 
+          const qTokens = tokenize(q);
+
+          // Pre-indexa cada produto (lazy, so se nao tem cache)
           const filtered = S.products
             .filter(p => {
-              // Filtra apenas produtos DESATIVADOS na loja fisica/PDV.
-              // 'activeOnSite' e flag exclusiva do E-commerce.
+              // Filtra apenas produtos DESATIVADOS. 'activeOnSite' e do
+              // e-commerce — NAO afeta PDV.
               if(p.active === false || p.ativo === false) return false;
-              const name = norm(p.name || p.nome);
-              const sku  = norm(p.sku || p.code);
-              const cat  = norm(p.categoria || p.category || (Array.isArray(p.categories) ? p.categories[0] : ''));
-              const desc = norm(p.descricao || p.description);
-              const haystack = name + ' ' + sku + ' ' + cat + ' ' + desc;
-              // TODAS as palavras da busca precisam aparecer no haystack
-              return qWords.every(w => haystack.includes(w));
+              const name = (p.name || p.nome || '');
+              const sku  = (p.sku || p.code || '');
+              const cat  = (p.categoria || p.category || (Array.isArray(p.categories) ? p.categories[0] : '') || '');
+              const desc = (p.descricao || p.description || '');
+              // Tokens do produto (todos os campos relevantes)
+              const haystack = tokenize(name + ' ' + sku + ' ' + cat + ' ' + desc);
+              // TODAS as palavras-tronco da busca precisam aparecer
+              // como prefixo de algum token do produto. Permite:
+              // 'ros' → encontra 'rosas', 'rosa', 'rosado'
+              // 'unid' → encontra 'unidade', 'unidades'
+              return qTokens.every(qt =>
+                haystack.some(ht => ht.startsWith(qt) || ht.includes(qt))
+              );
             })
             .sort((a, b) => {
               const an = norm(a.name || a.nome);
               const bn = norm(b.name || b.nome);
-              const aExact = an === qNorm ? 0 : (an.startsWith(qNorm) ? 1 : 2);
-              const bExact = bn === qNorm ? 0 : (bn.startsWith(qNorm) ? 1 : 2);
-              if(aExact !== bExact) return aExact - bExact;
+              const qNorm = norm(q);
+              // Score: 0 = match exato, 1 = comeca com, 2 = contem inicio
+              const score = (s) => {
+                if (s === qNorm) return 0;
+                if (s.startsWith(qNorm)) return 1;
+                // Conta quantas palavras do nome batem em prefixo
+                const bonus = qTokens.filter(qt => s.split(' ').some(w => w.startsWith(qt))).length;
+                return bonus > 0 ? 2 - bonus*0.1 : 3;
+              };
+              const sa = score(an), sb = score(bn);
+              if (sa !== sb) return sa - sb;
               return an.localeCompare(bn);
             })
-            .slice(0, 15);
+            .slice(0, 20);
 
           if (filtered.length === 0) {
-            console.log(`[pdv-search] Nenhum match para "${q}". S.products tem ${S.products.length} produtos. Exemplos:`,
-              S.products.slice(0,3).map(p => ({nome: p.name||p.nome, active: p.active, ativo: p.ativo})));
+            console.log(`[pdv-search] "${q}" → 0 resultados. Total produtos: ${S.products.length}. Tokens busca:`, qTokens);
+            // Mostra ate 5 nomes que CONTEM alguma das palavras (debug)
+            const partials = S.products.filter(p => {
+              const n = norm(p.name||p.nome);
+              return qTokens.some(t => n.includes(t.slice(0,3)));
+            }).slice(0, 5).map(p => p.name||p.nome);
+            if (partials.length) console.log('[pdv-search] Possiveis matches parciais:', partials);
           }
           renderSuggestions(filtered);
         }, 300);
@@ -2778,6 +2806,9 @@ async function init(){
     import('./services/serverClock.js').then(m => m.syncServerClock()).catch(()=>{});
     // Alertas de pagamento pendente (push no canto inferior direito)
     import('./services/paymentAlerts.js').then(m => m.startPaymentAlerts?.()).catch(()=>{});
+    // Real-time: SSE para sincronizacao automatica entre maquinas
+    // (elimina F5 manual quando outra unidade lanca/atualiza pedido).
+    import('./services/realtime.js').then(m => m.startRealtime?.()).catch(()=>{});
 
     // ── Ponto: lembretes de horário ──────────────────────────
     import('./pages/ponto.js').then(m => {
