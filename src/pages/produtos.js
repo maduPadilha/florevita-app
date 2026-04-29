@@ -621,8 +621,17 @@ export async function saveProduct(editId=null, prodCode=null){
   };
   if(S._prodImg) data.images=[S._prodImg];
 
-  S.loading=true; S._modal=''; S._prodImg=null; S._prodTab=null; S._prodDraft=null; S._prodCats=null;
-  try{ render(); }catch(e){}
+  // UX: NAO fecha modal antes de confirmar o save. Bloqueia botao e
+  // mostra estado de carregamento. Se der erro, modal fica aberto pra
+  // a usuaria corrigir e tentar de novo (antes a tela 'sumia' e o
+  // produto se perdia silenciosamente).
+  const btnSave = document.getElementById('btn-mp-save');
+  const originalBtnHtml = btnSave?.innerHTML;
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.innerHTML = '⏳ Salvando...';
+  }
+
   try{
     let p;
     if(editId){
@@ -632,12 +641,28 @@ export async function saveProduct(editId=null, prodCode=null){
       p = await POST('/products', data);
       if(p?._id) S.products.unshift(p);
     }
-    toast(editId?'✅ Produto atualizado!':'✅ Produto cadastrado!');
-    saveCachedData(); // salva cache com produto novo/atualizado
+    // SUCESSO: agora sim fecha o modal e limpa o estado
+    S._modal=''; S._prodImg=null; S._prodTab=null; S._prodDraft=null; S._prodCats=null;
+    saveCachedData();
+    try{ render(); }catch(e){}
+    toast(editId?'✅ Produto atualizado com sucesso!':'✅ Produto cadastrado com sucesso!');
   }catch(e){
-    toast('❌ Erro ao salvar: '+(e.message||''));
-  }finally{
-    S.loading=false; try{render();}catch(e){}
+    console.error('[saveProduct] erro:', e);
+    // Erro: NAO fecha o modal — usuaria pode corrigir.
+    if (btnSave) {
+      btnSave.disabled = false;
+      btnSave.innerHTML = originalBtnHtml || ('💾 ' + (editId ? 'Atualizar Produto' : 'Cadastrar Produto'));
+    }
+    // Mensagem mais descritiva
+    let msg = e?.message || e?.error || 'Verifique os dados e tente novamente.';
+    if (msg.includes('413') || msg.toLowerCase().includes('payload too large')) {
+      msg = 'Imagem muito grande. Use foto com menos de 1MB.';
+    } else if (msg.includes('400')) {
+      msg = 'Dados inválidos. Confira nome, preço e categoria.';
+    } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('failed to fetch')) {
+      msg = 'Sem conexão com o servidor. Verifique sua internet.';
+    }
+    toast('🚨 Erro ao salvar produto: ' + msg, true);
   }
 }
 

@@ -259,26 +259,47 @@ export async function showFinModal(type){
     const value=parseFloat(document.getElementById('fm-value')?.value||0);
     if(!desc) return toast('❌ Descrição obrigatória');
     if(!value||value<=0) return toast('❌ Informe o valor');
+    // Backend FinancialEntry exige type ∈ ['receita','despesa'] (lowercase).
+    // Frontend usa label capitalizado ('Receita'/'Despesa') na UI.
+    const typeLower = String(type).toLowerCase() === 'receita' ? 'receita' : 'despesa';
+    const data = document.getElementById('fm-date')?.value || '';
     const entry={
-      type, description:desc, value,
-      dueDate:document.getElementById('fm-date')?.value||null,
-      category:document.getElementById('fm-cat')?.value,
-      unit:document.getElementById('fm-unit')?.value,
-      supplier:document.getElementById('fm-supplier')?.value||'',
-      notes:document.getElementById('fm-notes')?.value||'',
-      status:'Pendente',
-      createdAt:new Date().toISOString()
+      type: typeLower,
+      description: desc,
+      descricao: desc,
+      value: value,
+      valor: value,
+      // Schema usa 'date' (string YYYY-MM-DD); preserva tambem dueDate para
+      // compat com listagens antigas que filtram por dueDate.
+      date: data,
+      dueDate: data || null,
+      category: document.getElementById('fm-cat')?.value || 'Outros',
+      categoria: document.getElementById('fm-cat')?.value || 'Outros',
+      unit: document.getElementById('fm-unit')?.value || 'Todas',
+      supplier: document.getElementById('fm-supplier')?.value || '',
+      notes: document.getElementById('fm-notes')?.value || '',
+      status: 'Pendente',
+      createdBy: S.user?.name || 'Sistema',
+      user: S.user?.name || 'Sistema',
     };
+
+    // UX: feedback imediato + bloqueia clique duplo
+    const btn = document.getElementById('btn-sv-fin');
+    if (btn) { btn.disabled = true; btn.textContent = '💾 Salvando...'; }
+
     try {
       const saved = await POST('/financial/entries', entry);
-      if(saved && saved._id) entry._id = saved._id;
-      if(!S.financialEntries) S.financialEntries = [];
+      if (saved && saved._id) entry._id = saved._id;
+      if (!S.financialEntries) S.financialEntries = [];
       S.financialEntries.unshift(entry);
-      S._modal=''; render();
-      toast(`✅ ${type} cadastrada!`);
+      S._modal = ''; render();
+      toast(`✅ ${type} cadastrada com sucesso!`);
     } catch(e){
       console.error('Erro ao salvar entrada financeira:', e);
-      toast('❌ Erro ao salvar. Tente novamente.');
+      // Tenta extrair mensagem util do erro
+      const msg = e?.message || e?.error || 'Tente novamente.';
+      toast('🚨 Erro ao salvar: ' + msg, true);
+      if (btn) { btn.disabled = false; btn.textContent = `Salvar ${type}`; }
     }
   });
 }

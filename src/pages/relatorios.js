@@ -937,6 +937,21 @@ ${tab==='vendasUnidade'?(()=>{
   const linhas = Object.entries(porUnidade).sort((a,b)=>b[1].total-a[1].total);
   const totalGeral = linhas.reduce((s,[,d])=>s+d.total, 0);
 
+  // Agregacao por forma de pagamento (cruzado com unidade)
+  const porPag = {};
+  const pagPorUnidade = {}; // { 'Pix': { 'CDLE': { qty, total }, 'Allegro': {...} } }
+  lista.forEach(o => {
+    const pg = o.payment || o.paymentMethod || '—';
+    const uni = o.saleUnit || o.unit || '—';
+    if (!porPag[pg]) porPag[pg] = { qty:0, total:0 };
+    porPag[pg].qty++;
+    porPag[pg].total += (o.total||0);
+    if (!pagPorUnidade[pg]) pagPorUnidade[pg] = {};
+    if (!pagPorUnidade[pg][uni]) pagPorUnidade[pg][uni] = { qty:0, total:0 };
+    pagPorUnidade[pg][uni].qty++;
+    pagPorUnidade[pg][uni].total += (o.total||0);
+  });
+
   const allPagamentos = ['Pix','Cartão','Cartão Crédito','Cartão Débito','Dinheiro','Pagar na Entrega','Boleto'];
 
   return `
@@ -997,23 +1012,94 @@ ${tab==='vendasUnidade'?(()=>{
           <td>${totalGeral ? Math.round((d.total/totalGeral)*100) : 0}%</td>
         </tr>`).join('')}
       </tbody>
+      <tfoot>
+        <tr style="background:var(--leaf-l);font-weight:800;">
+          <td>🏆 TOTAL GERAL</td>
+          <td>${linhas.reduce((s,[,d])=>s+d.qty,0)}</td>
+          <td>${linhas.reduce((s,[,d])=>s+d.itens,0)}</td>
+          <td style="color:var(--leaf);">${$c(totalGeral)}</td>
+          <td>100%</td>
+        </tr>
+      </tfoot>
     </table></div>`}
   </div>
   <div class="card">
-    <div class="card-title">📋 Pedidos do período (${lista.length})</div>
-    ${lista.length===0 ? `<div class="empty"><p>Nenhum pedido.</p></div>` : `
-    <div style="max-height:400px;overflow-y:auto;"><table>
-      <thead><tr><th>Pedido</th><th>Unidade</th><th>Cliente</th><th>Total</th></tr></thead>
+    <div class="card-title">💳 Por Forma de Pagamento</div>
+    ${Object.keys(porPag).length===0 ? `<div class="empty"><p>Sem dados.</p></div>` : `
+    <div style="overflow-x:auto;"><table>
+      <thead><tr><th>Forma</th><th>Pedidos</th><th>Total</th><th>%</th></tr></thead>
       <tbody>
-        ${lista.slice(0,200).map(o => `<tr>
-          <td><strong>${o.orderNumber||'—'}</strong></td>
-          <td><span class="tag t-rose" style="font-size:10px;">${o.saleUnit||o.unit||'—'}</span></td>
-          <td style="font-size:11px;">${o.client?.name||o.clientName||'—'}</td>
-          <td style="font-weight:600;">${$c(o.total)}</td>
+        ${Object.entries(porPag).sort((a,b)=>b[1].total-a[1].total).map(([pg, d]) => `<tr>
+          <td><strong>${pg}</strong></td>
+          <td>${d.qty}</td>
+          <td style="color:var(--leaf);font-weight:700;">${$c(d.total)}</td>
+          <td>${totalGeral ? Math.round((d.total/totalGeral)*100) : 0}%</td>
         </tr>`).join('')}
       </tbody>
+      <tfoot>
+        <tr style="background:#FCE7F0;font-weight:800;">
+          <td>💰 TOTAL</td>
+          <td>${Object.values(porPag).reduce((s,d)=>s+d.qty,0)}</td>
+          <td style="color:var(--leaf);">${$c(totalGeral)}</td>
+          <td>100%</td>
+        </tr>
+      </tfoot>
     </table></div>`}
   </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="card-title">🔀 Cruzamento: Forma de Pagamento × Unidade</div>
+  ${Object.keys(pagPorUnidade).length===0 ? `<div class="empty"><p>Sem dados.</p></div>` : `
+  <div style="overflow-x:auto;"><table>
+    <thead><tr>
+      <th>Forma Pagto.</th>
+      ${linhas.map(([uni]) => `<th style="text-align:right;">${uni}</th>`).join('')}
+      <th style="text-align:right;background:var(--leaf-l);">Total</th>
+    </tr></thead>
+    <tbody>
+      ${Object.entries(pagPorUnidade).sort((a,b)=>{
+        const ta = Object.values(a[1]).reduce((s,d)=>s+d.total,0);
+        const tb = Object.values(b[1]).reduce((s,d)=>s+d.total,0);
+        return tb - ta;
+      }).map(([pg, perUni]) => {
+        const linha = linhas.map(([uni]) => {
+          const v = perUni[uni];
+          return `<td style="text-align:right;font-weight:600;color:var(--leaf);">${v ? $c(v.total) : '—'}</td>`;
+        }).join('');
+        const totalPg = Object.values(perUni).reduce((s,d)=>s+d.total,0);
+        return `<tr>
+          <td><strong>${pg}</strong></td>
+          ${linha}
+          <td style="text-align:right;background:var(--leaf-l);font-weight:800;color:var(--leaf);">${$c(totalPg)}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+    <tfoot>
+      <tr style="background:#FCE7F0;font-weight:800;">
+        <td>💰 TOTAL</td>
+        ${linhas.map(([,d]) => `<td style="text-align:right;color:var(--leaf);">${$c(d.total)}</td>`).join('')}
+        <td style="text-align:right;background:var(--leaf);color:#fff;">${$c(totalGeral)}</td>
+      </tr>
+    </tfoot>
+  </table></div>`}
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="card-title">📋 Pedidos do período (${lista.length})</div>
+  ${lista.length===0 ? `<div class="empty"><p>Nenhum pedido.</p></div>` : `
+  <div style="max-height:400px;overflow-y:auto;"><table>
+    <thead><tr><th>Pedido</th><th>Unidade</th><th>Cliente</th><th>Pagamento</th><th>Total</th></tr></thead>
+    <tbody>
+      ${lista.slice(0,200).map(o => `<tr>
+        <td><strong>${o.orderNumber||'—'}</strong></td>
+        <td><span class="tag t-rose" style="font-size:10px;">${o.saleUnit||o.unit||'—'}</span></td>
+        <td style="font-size:11px;">${o.client?.name||o.clientName||'—'}</td>
+        <td style="font-size:11px;">${o.payment||'—'}</td>
+        <td style="font-weight:600;">${$c(o.total)}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`}
 </div>`;
 })():''}
 
