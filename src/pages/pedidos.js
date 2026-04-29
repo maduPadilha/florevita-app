@@ -520,7 +520,7 @@ export function renderPedidos(){
           <table>
             <thead><tr>
               <th>#</th><th>Cliente / Dest.</th><th>Bairro</th><th>Unidade</th>
-              <th>Itens</th><th>Total</th><th>Data Venda</th><th>Data Entrega</th><th>Canal</th><th>Status</th><th></th>
+              <th>Itens</th><th>Total</th><th>Data da Venda</th><th>Data da Entrega</th><th>Canal</th><th>Status</th><th></th>
             </tr></thead>
             <tbody>${renderRows(ped)}</tbody>
           </table>
@@ -532,7 +532,7 @@ export function renderPedidos(){
   <table>
     <thead><tr>
       <th>#</th><th>Cliente / Dest.</th><th>Bairro</th><th>Unidade</th>
-      <th>Itens</th><th>Total</th><th>Entrega</th><th>Canal</th><th>Status</th><th></th>
+      <th>Itens</th><th>Total</th><th>Data da Venda</th><th>Data da Entrega</th><th>Canal</th><th>Status</th><th></th>
     </tr></thead>
     <tbody>${renderRows(filtered)}</tbody>
   </table>
