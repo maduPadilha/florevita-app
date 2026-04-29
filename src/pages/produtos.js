@@ -215,11 +215,13 @@ export function renderProdutos(){
       </div>`).join('')}
   ` : `<div class="empty"><div class="empty-icon">🌹</div><p>Sem produtos</p><button class="btn btn-primary" id="btn-new-prod2" style="margin-top:10px">+ Cadastrar Produto</button>
         <button class="btn btn-ghost" style="margin-top:6px;font-size:11px" onclick="recarregarDados()">🔄 Recarregar dados do servidor</button></div>`):filtered.length===0?`<div class="empty"><div class="empty-icon">🔍</div><p>Nenhum produto encontrado com os filtros aplicados</p></div>`:`
-  <div class="tw"><table><thead><tr><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Estoque</th><th>Site</th><th>Status</th><th>NCM</th><th></th></tr></thead>
+  <div class="tw"><table><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Estoque</th><th>Site</th><th>Status</th><th>NCM</th><th></th></tr></thead>
   <tbody>${displayed.map(p=>{
     const mg=p.salePrice>0?((p.salePrice-(p.costPrice||0))/p.salePrice*100).toFixed(0):0;
     const low=(p.stock||0)<=(p.minStock||5);
+    const codigoProd = p.code || p.sku || '';
     return`<tr>
+      <td style="font-family:monospace;font-size:12px;font-weight:700;color:#7C3AED;white-space:nowrap;">${codigoProd ? codigoProd : '<span style="color:var(--muted);font-weight:400;">—</span>'}</td>
       <td><div style="display:flex;align-items:center;gap:8px;">
         ${p.images?.[0]?`<img src="${p.images[0]}" loading="lazy" decoding="async" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer" title="${p.name}" onclick="showFullImg('${p.images[0]}')">`:`<span style="font-size:20px">${emoji(p.category)}</span>`}
         <div style="display:flex;flex-direction:column;gap:2px;">
