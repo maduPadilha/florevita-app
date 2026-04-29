@@ -531,6 +531,9 @@ export function renderConfig(){
         <button class="btn btn-primary btn-sm" id="btn-migrate-codes" style="background:#3B82F6;">
           🏷️ Aplicar Renumeração
         </button>
+        <button class="btn btn-ghost btn-sm" id="btn-recover-codes" style="border:1px solid #DC2626;color:#991B1B;" title="Use se a migração foi interrompida e os produtos sumiram/ficaram com TEMP">
+          🚑 Recuperar Códigos (emergência)
+        </button>
       </div>
       <div id="migrate-codes-result" style="margin-top:10px;font-size:12px;"></div>
     </div>
@@ -1102,6 +1105,28 @@ export function bindConfigActions(){
   };
   document.getElementById('btn-migrate-codes-dryrun')?.addEventListener('click', () => _runMigrateCodes(true));
   document.getElementById('btn-migrate-codes')?.addEventListener('click', () => _runMigrateCodes(false));
+
+  // Recuperação emergencial (corrige produtos com __TMP_*)
+  document.getElementById('btn-recover-codes')?.addEventListener('click', async () => {
+    const out = document.getElementById('migrate-codes-result');
+    if(S.user?.cargo!=='admin' && S.user?.role!=='Administrador'){ toast('Sem permissão'); return; }
+    if (!confirm('Recuperar códigos de produto?\n\nReatribui LE0001+ para TODOS os produtos por ordem de cadastro.\nUse esta opção se a migração anterior foi interrompida.')) return;
+    if (out) out.innerHTML = '<div style="padding:8px;color:var(--muted);">⏳ Recuperando...</div>';
+    try {
+      const { POST } = await import('../services/api.js');
+      const r = await POST('/products/admin/recover-codes', {});
+      out.innerHTML = `<div style="padding:10px;background:#D1FAE5;border:1px solid #10B981;border-radius:8px;color:#065F46;">
+        ✅ <strong>Recuperação concluída!</strong><br>
+        ${r.totalProdutos} produtos · ${r.tempEncontrados||0} corrigidos · próximo: <strong>${r.proximoCodigo}</strong>.
+      </div>`;
+      toast(`✅ Recuperação OK — ${r.totalProdutos} produtos`);
+      const { invalidateCache } = await import('../services/cache.js');
+      invalidateCache('products');
+    } catch(err){
+      out.innerHTML = `<div style="padding:10px;background:#FEE2E2;border:1px solid #EF4444;border-radius:8px;color:#991B1B;">🚨 Erro: ${err.message}</div>`;
+      toast('🚨 Erro na recuperação: '+err.message, true);
+    }
+  });
 
   // Save config (migrated to API)
   {const _el=document.getElementById('btn-save-cfg');if(_el)_el.onclick=async()=>{
