@@ -157,27 +157,40 @@ export function invalidateCache(type='all'){
 // Em caso de cold-start (Render free tier ~35s), usa retry só na fase crítica.
 export async function loadData(){
   const _was = S.loading;
-  S.loading   = true;
+
+  // OTIMIZACAO: se ja temos cache na memoria (loadCachedData preencheu),
+  // NAO mostra loading screen — atualiza em background silencioso.
+  // Render Starter responde em <1s, retries longos eram exagero.
+  const temCacheLocal = (S.products?.length > 0) || (S.orders?.length > 0) || (S.clients?.length > 0);
+  S.loading = !temCacheLocal;
 
   // ── FASE CRÍTICA: orders + clients + users ────────────────────
-  // Tenta até 8 vezes (cold-start Render pode levar ~35s)
+  // Antes: ate 8 tentativas com 10s entre = 80s. Render Starter ja
+  // nao hiberna mais — se falhar mesmo, e melhor desistir e usar cache.
   let orders=null, clients=null, users=null;
   let carregouCritico = false;
 
-  for(let n=1; n<=8; n++){
-    S._loginMsg = n===1 ? '🌸 Carregando dados...' : `⏳ Aguardando servidor... (${n}/8)`;
-    try{ const { render } = await import('../main.js'); render(); }catch(_){}
+  // Cache do main.js para evitar re-import a cada iteracao
+  let mainModule;
+  try { mainModule = await import('../main.js'); } catch(_){ mainModule = null; }
+  const reRender = () => { try { mainModule?.render?.(); } catch(_){} };
 
-    // /users e admin-only — para colaboradora nao-admin, nao tenta
-    // (evita 403 ruidoso no console). A listagem de entregadores
-    // ja vem do endpoint publico /collaborators/public.
-    const isAdminUser = S.user && (
-      S.user.role === 'Administrador' ||
-      S.user.cargo === 'admin' ||
-      S.user.cargo === 'Administrador' ||
-      S.user.unidade === 'todas' ||
-      S.user.unit === 'Todas'
-    );
+  // /users e admin-only — para colaboradora nao-admin, nao tenta
+  const isAdminUser = S.user && (
+    S.user.role === 'Administrador' ||
+    S.user.cargo === 'admin' ||
+    S.user.cargo === 'Administrador' ||
+    S.user.unidade === 'todas' ||
+    S.user.unit === 'Todas'
+  );
+
+  // Maximo 3 tentativas com 2s entre cada (em vez de 8x10s = 80s)
+  for(let n=1; n<=3; n++){
+    if (!temCacheLocal) {
+      S._loginMsg = n===1 ? '🌸 Carregando dados...' : `⏳ Aguardando servidor... (${n}/3)`;
+      reRender();
+    }
+
     [orders, clients, users] = await Promise.all([
       GET('/orders?limit=300').catch(()=>null),
       GET('/clients?limit=500').catch(()=>null),
@@ -187,10 +200,8 @@ export async function loadData(){
     const algumOk = [orders, clients, users].some(x => Array.isArray(x));
     if(algumOk){ carregouCritico = true; break; }
 
-    if(n < 8){
-      S._loginMsg = `🌸 Servidor aquecendo... (${n}/8)`;
-      try{ const { render } = await import('../main.js'); render(); }catch(_){}
-      await new Promise(r=>setTimeout(r, 10000));
+    if(n < 3){
+      await new Promise(r=>setTimeout(r, 2000));
     }
   }
 
@@ -207,7 +218,7 @@ export async function loadData(){
 
   S._loginMsg = null;
   S.loading   = _was;
-  try{ const { render } = await import('../main.js'); render(); }catch(_){}
+  reRender();
 
   if(carregouCritico){
     console.log(`[load] ✅ crítico: ${S.orders.length}o | ${S.clients.length}c | ${S.users.length}u`);
