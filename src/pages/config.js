@@ -516,6 +516,25 @@ export function renderConfig(){
       <div id="migrate-retirada-result" style="margin-top:10px;font-size:12px;"></div>
     </div>
 
+    <!-- Renumerar codigos de produto -->
+    <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#DBEAFE,#EFF6FF);border:1px solid #3B82F6;">
+      <div class="card-title">🏷️ Padronizar Códigos de Produto (LE00001)</div>
+      <div style="font-size:11px;color:#1E40AF;margin-bottom:10px;line-height:1.5;">
+        Renumera <strong>TODOS</strong> os produtos no formato <strong>LE00001, LE00002, LE00003...</strong>
+        Ordenado por data de cadastro (mais antigos primeiro). A partir daí, novos produtos
+        recebem código automático sequencial. <strong>Ação irreversível</strong> — códigos antigos serão substituídos.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" id="btn-migrate-codes-dryrun" style="border:1px solid #3B82F6;color:#1E40AF;">
+          👀 Simular (não aplica)
+        </button>
+        <button class="btn btn-primary btn-sm" id="btn-migrate-codes" style="background:#3B82F6;">
+          🏷️ Aplicar Renumeração
+        </button>
+      </div>
+      <div id="migrate-codes-result" style="margin-top:10px;font-size:12px;"></div>
+    </div>
+
     <div class="card" style="margin-bottom:14px;">
       <div class="card-title">🖼️ Logo da Tela de Login</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">
@@ -1042,6 +1061,47 @@ export function bindConfigActions(){
       _el.textContent = '🔧 Executar Correção';
     }
   };}
+
+  // Migracao de codigos de produto LE00001
+  const _runMigrateCodes = async (dryRun) => {
+    const out = document.getElementById('migrate-codes-result');
+    const btnDry = document.getElementById('btn-migrate-codes-dryrun');
+    const btnApp = document.getElementById('btn-migrate-codes');
+    if(S.user?.cargo!=='admin' && S.user?.role!=='Administrador'){ toast('Sem permissão'); return; }
+    if (!dryRun && !confirm('Renumerar TODOS os produtos no formato LE00001+?\n\nEsta ação substituirá os códigos atuais e é IRREVERSÍVEL.')) return;
+    if (btnDry) btnDry.disabled = true;
+    if (btnApp) btnApp.disabled = true;
+    if (out) out.innerHTML = '<div style="padding:8px;color:var(--muted);">⏳ Processando...</div>';
+    try {
+      const { POST } = await import('../services/api.js');
+      const url = '/products/admin/migrate-codes' + (dryRun ? '?dryRun=true' : '');
+      const r = await POST(url, {});
+      if (dryRun) {
+        out.innerHTML = `<div style="padding:10px;background:#FEF9C3;border:1px solid #FACC15;border-radius:8px;color:#713F12;">
+          🔍 <strong>Simulação:</strong> ${r.totalProdutos} produtos analisados, <strong>${r.mudancasNecessarias}</strong> precisam mudar.<br>
+          ${r.amostra?.length ? `<details style="margin-top:6px;"><summary style="cursor:pointer;">Ver amostra</summary><ul style="margin:6px 0;padding-left:20px;">${r.amostra.map(m=>`<li><strong>${m.codeAntigo}</strong> → <strong>${m.codeNovo}</strong> (${m.nome})</li>`).join('')}</ul></details>` : ''}
+        </div>`;
+        toast(`👀 Simulação: ${r.mudancasNecessarias} produtos precisam mudar`);
+      } else {
+        out.innerHTML = `<div style="padding:10px;background:#D1FAE5;border:1px solid #10B981;border-radius:8px;color:#065F46;">
+          ✅ <strong>Renumeração concluída!</strong><br>
+          ${r.totalProdutos} produtos · ${r.atualizados} códigos atualizados · próximo será <strong>${r.proximoCodigo}</strong>.
+        </div>`;
+        toast(`✅ ${r.atualizados} códigos atualizados`);
+        // Invalida cache de produtos para forçar reload
+        const { invalidateCache } = await import('../services/cache.js');
+        invalidateCache('products');
+      }
+    } catch(err){
+      out.innerHTML = `<div style="padding:10px;background:#FEE2E2;border:1px solid #EF4444;border-radius:8px;color:#991B1B;">🚨 Erro: ${err.message}</div>`;
+      toast('🚨 Erro: '+err.message, true);
+    } finally {
+      if (btnDry) btnDry.disabled = false;
+      if (btnApp) btnApp.disabled = false;
+    }
+  };
+  document.getElementById('btn-migrate-codes-dryrun')?.addEventListener('click', () => _runMigrateCodes(true));
+  document.getElementById('btn-migrate-codes')?.addEventListener('click', () => _runMigrateCodes(false));
 
   // Save config (migrated to API)
   {const _el=document.getElementById('btn-save-cfg');if(_el)_el.onclick=async()=>{

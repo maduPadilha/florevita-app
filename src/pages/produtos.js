@@ -306,8 +306,8 @@ export async function showNewProductModal(prod=null){
       </div>
     </div>
     <div class="fg">
-      <label class="fl">Codigo do Produto</label>
-      <input class="fi" id="mp-code" value="${prod?.code||''}" placeholder="Auto-gerado"/>
+      <label class="fl">Código do Produto <span style="font-size:9px;color:var(--muted);">(automático — formato LE00001)</span></label>
+      <input class="fi" id="mp-code" value="${prod?.code||''}" placeholder="${edit ? '' : '🤖 Gerado pelo sistema ao salvar'}" readonly style="background:#F3F4F6;color:#6B7280;cursor:not-allowed;"/>
     </div>
   </div>
 
