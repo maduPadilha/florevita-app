@@ -372,22 +372,12 @@ export async function showNewProductModal(prod=null){
 
   <!-- SECAO 5b: VARIACOES DE COR -->
   <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">🎨 Variações — Cores</div>
-  <div style="margin-bottom:16px;background:var(--cream);border-radius:10px;padding:14px;">
+  <div id="mp-colors-section" style="margin-bottom:16px;background:var(--cream);border-radius:10px;padding:14px;">
     <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">
       Adicione as cores disponíveis deste produto. Cada cor aparece como opção no PDV e no e-commerce.
       Você pode incluir um <strong>ajuste de preço</strong> (+/- R$) e <strong>estoque próprio</strong> por cor.
     </div>
-    <div id="mp-colors-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
-      ${(prod?.colors||[]).map((c, idx) => `
-        <div data-color-row="${idx}" style="display:grid;grid-template-columns:36px 1fr 110px 100px 32px;gap:8px;align-items:center;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid var(--border);">
-          <input type="color" value="${c.hex||'#FF6FA8'}" data-color-hex style="width:32px;height:32px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:0;"/>
-          <input type="text" placeholder="Nome (ex: Rosa Pink)" value="${c.name||c.nome||''}" data-color-name style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;"/>
-          <input type="number" placeholder="+0,00" value="${c.priceAdjust||0}" step="0.01" data-color-price style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" title="Ajuste de preço (+/-)"/>
-          <input type="number" placeholder="Estoque" value="${c.stock||0}" min="0" data-color-stock style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" title="Estoque desta variação"/>
-          <button type="button" onclick="this.closest('[data-color-row]').remove()" style="background:rgba(220,38,38,.1);color:var(--red);border:1px solid rgba(220,38,38,.3);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;">×</button>
-        </div>
-      `).join('')}
-    </div>
+    <div id="mp-colors-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
     <button type="button" id="mp-color-add" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">
       ➕ Adicionar Cor
     </button>
@@ -483,24 +473,71 @@ export async function showNewProductModal(prod=null){
     reader.readAsDataURL(file);
   });
 
-  // ── Adicionar nova linha de cor ───────────────────────────
-  document.getElementById('mp-color-add')?.addEventListener('click', () => {
+  // ── Variacoes de cor: helpers DOM-only (evita HTML injection) ─
+  const _addColorRow = (data = {}) => {
     const list = document.getElementById('mp-colors-list');
     if (!list) return;
     const row = document.createElement('div');
-    const idx = list.children.length;
-    row.setAttribute('data-color-row', String(idx));
+    row.setAttribute('data-color-row', '');
     row.style.cssText = 'display:grid;grid-template-columns:36px 1fr 110px 100px 32px;gap:8px;align-items:center;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid var(--border);';
-    row.innerHTML = `
-      <input type="color" value="#FF6FA8" data-color-hex style="width:32px;height:32px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:0;"/>
-      <input type="text" placeholder="Nome (ex: Rosa Pink)" data-color-name style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;"/>
-      <input type="number" placeholder="+0,00" value="0" step="0.01" data-color-price style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" title="Ajuste de preço (+/-)"/>
-      <input type="number" placeholder="Estoque" value="0" min="0" data-color-stock style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" title="Estoque desta variação"/>
-      <button type="button" style="background:rgba(220,38,38,.1);color:var(--red);border:1px solid rgba(220,38,38,.3);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;">×</button>
-    `;
-    row.querySelector('button').onclick = () => row.remove();
+
+    // Color picker
+    const ihex = document.createElement('input');
+    ihex.type = 'color'; ihex.value = data.hex || '#FF6FA8';
+    ihex.dataset.colorHex = '';
+    ihex.style.cssText = 'width:32px;height:32px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:0;';
+    // CRITICO: evita que o click bubble alcance handlers de cima
+    ihex.addEventListener('click', e => e.stopPropagation());
+
+    // Nome
+    const inome = document.createElement('input');
+    inome.type = 'text'; inome.placeholder = 'Nome (ex: Rosa Pink)';
+    inome.value = data.name || data.nome || '';
+    inome.dataset.colorName = '';
+    inome.style.cssText = 'padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;';
+
+    // Ajuste de preço
+    const ipreco = document.createElement('input');
+    ipreco.type = 'number'; ipreco.step = '0.01';
+    ipreco.placeholder = '+0,00'; ipreco.value = data.priceAdjust ?? 0;
+    ipreco.title = 'Ajuste de preço (+/-)';
+    ipreco.dataset.colorPrice = '';
+    ipreco.style.cssText = 'padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;';
+
+    // Estoque
+    const istk = document.createElement('input');
+    istk.type = 'number'; istk.min = '0';
+    istk.placeholder = 'Estoque'; istk.value = data.stock ?? 0;
+    istk.title = 'Estoque desta variação';
+    istk.dataset.colorStock = '';
+    istk.style.cssText = 'padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;';
+
+    // Botao remover
+    const brm = document.createElement('button');
+    brm.type = 'button'; brm.textContent = '×';
+    brm.style.cssText = 'background:rgba(220,38,38,.1);color:var(--red);border:1px solid rgba(220,38,38,.3);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;';
+    brm.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      row.remove();
+    });
+
+    row.append(ihex, inome, ipreco, istk, brm);
+    // Stop propagation no row inteiro pra blindar contra fechamento do modal
+    row.addEventListener('click', e => e.stopPropagation());
     list.appendChild(row);
-    row.querySelector('[data-color-name]').focus();
+    return row;
+  };
+
+  // Popula linhas existentes (modo edicao)
+  (prod?.colors || []).forEach(c => _addColorRow(c));
+
+  // Botao adicionar
+  document.getElementById('mp-color-add')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const row = _addColorRow();
+    row?.querySelector('[data-color-name]')?.focus();
   });
 
   // ── Salvar ────────────────────────────────────────────────
