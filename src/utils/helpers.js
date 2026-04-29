@@ -139,6 +139,52 @@ export function triggerServerOrderSearch(q){
   }, 400);
 }
 
+// ── DATA SEGURA (sem bug de fuso) ────────────────────────────
+// Recebe uma data em qualquer formato comum do sistema e retorna um Date
+// fixado em 12:00 do dia LOCAL — evita o bug classico onde 'YYYY-MM-DD'
+// e parseado como UTC e em Manaus (UTC-4) volta um dia.
+//   '2026-04-29'              → Date local 2026-04-29 12:00
+//   '2026-04-29T00:00:00.000Z'→ Date local 2026-04-29 12:00
+//   Date | timestamp           → mesma data local 12:00
+export function parseLocalDate(input){
+  if (!input) return null;
+  // Se ja e Date
+  if (input instanceof Date) {
+    if (isNaN(input.getTime())) return null;
+    return new Date(input.getFullYear(), input.getMonth(), input.getDate(), 12, 0, 0);
+  }
+  const s = String(input);
+  // Formato YYYY-MM-DD ou YYYY-MM-DDTxx:yy:zz
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10) - 1;
+    const d = parseInt(m[3], 10);
+    return new Date(y, mo, d, 12, 0, 0); // 12h LOCAL evita off-by-one
+  }
+  // Outros formatos: tenta parse padrao + corrige para 12h local
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
+}
+
+// Formata uma data do pedido em pt-BR sem bug de fuso.
+// fmt: 'curta' (28/04/26), 'longa' (qua, 28 de abril 2026), 'iso' (2026-04-28)
+export function formatOrderDate(input, fmt = 'curta'){
+  const d = parseLocalDate(input);
+  if (!d) return '';
+  if (fmt === 'iso') {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  if (fmt === 'longa') {
+    return d.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+  }
+  if (fmt === 'comanda') {
+    return d.toLocaleDateString('pt-BR', { weekday:'short', day:'2-digit', month:'2-digit', year:'2-digit' });
+  }
+  return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
+}
+
 // ── EXCLUSAO COM SENHA ──────────────────────────────────────
 // Senha de protecao para colaboradoras nao-admin excluirem registros
 // (Cliente / Pedido / Produto / Categoria). Admin nao precisa.

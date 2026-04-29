@@ -2,10 +2,19 @@
 export const $c = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
 export const $d = d => {
   if(!d) return '—';
-  // Se for string YYYY-MM-DD, formata sem timezone (evita bug UTC em Manaus UTC-4)
-  if(typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)){
-    const [y,m,day] = d.split('-');
-    return `${day}/${m}/${y}`;
+  // Estrategia anti-bug-de-fuso:
+  // 1) String 'YYYY-MM-DD' ou 'YYYY-MM-DDT...' → extrai os 3 primeiros
+  //    grupos e formata DD/MM/YYYY (ignora qualquer hora/timezone).
+  //    Pedido salva data como ISO completo (2026-04-29T00:00:00.000Z),
+  //    parseado como UTC vira 28/04 em Manaus — bug classico.
+  // 2) Date object: usa getDate/getMonth/getFullYear (locais).
+  // 3) Outros: fallback toLocaleDateString.
+  if(typeof d === 'string'){
+    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m) return `${m[3]}/${m[2]}/${m[1]}`;
+  }
+  if(d instanceof Date && !isNaN(d.getTime())){
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
   }
   return new Date(d).toLocaleDateString('pt-BR');
 };

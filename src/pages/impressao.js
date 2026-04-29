@@ -1,7 +1,7 @@
 import { S } from '../state.js';
 import { $c } from '../utils/formatters.js';
 import { GET, PUT } from '../services/api.js';
-import { toast } from '../utils/helpers.js';
+import { toast, parseLocalDate, formatOrderDate } from '../utils/helpers.js';
 import { getClientWithStats, getClientTier } from './clientes.js';
 
 // ── Helper: render() via dynamic import ───────────────────────
@@ -298,7 +298,7 @@ export function renderImpressao(){
 
 // Substitui variaveis {xxx} no texto da etiqueta pelos dados do pedido
 function applyLabelVars(texto, o, empresa, whats){
-  const dt = o.scheduledDate ? new Date(o.scheduledDate).toLocaleDateString('pt-BR') : '—';
+  const dt = o.scheduledDate ? formatOrderDate(o.scheduledDate, 'curta') : '—';
   return String(texto||'')
     .replace(/\{empresa\}/g,      empresa||'')
     .replace(/\{recipient\}/g,    o.recipient||'—')
@@ -332,7 +332,7 @@ export function printCard(orderId){
       <div style="font-size:26px;margin-bottom:10px;">\u{1F33A}</div>
       ${layout.mostrarDestinatario!==false?`<div style="font-size:11px;color:#888;margin-bottom:3px;letter-spacing:1px;">PARA:</div><div style="font-size:20px;font-weight:bold;margin-bottom:16px;color:#1A0A10;">${(o.recipient||'\u2014').toUpperCase()}</div>`:''}
       ${layout.mostrarMensagem!==false?`<div style="font-size:${tam}px;font-style:italic;color:#2D1A20;line-height:1.8;padding:14px 16px;background:rgba(255,255,255,.6);border-radius:8px;margin-bottom:14px;">"${o.cardMessage||'Com muito carinho! \u{1F338}'}"</div>`:''}
-      ${layout.mostrarData!==false&&o.scheduledDate?`<div style="font-size:11px;color:#9E8090;margin-bottom:8px;">\u{1F4C5} ${new Date(o.scheduledDate).toLocaleDateString('pt-BR')} ${o.scheduledPeriod?'\u00b7 '+o.scheduledPeriod:''}</div>`:''}
+      ${layout.mostrarData!==false&&o.scheduledDate?`<div style="font-size:11px;color:#9E8090;margin-bottom:8px;">\u{1F4C5} ${formatOrderDate(o.scheduledDate, 'curta')} ${o.scheduledPeriod?'\u00b7 '+o.scheduledPeriod:''}</div>`:''}
       ${layout.mostrarProduto!==false&&(o.items||[]).length?`<div style="font-size:11px;color:#9E8090;margin-bottom:8px;">\u{1F338} ${(o.items||[]).map(i=>i.name).join(', ')}</div>`:''}
       ${layout.mostrarRemetente!==false&&o.identifyClient!==false?`<div style="font-size:12px;color:#9E8090;">\u{1F48C} COM CARINHO DE: <strong>${(o.client?.name||o.clientName||'\u2014').toUpperCase()}</strong></div>`:'<div style="font-size:20px;">\u{1F49D}</div>'}
     </div>`;
@@ -424,7 +424,7 @@ function _printComandaInternal(orderId){
 
   // ── DATA / TURNO / HORARIO ──────────────────────────────────
   const dataEntrega = o.scheduledDate
-    ? new Date(o.scheduledDate).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'}).toUpperCase()
+    ? formatOrderDate(o.scheduledDate, 'comanda').toUpperCase()
     : '\u2014';
   const turno   = UC(o.scheduledPeriod||'');
   // Monta exibicao do horario considerando janela (Horario Especifico)
@@ -628,7 +628,7 @@ function _printComandaInternal(orderId){
       </div>
       <div style="background:#C8436A;border-radius:6px;padding:7px 10px;text-align:center;">
         <div style="font-size:9px;color:rgba(255,255,255,.85);margin-bottom:1px;">\u{1F4C5} DATA \u00b7 TURNO \u00b7 HORA</div>
-        <div style="font-size:12px;font-weight:700;color:#fff;">${UC(o.scheduledDate?new Date(o.scheduledDate).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'\u2014')}</div>
+        <div style="font-size:12px;font-weight:700;color:#fff;">${UC(o.scheduledDate?formatOrderDate(o.scheduledDate, 'curta'):'\u2014')}</div>
         <div style="font-size:15px;font-weight:900;color:#FFD700;">${UC(turno||'\u2014')}</div>
         ${horario?`<div style="font-size:16px;font-weight:900;color:#fff;background:rgba(0,0,0,0.25);border-radius:4px;padding:2px 6px;margin-top:2px;">\u23F0 ${UC(horario)}</div>`:''}
       </div>
