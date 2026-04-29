@@ -2731,6 +2731,22 @@ async function init(){
     }
   });
 
+  // ── Defesa global: dentro de modais (.mo) o Enter NAO submete form
+  // automaticamente (em <textarea> permite quebra de linha normal).
+  // Antes: pressionar Enter num input dentro de modal podia clicar no
+  // primeiro botao da pagina (incluindo botoes que fechavam o modal).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const t = e.target;
+    if (!t || !t.closest) return;
+    // Se esta dentro de modal e nao e textarea/button → previne submit acidental
+    if (t.closest('.mo') && t.tagName !== 'TEXTAREA' && t.tagName !== 'BUTTON') {
+      // Permite Enter funcional em selects (abre opcoes)
+      if (t.tagName === 'SELECT') return;
+      e.preventDefault();
+    }
+  }, true);
+
   // ── Wake-up ping: acorda o Render antes do login ──────────────
   fetch(API+'/health', {method:'GET', signal:AbortSignal.timeout(5000)}).catch(()=>{});
 

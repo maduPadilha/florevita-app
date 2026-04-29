@@ -47,7 +47,7 @@ export let S = {
   _fCanal:'', _fPrioridade:'', _fDate1:'', _fDate2:'',
   _orderSearch:'',
   _clientSel:null, _clientSearch:'', _prodSearch:'', _prodCat:'', _prodStatus:'', _prodLimit:50,
-  _colabSearch:'',
+  _colabSearch:'', _colabDraft:null,
   _catSearch:'',
   _userSearch:'',
   _orcView:'list', _orcDraft:null, _orcDetail:null, _orcEditId:null,

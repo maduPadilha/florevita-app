@@ -497,6 +497,37 @@ export async function showColabModal(colabId=null, overrideCargo=null){
 
   await render();
 
+  // ── RESTAURA draft (se houver) — ao mudar cargo o modal e re-renderizado
+  // mas os campos digitados sao recuperados aqui ──────────────────
+  if (S._colabDraft) {
+    const d = S._colabDraft;
+    const set = (id, v) => { const el = document.getElementById(id); if(el && v !== undefined && v !== null) el.value = v; };
+    set('cl-name',  d.name);
+    set('cl-email', d.email);
+    set('cl-pass',  d.pass);
+    set('cl-phone', d.phone);
+    if (d.unidade) set('cl-unidade', d.unidade);
+    set('cl-valor-entrega',      d.valorEntrega);
+    set('cl-comissao-venda',     d.comissaoVenda);
+    set('cl-comissao-montagem',  d.comissaoMontagem);
+    set('cl-comissao-expedicao', d.comissaoExpedicao);
+    set('cl-meta-montagem-qtd',  d.montagemQtd);
+    set('cl-meta-montagem-per',  d.montagemPer);
+    set('cl-meta-expedicao-qtd', d.expedicaoQtd);
+    set('cl-meta-expedicao-per', d.expedicaoPer);
+    const ckActive = document.getElementById('cl-active');
+    if (ckActive && typeof d.active === 'boolean') ckActive.checked = d.active;
+    // Restaura modulos checados
+    if (d.modulos) {
+      document.querySelectorAll('.cl-cb').forEach(cb => {
+        const k = cb.dataset.mod;
+        if (k in d.modulos) cb.checked = !!d.modulos[k];
+      });
+    }
+    // Limpa o draft apos uso (proxima abertura nao herda)
+    S._colabDraft = null;
+  }
+
   // styleClLbl: funcao local disponivel globalmente para os onclick inline
   window.styleClLbl = function(lbl, on){
     if(!lbl) return;
@@ -509,16 +540,40 @@ export async function showColabModal(colabId=null, overrideCargo=null){
   // (fora do modal — controlados por can() e PERMS_DEFAULT)
   const GERENTE_BLOCKED_MODS = ['whatsapp','backup'];
 
-  // Ao mudar cargo: re-abre modal preservando dados digitados
+  // Ao mudar cargo: re-abre modal preservando TODOS os dados digitados.
+  // ANTES de re-renderizar, captura o estado atual do form em S._colabDraft.
+  // Depois do render, showColabModal restaura via S._colabDraft.
   document.getElementById('cl-cargo')?.addEventListener('change',()=>{
     const newCargo = document.getElementById('cl-cargo')?.value;
+    // Captura draft para nao perder dados ao re-renderizar
+    S._colabDraft = {
+      name:  document.getElementById('cl-name')?.value || '',
+      email: document.getElementById('cl-email')?.value || '',
+      pass:  document.getElementById('cl-pass')?.value || '',
+      phone: document.getElementById('cl-phone')?.value || '',
+      unidade: document.getElementById('cl-unidade')?.value || '',
+      // Captura modulos checados
+      modulos: (() => {
+        const m = {};
+        document.querySelectorAll('.cl-cb').forEach(cb => { m[cb.dataset.mod] = cb.checked; });
+        return m;
+      })(),
+      active: document.getElementById('cl-active')?.checked !== false,
+      // Captura comissoes/metas
+      valorEntrega:     parseFloat(document.getElementById('cl-valor-entrega')?.value) || 0,
+      comissaoVenda:    parseFloat(document.getElementById('cl-comissao-venda')?.value) || 0,
+      comissaoMontagem: parseFloat(document.getElementById('cl-comissao-montagem')?.value) || 0,
+      comissaoExpedicao:parseFloat(document.getElementById('cl-comissao-expedicao')?.value) || 0,
+      montagemQtd:      parseInt(document.getElementById('cl-meta-montagem-qtd')?.value) || 0,
+      montagemPer:      document.getElementById('cl-meta-montagem-per')?.value || 'dia',
+      expedicaoQtd:     parseInt(document.getElementById('cl-meta-expedicao-qtd')?.value) || 0,
+      expedicaoPer:     document.getElementById('cl-meta-expedicao-per')?.value || 'dia',
+    };
+
     if(colabId){
       const all=getColabs(); const i=all.findIndex(c=>c.id===colabId);
       if(i>=0){
         const update = {...all[i], cargo:newCargo};
-        // Gerente: acesso a todas unidades + modulos operacionais
-        // (exclui whatsapp e backup). Usuarios/Config/E-commerce/Notas Fiscais
-        // ja sao bloqueados por PERMS_DEFAULT/can()
         if(newCargo === 'Gerente'){
           update.unidade = 'Todas';
           update.modulos = {};
