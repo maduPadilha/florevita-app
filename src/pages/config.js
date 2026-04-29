@@ -518,9 +518,9 @@ export function renderConfig(){
 
     <!-- Renumerar codigos de produto -->
     <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#DBEAFE,#EFF6FF);border:1px solid #3B82F6;">
-      <div class="card-title">🏷️ Padronizar Códigos de Produto (LE00001)</div>
+      <div class="card-title">🏷️ Padronizar Códigos de Produto (LE0001)</div>
       <div style="font-size:11px;color:#1E40AF;margin-bottom:10px;line-height:1.5;">
-        Renumera <strong>TODOS</strong> os produtos no formato <strong>LE00001, LE00002, LE00003...</strong>
+        Renumera <strong>TODOS</strong> os produtos no formato <strong>LE0001, LE0002, LE0003...</strong>
         Ordenado por data de cadastro (mais antigos primeiro). A partir daí, novos produtos
         recebem código automático sequencial. <strong>Ação irreversível</strong> — códigos antigos serão substituídos.
       </div>
@@ -1062,13 +1062,13 @@ export function bindConfigActions(){
     }
   };}
 
-  // Migracao de codigos de produto LE00001
+  // Migracao de codigos de produto LE0001
   const _runMigrateCodes = async (dryRun) => {
     const out = document.getElementById('migrate-codes-result');
     const btnDry = document.getElementById('btn-migrate-codes-dryrun');
     const btnApp = document.getElementById('btn-migrate-codes');
     if(S.user?.cargo!=='admin' && S.user?.role!=='Administrador'){ toast('Sem permissão'); return; }
-    if (!dryRun && !confirm('Renumerar TODOS os produtos no formato LE00001+?\n\nEsta ação substituirá os códigos atuais e é IRREVERSÍVEL.')) return;
+    if (!dryRun && !confirm('Renumerar TODOS os produtos no formato LE0001+?\n\nEsta ação substituirá os códigos atuais e é IRREVERSÍVEL.')) return;
     if (btnDry) btnDry.disabled = true;
     if (btnApp) btnApp.disabled = true;
     if (out) out.innerHTML = '<div style="padding:8px;color:var(--muted);">⏳ Processando...</div>';
