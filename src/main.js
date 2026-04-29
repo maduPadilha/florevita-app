@@ -1687,15 +1687,62 @@ function bindPageActions(){
       let _pdvHighlight = -1;
       let _pdvCurrentResults = [];
 
-      const addProdToCart = (prod) => {
+      const addProdToCart = (prod, colorChoice) => {
         if(!prod) return;
-        const id = prod._id;
-        const name = prod.name || prod.nome || '';
-        const price = prod.salePrice || prod.preco || 0;
+        const colors = Array.isArray(prod.colors) ? prod.colors : [];
+        // Se tem variacoes de cor e ainda nao escolheu, mostra modal
+        if (colors.length > 0 && !colorChoice) {
+          showColorPicker(prod);
+          return;
+        }
+        const id = prod._id + (colorChoice ? ':' + colorChoice.name : '');
+        const baseName = prod.name || prod.nome || '';
+        const name = colorChoice ? `${baseName} (${colorChoice.name})` : baseName;
+        const basePrice = prod.salePrice || prod.preco || 0;
+        const price = basePrice + (colorChoice?.priceAdjust || 0);
         const ex = PDV.cart.find(i => i.id === id);
         if(ex) PDV.cart = PDV.cart.map(i => i.id === id ? {...i, qty: i.qty + 1} : i);
-        else PDV.cart.push({id, name, price, qty: 1});
+        else PDV.cart.push({id, name, price, qty: 1, colorName: colorChoice?.name, colorHex: colorChoice?.hex});
         render();
+      };
+
+      // Modal simples de seleção de cor
+      const showColorPicker = (prod) => {
+        const colors = prod.colors || [];
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+        const baseName = prod.name || prod.nome || '';
+        const basePrice = prod.salePrice || prod.preco || 0;
+        overlay.innerHTML = `
+          <div style="background:#fff;border-radius:16px;max-width:480px;width:100%;overflow:hidden;box-shadow:0 25px 70px rgba(0,0,0,.3);">
+            <div style="background:#C8736A;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;">
+              <strong>🎨 Escolha a cor — ${baseName}</strong>
+              <button data-cp-close style="background:rgba(255,255,255,.25);color:#fff;border:none;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;">×</button>
+            </div>
+            <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              ${colors.map((c, i) => {
+                const totalP = (basePrice + (c.priceAdjust||0)).toFixed(2).replace('.', ',');
+                const sem = (c.stock||0) === 0;
+                return `<button data-cp-color="${i}" ${sem?'disabled':''} style="background:#fff;border:2px solid ${c.hex||'#ccc'};border-radius:12px;padding:14px 12px;cursor:${sem?'not-allowed':'pointer'};display:flex;flex-direction:column;align-items:center;gap:6px;opacity:${sem?0.45:1};">
+                  <div style="width:42px;height:42px;border-radius:50%;background:${c.hex||'#ccc'};border:2px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.08);"></div>
+                  <div style="font-weight:700;font-size:13px;color:#1F2937;">${c.name}</div>
+                  <div style="font-size:11px;color:#6B7280;">R$ ${totalP}${(c.priceAdjust||0)!==0 ? ` <span style="color:${c.priceAdjust>0?'#D97706':'#059669'};">(${c.priceAdjust>0?'+':''}${c.priceAdjust.toFixed(2).replace('.',',')})</span>` : ''}</div>
+                  <div style="font-size:10px;color:${sem?'var(--red)':'var(--leaf)'};">${sem?'Sem estoque':`${c.stock} em estoque`}</div>
+                </button>`;
+              }).join('')}
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        const close = () => overlay.remove();
+        overlay.addEventListener('click', e => { if(e.target===overlay) close(); });
+        overlay.querySelector('[data-cp-close]')?.addEventListener('click', close);
+        overlay.querySelectorAll('[data-cp-color]').forEach(b => {
+          b.onclick = () => {
+            const c = colors[parseInt(b.dataset.cpColor)];
+            close();
+            addProdToCart(prod, c);
+          };
+        });
       };
 
       const renderSuggestions = (filtered) => {

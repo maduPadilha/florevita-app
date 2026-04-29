@@ -222,7 +222,14 @@ export function renderProdutos(){
     return`<tr>
       <td><div style="display:flex;align-items:center;gap:8px;">
         ${p.images?.[0]?`<img src="${p.images[0]}" loading="lazy" decoding="async" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer" title="${p.name}" onclick="showFullImg('${p.images[0]}')">`:`<span style="font-size:20px">${emoji(p.category)}</span>`}
-        <span style="font-weight:500">${p.name}</span>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <span style="font-weight:500">${p.name}</span>
+          ${(p.colors||[]).length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;">
+            <span style="font-size:9px;color:var(--muted);">🎨</span>
+            ${(p.colors||[]).slice(0,6).map(c => `<span title="${c.name}" style="width:14px;height:14px;border-radius:50%;background:${c.hex||'#999'};border:1px solid rgba(0,0,0,.15);display:inline-block;"></span>`).join('')}
+            ${p.colors.length > 6 ? `<span style="font-size:9px;color:var(--muted);">+${p.colors.length-6}</span>` : ''}
+          </div>` : ''}
+        </div>
       </div></td>
       <td>${(()=>{const cs=getProductCategories(p);return cs.length?cs.map(c=>`<span class="tag t-gray" style="margin:1px;display:inline-block;font-size:10px;">${c}</span>`).join(' '):'\u2014';})()}</td>
       <td style="color:var(--muted)">${$c(p.costPrice)}</td>
@@ -363,6 +370,29 @@ export async function showNewProductModal(prod=null){
     </div>
   </div>
 
+  <!-- SECAO 5b: VARIACOES DE COR -->
+  <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">🎨 Variações — Cores</div>
+  <div style="margin-bottom:16px;background:var(--cream);border-radius:10px;padding:14px;">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">
+      Adicione as cores disponíveis deste produto. Cada cor aparece como opção no PDV e no e-commerce.
+      Você pode incluir um <strong>ajuste de preço</strong> (+/- R$) e <strong>estoque próprio</strong> por cor.
+    </div>
+    <div id="mp-colors-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+      ${(prod?.colors||[]).map((c, idx) => `
+        <div data-color-row="${idx}" style="display:grid;grid-template-columns:36px 1fr 110px 100px 32px;gap:8px;align-items:center;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid var(--border);">
+          <input type="color" value="${c.hex||'#FF6FA8'}" data-color-hex style="width:32px;height:32px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:0;"/>
+          <input type="text" placeholder="Nome (ex: Rosa Pink)" value="${c.name||c.nome||''}" data-color-name style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;"/>
+          <input type="number" placeholder="+0,00" value="${c.priceAdjust||0}" step="0.01" data-color-price style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" title="Ajuste de preço (+/-)"/>
+          <input type="number" placeholder="Estoque" value="${c.stock||0}" min="0" data-color-stock style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" title="Estoque desta variação"/>
+          <button type="button" onclick="this.closest('[data-color-row]').remove()" style="background:rgba(220,38,38,.1);color:var(--red);border:1px solid rgba(220,38,38,.3);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;">×</button>
+        </div>
+      `).join('')}
+    </div>
+    <button type="button" id="mp-color-add" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">
+      ➕ Adicionar Cor
+    </button>
+  </div>
+
   <!-- SECAO 6: CONFIGURACOES DE SITE -->
   <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">🌐 Configuracoes</div>
   <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;">
@@ -453,10 +483,47 @@ export async function showNewProductModal(prod=null){
     reader.readAsDataURL(file);
   });
 
+  // ── Adicionar nova linha de cor ───────────────────────────
+  document.getElementById('mp-color-add')?.addEventListener('click', () => {
+    const list = document.getElementById('mp-colors-list');
+    if (!list) return;
+    const row = document.createElement('div');
+    const idx = list.children.length;
+    row.setAttribute('data-color-row', String(idx));
+    row.style.cssText = 'display:grid;grid-template-columns:36px 1fr 110px 100px 32px;gap:8px;align-items:center;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid var(--border);';
+    row.innerHTML = `
+      <input type="color" value="#FF6FA8" data-color-hex style="width:32px;height:32px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:0;"/>
+      <input type="text" placeholder="Nome (ex: Rosa Pink)" data-color-name style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;"/>
+      <input type="number" placeholder="+0,00" value="0" step="0.01" data-color-price style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" title="Ajuste de preço (+/-)"/>
+      <input type="number" placeholder="Estoque" value="0" min="0" data-color-stock style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" title="Estoque desta variação"/>
+      <button type="button" style="background:rgba(220,38,38,.1);color:var(--red);border:1px solid rgba(220,38,38,.3);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;">×</button>
+    `;
+    row.querySelector('button').onclick = () => row.remove();
+    list.appendChild(row);
+    row.querySelector('[data-color-name]').focus();
+  });
+
   // ── Salvar ────────────────────────────────────────────────
   document.getElementById('btn-mp-save')?.addEventListener('click',()=>{
     saveProduct(prod?._id||null, prod?.code||null);
   });
+}
+
+// Helper: le todas as linhas de variacao de cor do form
+function collectColors(){
+  const rows = document.querySelectorAll('#mp-colors-list [data-color-row]');
+  const colors = [];
+  rows.forEach(r => {
+    const name = r.querySelector('[data-color-name]')?.value?.trim();
+    if (!name) return; // ignora linha sem nome
+    colors.push({
+      name,
+      hex: r.querySelector('[data-color-hex]')?.value || '#FF6FA8',
+      priceAdjust: parseFloat(r.querySelector('[data-color-price]')?.value) || 0,
+      stock: parseInt(r.querySelector('[data-color-stock]')?.value) || 0,
+    });
+  });
+  return colors;
 }
 
 // ── saveProduct ──────────────────────────────────────────────
@@ -511,6 +578,7 @@ export async function saveProduct(editId=null, prodCode=null){
     },
     composto,
     insumos:       composto ? insumos : [],
+    colors:        collectColors(),
     taxation,
     unit: 'Todas',
   };
