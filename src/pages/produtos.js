@@ -257,17 +257,24 @@ export function renderProdutos(){
 
 // ── showNewProductModal ───────────────────────────────────────
 export async function showNewProductModal(prod=null){
+  console.log('[showNewProductModal] abrindo modal — prod:', prod?._id || 'NOVO');
   const edit = !!prod;
   const cats = getCategorias();
   const tax = prod?.taxation||{};
   const d   = prod?.dimensoes||{};
   const draft = S._prodDraft||{};
 
+  // Garante reset de estado de imagem ao abrir (evita lixo de cadastro anterior)
+  if (!edit) S._prodImg = null;
+
   // Initialize selected categories for multi-select
   S._prodCats = getProductCategories(prod);
 
-  S._modal=`<div class="mo" id="mo" onclick="if(event.target===this){S._modal='';S._prodDraft=null;S._prodTab=null;S._prodCats=null;render();}">
-  <div class="mo-box" style="max-width:820px;width:96vw;max-height:92vh;overflow-y:auto;padding:0;" onclick="event.stopPropagation()">
+  // IMPORTANTE: data-prevent-close no overlay impede que o handler global
+  // (main.js _bindModalActions) feche o modal ao detectar cliques. Apenas
+  // o botao ✕ ou clique no overlay (mo) explicitamente fecham.
+  S._modal=`<div class="mo" id="mo" data-prod-modal="1" onclick="if(event.target===this){if(confirm('Descartar cadastro?')){S._modal='';S._prodDraft=null;S._prodTab=null;S._prodCats=null;S._prodImg=null;render();}}">
+  <div class="mo-box" style="max-width:820px;width:96vw;max-height:92vh;overflow-y:auto;padding:0;" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">
 
   <!-- Header fixo -->
   <div style="position:sticky;top:0;background:var(--primary);color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;z-index:10;">

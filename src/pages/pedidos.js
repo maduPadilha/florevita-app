@@ -246,14 +246,19 @@ export function renderPedidos(){
       if(fCanal==='iFood' && !src.includes('ifood')) return false;
     }
     if(fPrior && (o.priority||'Normal')!==fPrior) return false;
-    // Filtro de data: usa scheduledDate quando existe, senao FALLBACK para
-    // createdAt. Pedido lancado hoje sem data agendada (cliente vai retirar
-    // depois) ainda aparece em 'Hoje' porque foi criado hoje.
+    // Filtro de data: aceita pedido se SCHEDULED OU CREATED bate no range.
+    // Pedido vendido HOJE com entrega para AMANHA aparece em 'Hoje' (vendido)
+    // E em 'Amanha' (entrega). Pedido sem scheduledDate aparece pelo createdAt.
     if(fDate1 || fDate2){
-      const refDate = (o.scheduledDate || o.createdAt || '').substring(0, 10);
-      if (!refDate) return false;
-      if (fDate1 && refDate < fDate1) return false;
-      if (fDate2 && refDate > fDate2) return false;
+      const sched = (o.scheduledDate || '').substring(0, 10);
+      const created = (o.createdAt || '').substring(0, 10);
+      const dentroDoRange = (d) => {
+        if (!d) return false;
+        if (fDate1 && d < fDate1) return false;
+        if (fDate2 && d > fDate2) return false;
+        return true;
+      };
+      if (!dentroDoRange(sched) && !dentroDoRange(created)) return false;
     }
     return true;
   });
@@ -340,9 +345,13 @@ export function renderPedidos(){
         </td>
         <td style="color:var(--muted);font-size:11px">${(o.items||[]).map(i=>i.name).join(', ').substring(0,22)||'—'}</td>
         <td style="font-weight:600">${$c(o.total)}</td>
+        <td style="font-size:11px;color:#1F2937;">
+          ${o.createdAt ? `<div style="font-weight:600">${$d(o.createdAt)}</div>` : '<span style="color:var(--muted)">—</span>'}
+          ${o.createdAt ? `<div style="font-size:10px;color:var(--muted);">${new Date(o.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>` : ''}
+        </td>
         <td style="font-size:11px">
-          ${o.scheduledDate?`<div style="font-weight:600">${$d(o.scheduledDate)}</div>`:''}
-          ${o.scheduledPeriod?`<div style="color:var(--muted)">${o.scheduledPeriod}${o.scheduledTime?' · '+o.scheduledTime:''}</div>`:'<span style="color:var(--muted)">—</span>'}
+          ${o.scheduledDate?`<div style="font-weight:600">${$d(o.scheduledDate)}</div>`:'<span style="color:var(--muted)">—</span>'}
+          ${o.scheduledPeriod?`<div style="color:var(--muted);font-size:10px;">${o.scheduledPeriod}${o.scheduledTime?' · '+o.scheduledTime:''}</div>`:''}
         </td>
         <td style="text-align:center;">${canalIcon}</td>
         <td>
@@ -511,7 +520,7 @@ export function renderPedidos(){
           <table>
             <thead><tr>
               <th>#</th><th>Cliente / Dest.</th><th>Bairro</th><th>Unidade</th>
-              <th>Itens</th><th>Total</th><th>Entrega</th><th>Canal</th><th>Status</th><th></th>
+              <th>Itens</th><th>Total</th><th>Data Venda</th><th>Data Entrega</th><th>Canal</th><th>Status</th><th></th>
             </tr></thead>
             <tbody>${renderRows(ped)}</tbody>
           </table>

@@ -469,7 +469,25 @@ export function renderRelatorios(){
       : S.orders.filter(o=>o.unit===unit&&o.source!=='E-commerce')
     : S.orders;
   const filtered= base.filter(o=>inPeriod(o.createdAt));
-  const validos = filtered.filter(o=>o.status!=='Cancelado');
+  // RELATORIOS DE VENDAS = pedidos validos (nao-cancelados) com pagamento
+  // CONFIRMADO. Pedidos com paymentStatus 'Aguardando Pagamento' /
+  // 'Aguardando Comprovante' NAO entram no faturamento ate confirmar.
+  // Status considerados confirmados:
+  //   'Aprovado', 'Pago', 'Pago na Entrega', 'Recebido'
+  const PAGAMENTOS_CONFIRMADOS = ['Aprovado', 'Pago', 'Pago na Entrega', 'Recebido'];
+  const PAGAMENTOS_AG_ENTREGA = ['Ag. Pagamento na Entrega']; // legitimo, mas separado
+  const validos = filtered.filter(o => {
+    if (o.status === 'Cancelado') return false;
+    const ps = String(o.paymentStatus || '').trim();
+    // Pagar na entrega (cliente vai pagar quando chegar) — entra somente
+    // se a entrega ja foi confirmada (status Entregue)
+    if (PAGAMENTOS_AG_ENTREGA.includes(ps)) return o.status === 'Entregue';
+    // Sem paymentStatus definido (legado): assume confirmado se status
+    // 'Entregue' ou 'Pronto'/'Saiu p/ entrega' (operacao normal antiga)
+    if (!ps) return ['Entregue','Pronto','Saiu p/ entrega'].includes(o.status);
+    // Demais: so se confirmado
+    return PAGAMENTOS_CONFIRMADOS.includes(ps);
+  });
   const entregues=filtered.filter(o=>o.status==='Entregue');
   const fat     = validos.reduce((s,o)=>s+(o.total||0),0);
   const ticket  = validos.length ? fat/validos.length : 0;
@@ -957,7 +975,8 @@ ${tab==='vendasUnidade'?(()=>{
   return `
 <div class="card" style="margin-bottom:14px;">
   <div class="card-title">🏪 Vendas por Unidade — ${periodLabel}
-    <span class="tag" style="background:#FEE2E2;color:#991B1B;font-size:10px;margin-left:6px;">⛔ Cancelados não contabilizados</span>
+    <span class="tag" style="background:#D1FAE5;color:#047857;font-size:10px;margin-left:6px;" title="Apenas pedidos com pagamento Aprovado/Pago aparecem nos totais">✅ Pagamento confirmado</span>
+    <span class="tag" style="background:#FEE2E2;color:#991B1B;font-size:10px;margin-left:4px;">⛔ Cancelados não contam</span>
   </div>
   <div class="fr3" style="align-items:end;">
     <div class="fg"><label class="fl">📅 Data inicial</label>
