@@ -225,7 +225,17 @@ export function renderPedidos(){
         if (alvo && getTurnoPedido(o) !== alvo) return false;
       }
     }
-    if(fUnidade && o.unit!==fUnidade) return false;
+    // Filtro de unidade: compara NORMALIZADO (slug) — bate em qualquer
+    // formato salvo (label completo 'Loja Allegro Mall', slug 'allegro',
+    // legado 'Allegro Mall', etc). Considera tambem saleUnit (a loja
+    // que VENDEU): pedido vendido em Allegro mas para retirada em outro
+    // lugar continua aparecendo se filtrar por Allegro.
+    if(fUnidade){
+      const fSlug = normalizeUnidade(fUnidade);
+      const oUnitSlug = normalizeUnidade(o.unidade || o.unit);
+      const oSaleSlug = normalizeUnidade(o.saleUnit);
+      if (oUnitSlug !== fSlug && oSaleSlug !== fSlug) return false;
+    }
     if(fCanal){
       const src=(o.source||'').toLowerCase();
       const tipo=String(o.type||'').toLowerCase();
@@ -236,9 +246,15 @@ export function renderPedidos(){
       if(fCanal==='iFood' && !src.includes('ifood')) return false;
     }
     if(fPrior && (o.priority||'Normal')!==fPrior) return false;
-    // Usa so a parte YYYY-MM-DD da data para comparacao correta
-    if(fDate1 && (!o.scheduledDate || orderDate(o) < fDate1)) return false;
-    if(fDate2 && (!o.scheduledDate || orderDate(o) > fDate2)) return false;
+    // Filtro de data: usa scheduledDate quando existe, senao FALLBACK para
+    // createdAt. Pedido lancado hoje sem data agendada (cliente vai retirar
+    // depois) ainda aparece em 'Hoje' porque foi criado hoje.
+    if(fDate1 || fDate2){
+      const refDate = (o.scheduledDate || o.createdAt || '').substring(0, 10);
+      if (!refDate) return false;
+      if (fDate1 && refDate < fDate1) return false;
+      if (fDate2 && refDate > fDate2) return false;
+    }
     return true;
   });
   // Busca por numero, nome ou telefone
