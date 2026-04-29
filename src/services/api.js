@@ -34,10 +34,16 @@ export async function api(method, path, body=null) {
     try { data = await res.json(); } catch(e) { data = {}; }
 
     if(res.status===401 && S.user && !S.user.isLocalColab){
-      // Importa logout dinamicamente para evitar dependência circular
-      const { logout } = await import('./auth.js');
-      logout();
-      throw new Error('SESSAO_EXPIRADA');
+      // 401 = token expirado/invalido. Antes: logout AUTOMATICO destruia
+      // qualquer modal aberto (cadastro de produto, edicao de pedido, etc).
+      // Agora: SO desloga se o usuario nao esta no meio de uma acao (sem
+      // modal aberto). Senao, retorna erro amigavel para retentar.
+      if (!S._modal) {
+        const { logout } = await import('./auth.js');
+        logout();
+        throw new Error('SESSAO_EXPIRADA');
+      }
+      throw new Error('Sessão expirada. Saia e entre novamente para continuar.');
     }
 
     if(!res.ok) throw new Error(data.error||data.message||`Erro ${res.status}`);

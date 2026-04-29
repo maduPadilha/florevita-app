@@ -163,6 +163,11 @@ export function logout(){
   }catch(e){}
   S.user = null;
   S.token = null;
+  S._modal = '';   // garante que nenhum modal fica preso na tela de login
+  S.orders = [];
+  S.clients = [];
+  S.users = [];
+  S.products = [];
   import('../main.js').then(m => m.render());
 }
 
