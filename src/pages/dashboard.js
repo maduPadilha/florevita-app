@@ -243,8 +243,7 @@ export function renderDashboard(){
       </td>
       <td style="${recipStyle}font-size:12px;">${esc(recip)}</td>
       <td>
-        <div style="font-size:12px;color:#1E293B;">Manaus</div>
-        ${bairro?`<div style="font-size:10px;color:#94A3B8;">${esc(bairro)}</div>`:''}
+        <div style="font-size:12px;color:#1E293B;font-weight:600;">${bairro?esc(bairro):'<span style="color:#94A3B8;font-weight:400;">—</span>'}</div>
       </td>
       <td style="font-weight:700;font-size:12px;color:#1E293B;">${$c(o.total)}</td>
       <td>${timeInputs(o)}</td>
