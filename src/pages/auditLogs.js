@@ -60,6 +60,8 @@ const ACTION_LABELS = {
   create: '➕ Criar',
   update: '✏️ Editar',
   delete: '🗑️ Excluir',
+  edit_order: '✏️ Editar Pedido',
+  clear_audit_logs: '🧹 Limpou Logs',
   emit_nota: '📄 Emitir NF',
   cancel_nota: '🚫 Cancelar NF',
   config_change: '⚙️ Config',
@@ -190,7 +192,10 @@ function renderLogsTab() {
 </div>
 
 <div class="card">
-  <div class="card-title">📋 Registros <span class="notif">${_logs.length} de ${_total}</span></div>
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+    <span>📋 Registros <span class="notif">${_logs.length} de ${_total}</span></span>
+    ${S.user?.role === 'Administrador' ? `<button class="btn btn-sm" id="btn-clear-audit" style="background:#DC2626;color:#fff;">🗑️ Limpar Registros</button>` : ''}
+  </div>
   ${_logs.length === 0 ? `<div class="empty"><p>Nenhum log com esses filtros.</p></div>` : `
   <div style="overflow-x:auto;">
     <table style="width:100%;font-size:11px;">
@@ -202,6 +207,7 @@ function renderLogsTab() {
         <th>Dispositivo</th>
         <th>IP</th>
         <th>Risco</th>
+        <th>Detalhes</th>
       </tr></thead>
       <tbody>
         ${_logs.map(l => {
@@ -219,6 +225,15 @@ function renderLogsTab() {
             <td style="font-family:monospace;font-size:10px;">${l.ip || '—'}</td>
             <td>${riskBadge(l.risk)}
               ${l.riskReasons?.length ? `<div style="font-size:9px;color:var(--muted);margin-top:3px;">${l.riskReasons.join(' · ')}</div>` : ''}
+            </td>
+            <td style="font-size:10px;max-width:280px;">
+              ${l.meta?.orderNumber ? `<div style="font-weight:600;color:var(--rose);">Pedido ${l.meta.orderNumber}</div>` : ''}
+              ${Array.isArray(l.meta?.diff) && l.meta.diff.length ? l.meta.diff.slice(0, 5).map(d => {
+                const de  = String(d.de  ?? '—').slice(0, 40);
+                const para= String(d.para?? '—').slice(0, 40);
+                return `<div style="margin-top:2px;"><strong>${d.campo}:</strong> <span style="color:#991B1B;text-decoration:line-through;">${de}</span> → <span style="color:#065F46;font-weight:600;">${para}</span></div>`;
+              }).join('') + (l.meta.diff.length > 5 ? `<div style="color:var(--muted);">+${l.meta.diff.length-5} alterações</div>` : '') : ''}
+              ${l.meta?.apagados !== undefined ? `<div><strong>Logs apagados:</strong> ${l.meta.apagados}</div>` : ''}
             </td>
           </tr>`;
         }).join('')}
@@ -340,6 +355,26 @@ export function bindAuditLogsEvents() {
     loadLogs();
   };
   document.getElementById('btn-audit-apply')?.addEventListener('click', apply);
+
+  // Botao Limpar Registros — admin only, dupla confirmacao
+  document.getElementById('btn-clear-audit')?.addEventListener('click', async () => {
+    if (S.user?.role !== 'Administrador') return toast('❌ Apenas Administrador', true);
+    const opt = prompt('Apagar registros de quanto tempo atras?\n\nDigite o numero de DIAS (ex: 30 = mais antigos que 30 dias)\nOu deixe VAZIO e clique OK para apagar TODOS.\n\nCancelar para abortar.');
+    if (opt === null) return;
+    const olderThanDays = opt.trim() ? parseInt(opt) : 0;
+    const msg = olderThanDays > 0
+      ? `Apagar logs com mais de ${olderThanDays} dias?`
+      : 'APAGAR TODOS OS REGISTROS DE AUDITORIA? Essa acao e irreversivel.';
+    if (!confirm(msg)) return;
+    const conf = prompt('Para confirmar, digite a palavra: LIMPAR');
+    if (conf !== 'LIMPAR') return toast('Cancelado', true);
+    try {
+      const { api } = await import('../services/api.js');
+      const r = await api('DELETE', '/audit-logs/clear', { confirm: 'LIMPAR', olderThanDays });
+      toast(`✅ ${r.deleted || 0} registros apagados`);
+      loadLogs();
+    } catch (e) { toast('❌ ' + e.message, true); }
+  });
   document.getElementById('btn-audit-clear')?.addEventListener('click', () => {
     S._auditQuery=''; S._auditUser=''; S._auditAction=''; S._auditModule='';
     S._auditRisk=''; S._auditDateFrom=''; S._auditDateTo=''; loadLogs();
