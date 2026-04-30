@@ -148,6 +148,17 @@ export function stopPermissionPolling(){
 });
 
 export function logout(){
+  // Registra logout no backend (fire-and-forget para nao bloquear)
+  try {
+    const tk = S.token || localStorage.getItem('fv2_token');
+    if (tk) {
+      fetch(API + '/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+tk },
+        keepalive: true, // sobrevive ao close da pagina
+      }).catch(()=>{});
+    }
+  } catch(_){}
   // stopPolling is in polling.js — import dynamically to avoid circular deps
   import('./polling.js').then(m => { if(m.stopPolling) m.stopPolling(); }).catch(()=>{});
   // Para também o polling de permissões
@@ -298,6 +309,23 @@ export async function doLogin(email, pass){
         import('../pages/backup.js').then(m => { if(m.startAutoBackup) m.startAutoBackup(); }).catch(()=>{});
       }
       toast('✅ Bem-vindo(a), '+user.name+'!');
+      // ── ALERTA DE SESSAO ABANDONADA ────────────────────────────
+      // Backend detectou login anterior sem logout (>3h atras).
+      if (d.previousSessionAbandoned?.abandoned) {
+        const abandono = d.previousSessionAbandoned;
+        setTimeout(()=>{
+          const dt = new Date(abandono.lastLoginAt);
+          const dataStr = dt.toLocaleString('pt-BR', { timeZone: 'America/Manaus' });
+          alert(
+            '⚠️ ATENÇÃO ' + user.name + '!\n\n' +
+            'Sua última sessão ficou ABERTA sem logout.\n\n' +
+            '📅 Login anterior: ' + dataStr + '\n' +
+            '⏱️ Há ' + abandono.hoursAgo + ' horas\n\n' +
+            '🔒 Lembre-se de SAIR do sistema sempre ao terminar o expediente.\n' +
+            'Sessões abertas geram alertas de segurança e ficam registradas.'
+          );
+        }, 1200);
+      }
       // Mensagem motivacional do dia (com delay para render completar)
       setTimeout(()=>{
         import('../main.js').then(m => {
