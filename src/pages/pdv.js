@@ -740,7 +740,21 @@ export async function _finalizePDV(){
       if(tipo === 'PJ' && cli.inscEstadual) out.clientInscEstadual = cli.inscEstadual;
       return out;
     })(),
-    items:PDV.cart.map(i=>({product:i.id,name:i.name,qty:i.qty,unitPrice:i.price,totalPrice:i.price*i.qty})),
+    // Items: usa o ID BASE do produto (sem ':color' do carrinho) para o
+    // backend conseguir achar e decrementar estoque. Salva colorName/Hex
+    // como campos separados para identificar a variacao.
+    items:PDV.cart.map(i=>{
+      const baseId = String(i.id||'').split(':')[0];
+      return {
+        product: baseId,
+        name: i.name,
+        qty: i.qty,
+        unitPrice: i.price,
+        totalPrice: i.price*i.qty,
+        colorName: i.colorName || undefined,
+        colorHex:  i.colorHex  || undefined,
+      };
+    }),
     subtotal:sub,discount:PDV.discount||0,total,
     payment:PDV.payment,type:PDV.type,
     // Se pagar na entrega → 'Ag. Pagamento na Entrega' (amarelo)
