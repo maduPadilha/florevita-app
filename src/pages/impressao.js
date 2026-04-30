@@ -480,17 +480,24 @@ function _printComandaInternal(orderId){
   const phone = o.recipientPhone||'';
 
   // ── ITENS COM FOTO ─────────────────────────────────────────
+  // Truncate helper: corta nomes/descricoes longas para evitar
+  // estourar a A4 com texto enorme.
+  const truncate = (s, max) => {
+    const t = String(s||'').trim();
+    return t.length > max ? t.slice(0, max-1) + '\u2026' : t;
+  };
   const itemsHtml = (o.items||[]).map(i=>{
     const prod = S.products.find(p=>p._id===i.product||p.name===i.name);
-    const foto = prod?.images?.[0]
-      ? `<img src="${prod.images[0]}" style="width:80px;height:80px;object-fit:cover;border-radius:5px;border:2px solid ${cor};flex-shrink:0;"/>`
-      : `<div style="width:80px;height:80px;border-radius:5px;background:#F5D6E0;display:flex;align-items:center;justify-content:center;font-size:36px;flex-shrink:0;">\u{1F338}</div>`;
-    const complements = [prod?.productionNotes, i.complement, i.notes].filter(Boolean);
-    return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #e5e5e5;">
+    const img  = prod?.imagem || prod?.images?.[0] || prod?.image || '';
+    const foto = img
+      ? `<img src="${img}" style="width:56px;height:56px;object-fit:cover;border-radius:5px;border:2px solid ${cor};flex-shrink:0;"/>`
+      : `<div style="width:56px;height:56px;border-radius:5px;background:#F5D6E0;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">\u{1F338}</div>`;
+    const complements = [prod?.productionNotes, i.complement, i.notes].filter(Boolean).map(c => truncate(c, 80));
+    return `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid #e5e5e5;">
       ${foto}
-      <div style="flex:1">
-        <div style="font-size:19px;font-weight:900;color:#111;">${UC(i.qty)}\u00d7 ${UC(i.name)}</div>
-        ${complements.map(c=>`<div style="font-size:12px;color:#555;margin-top:3px;">\u{1F4CB} ${UC(c)}</div>`).join('')}
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:900;color:#111;line-height:1.2;">${UC(i.qty)}\u00d7 ${UC(truncate(i.name, 60))}</div>
+        ${complements.map(c=>`<div style="font-size:10px;color:#555;margin-top:2px;line-height:1.2;">\u{1F4CB} ${UC(c)}</div>`).join('')}
       </div>
     </div>`;
   }).join('');
@@ -567,8 +574,8 @@ function _printComandaInternal(orderId){
     ${enderecoBlock(cor)}
 
     <!-- Cartao -->
-    ${o.cardMessage?`<div style="background:#FDF4F7;border-left:4px solid ${cor};padding:5px 10px;border-radius:0 6px 6px 0;font-size:11px;text-transform:none;">
-      \u{1F48C} <strong>CART\u00c3O:</strong> "${o.cardMessage}" ${o.identifyClient!==false?'\u2014 DE: '+UC(o.client?.name||o.clientName||''):'\u2014 AN\u00d4NIMO'}</div>`:''}
+    ${o.cardMessage?`<div style="background:#FDF4F7;border-left:4px solid ${cor};padding:5px 10px;border-radius:0 6px 6px 0;font-size:10px;text-transform:none;line-height:1.3;">
+      \u{1F48C} <strong>CART\u00c3O:</strong> "${truncate(o.cardMessage, 240)}" ${o.identifyClient!==false?'\u2014 DE: '+UC(o.client?.name||o.clientName||''):'\u2014 AN\u00d4NIMO'}</div>`:''}
 
     <!-- Horario Especifico (destaque se aplicavel) -->
     ${horarioEspecificoBadge}
@@ -697,10 +704,11 @@ function _printComandaInternal(orderId){
   *{margin:0;padding:0;box-sizing:border-box;}
   body{background:#f0f0f0;font-family:${cmdFonte},Arial,sans-serif;font-size:${cmdTam}px;text-transform:uppercase;}
   .page{width:210mm;margin:0 auto;background:${cmdBg};}
-  /* Cada via e um bloco INDEPENDENTE com sua propria pagina A4. */
+  /* Cada via e um bloco que CABE em UMA pagina A4 inteira.
+     Usa altura fixa + overflow:hidden para garantir 1 folha so. */
   .comanda{
     width:210mm;
-    min-height:297mm;
+    height:281mm;          /* 297 - 16 (margem 8 em cima/baixo) */
     background:${cmdBg};
     margin:0 auto 8mm;
     box-shadow:0 2px 12px rgba(0,0,0,.08);
@@ -708,12 +716,18 @@ function _printComandaInternal(orderId){
     break-after:page;
     page-break-inside:avoid;
     break-inside:avoid;
-    overflow:hidden;
+    overflow:hidden;       /* corta caso ultrapasse — nunca quebra */
+    box-sizing:border-box;
   }
   .comanda:last-child{
     page-break-after:auto;
     break-after:auto;
     margin-bottom:0;
+  }
+  /* Filho direto da comanda preenche a altura toda */
+  .comanda > div{
+    height:100%;
+    overflow:hidden;
   }
   .btn-print{display:block;margin:16px auto;background:#8B2252;color:#fff;border:none;padding:12px 36px;border-radius:8px;font-size:15px;cursor:pointer;font-family:Arial;font-weight:bold;}
   @media print{
@@ -722,13 +736,19 @@ function _printComandaInternal(orderId){
     .page{width:100%;margin:0;}
     .comanda{
       width:100%;
-      min-height:auto;
+      height:auto;
+      max-height:none;
       box-shadow:none;
       margin:0;
       page-break-after:always;
       break-after:page;
       page-break-inside:avoid;
       break-inside:avoid;
+      overflow:hidden;
+    }
+    .comanda > div{
+      height:auto;
+      overflow:visible;
     }
     .comanda:last-child{
       page-break-after:auto;
