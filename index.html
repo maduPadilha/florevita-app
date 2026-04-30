@@ -8,6 +8,11 @@
 <!-- X-Frame-Options REMOVIDO do meta (so funciona via HTTP header; browser reclama) -->
 <!-- A protecao anti-clickjacking e aplicada via CSP 'frame-ancestors' na hospedagem -->
 <meta name="referrer" content="no-referrer">
+<!-- Cache OFF para o index.html — assets com hash continuam cacheaveis.
+     Garante que toda maquina pegue a versao mais recente sem F5 manual. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Laços Eternos — Sistema de Gestão</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>

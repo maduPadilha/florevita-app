@@ -1,5 +1,41 @@
 // ── MAIN ENTRY POINT ────────────────────────────────────────────
 import './styles/main.css';
+
+// ── AUTO-UPDATE FORCADO ─────────────────────────────────────────
+// Bump esse numero a cada release para forcar TODAS as maquinas
+// a limpar cache e baixar a nova versao no proximo F5/login.
+// Formato: AAAAMMDDX (ano-mes-dia-build do dia)
+const APP_VERSION = '20260430-1';
+try {
+  const stored = localStorage.getItem('fv_app_version');
+  if (stored && stored !== APP_VERSION) {
+    console.log('[update] Versao detectada:', stored, '->', APP_VERSION, '— limpando caches');
+    // Preserva so o token e config essenciais — limpa o resto
+    const keepKeys = ['fv2_token', 'fv2_user', 'fv_backend_token', 'fv_recent_logins', 'fv_config'];
+    const keep = {};
+    for (const k of keepKeys) {
+      const v = localStorage.getItem(k);
+      if (v) keep[k] = v;
+    }
+    localStorage.clear();
+    for (const k of Object.keys(keep)) localStorage.setItem(k, keep[k]);
+    // Limpa Service Worker caches se existirem
+    if ('caches' in window) {
+      caches.keys().then(names => names.forEach(n => caches.delete(n))).catch(()=>{});
+    }
+    localStorage.setItem('fv_app_version', APP_VERSION);
+    // Reload uma unica vez (sem entrar em loop)
+    if (!sessionStorage.getItem('fv_force_reloaded')) {
+      sessionStorage.setItem('fv_force_reloaded', '1');
+      location.reload();
+    }
+  } else if (!stored) {
+    localStorage.setItem('fv_app_version', APP_VERSION);
+  }
+  // Reset flag depois de carregar com sucesso
+  setTimeout(() => sessionStorage.removeItem('fv_force_reloaded'), 5000);
+} catch(_){}
+
 import { S, API, PDV, DELIVERY_FEES, saveDeliveryFees, resetPDV } from './state.js';
 import { toast, setPage, getPageFromURL } from './utils/helpers.js';
 import { $c, $d, sc, ini, esc } from './utils/formatters.js';
