@@ -237,14 +237,18 @@ ${shiftFiltered.map(o=>{
     <div style="margin-bottom:10px;">
       ${(o.items||[]).map(item=>{
         const prod = S.products.find(p=>p._id===item.product||p.name===item.name);
-        return`<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--cream);border-radius:var(--r);margin-bottom:6px;">
-          ${prod?.images?.[0]
-            ?`<img src="${prod.images[0]}" style="width:56px;height:56px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid var(--border);flex-shrink:0" onclick="showFullImg('${prod.images[0]}')" title="Clique para ampliar"/>`
-            :`<div style="width:56px;height:56px;border-radius:8px;background:var(--rose-l);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">${emoji(prod?.category||item.name)}</div>`}
-          <div style="flex:1">
-            <div style="font-size:13px;font-weight:600">${item.qty}x ${item.name}</div>
-            ${prod?.productionNotes?`<div style="font-size:10px;color:#0369A1;background:#E0F2FE;padding:2px 6px;border-radius:4px;margin-top:2px;">🎨 ${esc(prod.productionNotes)}</div>`:''}
-            ${item.notes?`<div style="font-size:10px;color:#92400E;background:#FEF3C7;padding:2px 6px;border-radius:4px;margin-top:2px;">📝 ${esc(item.notes)}</div>`:''}
+        const img = prod?.imagem || prod?.images?.[0] || prod?.image || '';
+        const pid = prod?._id || prod?.id || '';
+        return`<div style="display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--cream);border-radius:var(--r);margin-bottom:8px;">
+          <div style="display:flex;justify-content:center;">
+            ${img
+              ?`<img src="${img}" style="width:100%;max-width:280px;height:200px;border-radius:10px;object-fit:contain;background:#fff;border:1px solid var(--border);cursor:zoom-in;" onclick="showFullImg('${img}')" title="Clique para ampliar"/>`
+              :`<div class="prod-img-placeholder-prod" data-pid="${pid}" style="width:100%;max-width:280px;height:200px;border-radius:10px;background:var(--rose-l);display:flex;align-items:center;justify-content:center;font-size:60px;">${emoji(prod?.category||item.name)}</div>`}
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:700;text-align:center;">${item.qty}x ${item.name}</div>
+            ${prod?.productionNotes?`<div style="font-size:11px;color:#0369A1;background:#E0F2FE;padding:4px 8px;border-radius:4px;margin-top:4px;">🎨 <strong>Produção:</strong> ${esc(prod.productionNotes)}</div>`:''}
+            ${item.notes?`<div style="font-size:11px;color:#92400E;background:#FEF3C7;padding:4px 8px;border-radius:4px;margin-top:4px;">📝 ${esc(item.notes)}</div>`:''}
           </div>
         </div>`;
       }).join('')}

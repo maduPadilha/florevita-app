@@ -1845,13 +1845,29 @@ function bindPageActions(){
             .slice(0, 20);
 
           if (filtered.length === 0) {
-            console.log(`[pdv-search] "${q}" → 0 resultados. Total produtos: ${S.products.length}. Tokens busca:`, qTokens);
-            // Mostra ate 5 nomes que CONTEM alguma das palavras (debug)
-            const partials = S.products.filter(p => {
-              const n = norm(p.name||p.nome);
-              return qTokens.some(t => n.includes(t.slice(0,3)));
-            }).slice(0, 5).map(p => p.name||p.nome);
-            if (partials.length) console.log('[pdv-search] Possiveis matches parciais:', partials);
+            console.log(`[pdv-search] "${q}" → 0 resultados local. Buscando no backend...`);
+            // Fallback: busca no backend (regex case-insensitive)
+            // Cobre o caso de produtos novos ainda nao sincronizados em S.products
+            renderSuggestions([]); // loading
+            suggBox.innerHTML = '<div style="padding:16px;text-align:center;color:#94A3B8;font-size:13px;">Buscando no servidor...</div>';
+            suggBox.style.display = 'block';
+            const tk = S.token||localStorage.getItem('fv2_token')||'';
+            fetch(API+'/products?search='+encodeURIComponent(q)+'&limit=20',{
+              headers:{'Authorization':'Bearer '+tk}
+            }).then(r => r.ok ? r.json() : []).then(remote => {
+              if (!Array.isArray(remote)) remote = [];
+              // Adiciona ao S.products os que ainda nao existem
+              for (const p of remote) {
+                const exists = S.products.find(x => String(x._id||x.id) === String(p._id));
+                if (!exists) S.products.push(p);
+              }
+              const ativos = remote.filter(p => p.active!==false && p.ativo!==false);
+              console.log(`[pdv-search] backend retornou ${remote.length} (${ativos.length} ativos)`);
+              renderSuggestions(ativos.slice(0, 20));
+            }).catch(()=>{
+              renderSuggestions([]);
+            });
+            return;
           }
           renderSuggestions(filtered);
         }, 300);
@@ -2375,6 +2391,28 @@ function bindPageActions(){
 
   // ── Produção ──────────────────────────────────────────────────
   if(S.page==='producao'){
+    // Lazy-load das imagens dos produtos visiveis na producao (ate 80)
+    setTimeout(() => {
+      try{
+        const phs = Array.from(document.querySelectorAll('.prod-img-placeholder-prod[data-pid]')).slice(0, 80);
+        const ids = Array.from(new Set(phs.map(el => el.dataset.pid).filter(Boolean)));
+        const need = ids.filter(id => {
+          const p = S.products.find(x => String(x._id||x.id) === String(id));
+          return p && !(p.imagem || p.images?.[0] || p.image);
+        });
+        if (!need.length) return;
+        fetch(API+'/products/images?ids='+encodeURIComponent(need.join(',')), {
+          headers:{ 'Authorization':'Bearer '+(S.token||localStorage.getItem('fv2_token')||'') }
+        }).then(r => r.ok ? r.json() : {}).then(map => {
+          let touched = 0;
+          for (const id of Object.keys(map||{})){
+            const p = S.products.find(x => String(x._id||x.id) === String(id));
+            if (p && map[id]) { p.imagem = map[id]; touched++; }
+          }
+          if (touched) render();
+        }).catch(()=>{});
+      }catch(_){}
+    }, 50);
     {const _el=document.getElementById('btn-rel-orders');if(_el)_el.onclick=async()=>{S.loading=true;render();S.orders=await GET('/orders');S.loading=false;render();};}
     {const _el=document.getElementById('btn-prod-today');if(_el)_el.onclick=()=>{S._prodDate=new Date().toISOString().split('T')[0];render();};}
     document.getElementById('prod-date-picker')?.addEventListener('change',e=>{S._prodDate=e.target.value;render();});
