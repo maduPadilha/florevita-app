@@ -117,13 +117,58 @@ window.removeProductCategory = function(cat){
 };
 function renderProductCategoryUI(){
   const pillsBox = document.getElementById('mp-cat-pills');
-  if(!pillsBox) return;
+  const summary  = document.getElementById('mp-cat-summary');
   const sel = S._prodCats||[];
-  pillsBox.innerHTML = sel.length
-    ? sel.map(c=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#fff;padding:3px 8px;border-radius:12px;font-size:11px;margin:2px;">${c}<button type="button" onclick="removeProductCategory('${c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.3);border:none;color:#fff;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;padding:0;">×</button></span>`).join('')
-    : `<span style="font-size:11px;color:var(--muted);font-style:italic;">Nenhuma categoria selecionada</span>`;
+  if (pillsBox) {
+    pillsBox.innerHTML = sel.map(c=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#fff;padding:3px 8px;border-radius:12px;font-size:11px;margin:2px;">${c}<button type="button" onclick="removeProductCategory('${c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.3);border:none;color:#fff;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;padding:0;">×</button></span>`).join('');
+  }
+  if (summary) {
+    summary.innerHTML = sel.length
+      ? `<strong>${sel.length} categoria${sel.length===1?'':'s'} selecionada${sel.length===1?'':'s'}</strong>`
+      : '<span style="color:var(--muted);font-style:italic;">Clique para escolher</span>';
+  }
 }
 window.renderProductCategoryUI = renderProductCategoryUI;
+
+// Toggle do painel colapsavel de categorias
+window.toggleProductCategoryPanel = function(force){
+  const panel = document.getElementById('mp-cat-panel');
+  if(!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  const next = (force === true) ? true : (force === false) ? false : !isOpen;
+  panel.style.display = next ? 'block' : 'none';
+  if (next) {
+    setTimeout(()=>document.getElementById('mp-cat-search')?.focus(), 50);
+  }
+};
+
+// Filtra a lista de categorias por texto digitado
+window.filterProductCategories = function(query){
+  const q = String(query||'').toLowerCase().trim();
+  document.querySelectorAll('#mp-cat-list [data-cat-row]').forEach(el => {
+    const txt = el.dataset.catRow || '';
+    el.style.display = !q || txt.includes(q) ? '' : 'none';
+  });
+};
+
+// Desmarca todas
+window.clearAllProductCategories = function(){
+  S._prodCats = [];
+  document.querySelectorAll('#mp-cat-list input[type="checkbox"]').forEach(cb => {
+    cb.checked = false;
+    if (cb.parentElement) cb.parentElement.style.background = 'transparent';
+  });
+  renderProductCategoryUI();
+};
+
+// Fecha o painel ao clicar fora
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('mp-cat-panel');
+  const toggle = document.getElementById('mp-cat-toggle');
+  if (!panel || panel.style.display === 'none') return;
+  if (panel.contains(e.target) || toggle?.contains(e.target)) return;
+  panel.style.display = 'none';
+});
 
 // ── PRODUTOS ─────────────────────────────────────────────────
 export function renderProdutos(){
@@ -293,18 +338,30 @@ export async function showNewProductModal(prod=null){
       <label class="fl">Nome do Produto *</label>
       <input class="fi" id="mp-name" value="${draft.name||prod?.name||''}" placeholder="Nome completo do produto"/>
     </div>
-    <div class="fg" style="grid-column:span 2">
-      <label class="fl">Categorias (selecione uma ou mais)</label>
-      <div id="mp-cat-pills" style="min-height:28px;padding:4px;background:var(--cream);border-radius:8px;margin-bottom:6px;">
-        ${(S._prodCats||[]).length
-          ? (S._prodCats||[]).map(c=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#fff;padding:3px 8px;border-radius:12px;font-size:11px;margin:2px;">${c}<button type="button" onclick="removeProductCategory('${c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.3);border:none;color:#fff;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;padding:0;">×</button></span>`).join('')
-          : `<span style="font-size:11px;color:var(--muted);font-style:italic;">Nenhuma categoria selecionada</span>`}
+    <div class="fg" style="grid-column:span 2;position:relative;">
+      <label class="fl">Categorias <span style="font-size:9px;color:var(--muted);">(selecione uma ou mais)</span></label>
+      <!-- Botao colapsavel: mostra resumo e abre/fecha o painel -->
+      <button type="button" id="mp-cat-toggle" onclick="event.preventDefault();toggleProductCategoryPanel();" style="width:100%;text-align:left;padding:9px 12px;background:#fff;border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+        <span id="mp-cat-summary" style="color:var(--ink2);">${(S._prodCats||[]).length ? `<strong>${(S._prodCats||[]).length} categoria${(S._prodCats||[]).length===1?'':'s'} selecionada${(S._prodCats||[]).length===1?'':'s'}</strong>` : '<span style="color:var(--muted);font-style:italic;">Clique para escolher</span>'}</span>
+        <span style="color:var(--muted);font-size:10px;">▼</span>
+      </button>
+      <!-- Pills das selecionadas (clica no × pra remover) -->
+      <div id="mp-cat-pills" style="margin-top:6px;min-height:0;">
+        ${(S._prodCats||[]).map(c=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#fff;padding:3px 8px;border-radius:12px;font-size:11px;margin:2px;">${c}<button type="button" onclick="removeProductCategory('${c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.3);border:none;color:#fff;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;padding:0;">×</button></span>`).join('')}
       </div>
-      <div style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:#fff;">
-        ${cats.map(c=>`<label class="cb" style="display:inline-flex;align-items:center;gap:4px;margin:3px 8px 3px 0;font-size:12px;cursor:pointer;">
-          <input type="checkbox" data-cat-cb="${c}" ${(S._prodCats||[]).includes(c)?'checked':''} onchange="toggleProductCategory('${c.replace(/'/g,"\\'")}', this.checked)"/>
-          <span>${c}</span>
-        </label>`).join('')}
+      <!-- Painel colapsavel (escondido por padrao) -->
+      <div id="mp-cat-panel" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:8px;margin-top:4px;">
+        <input type="text" id="mp-cat-search" placeholder="🔍 Buscar categoria..." oninput="filterProductCategories(this.value)" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px;"/>
+        <div id="mp-cat-list" style="max-height:240px;overflow-y:auto;padding:4px;">
+          ${cats.map(c=>`<label data-cat-row="${c.toLowerCase()}" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:13px;${(S._prodCats||[]).includes(c)?'background:#FAE8E6;':''}" onmouseover="this.style.background='#FFF7F4'" onmouseout="this.style.background='${(S._prodCats||[]).includes(c)?'#FAE8E6':'transparent'}'">
+            <input type="checkbox" data-cat-cb="${c}" ${(S._prodCats||[]).includes(c)?'checked':''} onchange="toggleProductCategory('${c.replace(/'/g,"\\'")}', this.checked); this.parentElement.style.background=this.checked?'#FAE8E6':'transparent';" style="width:16px;height:16px;cursor:pointer;accent-color:var(--primary);"/>
+            <span>${c}</span>
+          </label>`).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 4px 2px;border-top:1px solid var(--border);margin-top:4px;">
+          <button type="button" onclick="event.preventDefault();clearAllProductCategories();" style="background:none;border:none;color:var(--red);font-size:11px;cursor:pointer;">✕ Limpar tudo</button>
+          <button type="button" onclick="event.preventDefault();toggleProductCategoryPanel(false);" class="btn btn-primary btn-sm" style="font-size:11px;padding:4px 12px;">✓ Concluir</button>
+        </div>
       </div>
     </div>
     <div class="fg">
