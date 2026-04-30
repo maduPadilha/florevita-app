@@ -528,7 +528,7 @@ function _printComandaInternal(orderId){
   // VIA CD -- Arquivo interno
   // ═══════════════════════════════════════════════════════════
   const viaCD = `
-  <div style="padding:16px 18px 12px;font-family:Arial,sans-serif;text-transform:uppercase;box-sizing:border-box;width:100%;height:148mm;overflow:hidden;display:flex;flex-direction:column;gap:6px;">
+  <div style="padding:16px 18px 12px;font-family:Arial,sans-serif;text-transform:uppercase;box-sizing:border-box;width:100%;display:flex;flex-direction:column;gap:6px;">
 
     <!-- Header CD -->
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid ${cor};padding-bottom:8px;">
@@ -597,7 +597,7 @@ function _printComandaInternal(orderId){
   const floriSite  = (layout.site||cfg.site||'').toLowerCase();
 
   const viaEntregador = `
-  <div style="padding:14px 18px 10px;font-family:Arial,sans-serif;text-transform:uppercase;box-sizing:border-box;width:100%;height:148mm;overflow:hidden;display:flex;flex-direction:column;gap:5px;">
+  <div style="padding:14px 18px 10px;font-family:Arial,sans-serif;text-transform:uppercase;box-sizing:border-box;width:100%;display:flex;flex-direction:column;gap:5px;">
 
     <!-- Header Entregador -->
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #333;padding-bottom:7px;">
@@ -697,27 +697,53 @@ function _printComandaInternal(orderId){
   *{margin:0;padding:0;box-sizing:border-box;}
   body{background:#f0f0f0;font-family:${cmdFonte},Arial,sans-serif;font-size:${cmdTam}px;text-transform:uppercase;}
   .page{width:210mm;margin:0 auto;background:${cmdBg};}
-  .half-cd{height:148mm;overflow:hidden;border-bottom:3px dashed #999;position:relative;}
-  .half-ent{height:148mm;overflow:hidden;}
-  .cut-label{position:absolute;bottom:-12px;left:50%;transform:translateX(-50%);background:#fff;padding:0 14px;font-size:10px;color:#999;white-space:nowrap;font-family:Arial;letter-spacing:2px;}
+  /* Cada via e um bloco INDEPENDENTE com sua propria pagina A4. */
+  .comanda{
+    width:210mm;
+    min-height:297mm;
+    background:${cmdBg};
+    margin:0 auto 8mm;
+    box-shadow:0 2px 12px rgba(0,0,0,.08);
+    page-break-after:always;
+    break-after:page;
+    page-break-inside:avoid;
+    break-inside:avoid;
+    overflow:hidden;
+  }
+  .comanda:last-child{
+    page-break-after:auto;
+    break-after:auto;
+    margin-bottom:0;
+  }
   .btn-print{display:block;margin:16px auto;background:#8B2252;color:#fff;border:none;padding:12px 36px;border-radius:8px;font-size:15px;cursor:pointer;font-family:Arial;font-weight:bold;}
   @media print{
     body{background:#fff;margin:0;}
     .btn-print{display:none!important;}
     .page{width:100%;margin:0;}
-    .half-cd{height:50vh;page-break-after:avoid;}
-    .half-ent{height:50vh;}
-    @page{size:A4 portrait;margin:0;}
+    .comanda{
+      width:100%;
+      min-height:auto;
+      box-shadow:none;
+      margin:0;
+      page-break-after:always;
+      break-after:page;
+      page-break-inside:avoid;
+      break-inside:avoid;
+    }
+    .comanda:last-child{
+      page-break-after:auto;
+      break-after:auto;
+    }
+    @page{size:A4 portrait;margin:8mm;}
   }
 </style></head>
 <body>
 <button class="btn-print" onclick="window.print()">\u{1F5A8}\uFE0F Imprimir Comanda (A4)</button>
 <div class="page">
-  <div class="half-cd">
+  <div class="comanda tipo-arquivo">
     ${viaCD}
-    <div class="cut-label">\u2702 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 DESTACAR AQUI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 \u2702</div>
   </div>
-  <div class="half-ent">
+  <div class="comanda tipo-entregador">
     ${viaEntregador}
   </div>
 </div>
