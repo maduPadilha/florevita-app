@@ -1723,8 +1723,12 @@ function bindPageActions(){
               ${colors.map((c, i) => {
                 const totalP = (basePrice + (c.priceAdjust||0)).toFixed(2).replace('.', ',');
                 const sem = (c.stock||0) === 0;
-                return `<button data-cp-color="${i}" ${sem?'disabled':''} style="background:#fff;border:2px solid ${c.hex||'#ccc'};border-radius:12px;padding:14px 12px;cursor:${sem?'not-allowed':'pointer'};display:flex;flex-direction:column;align-items:center;gap:6px;opacity:${sem?0.45:1};">
-                  <div style="width:42px;height:42px;border-radius:50%;background:${c.hex||'#ccc'};border:2px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.08);"></div>
+                const cImg = c.image || c.imagem || '';
+                const visual = cImg
+                  ? `<img src="${cImg}" style="width:80px;height:80px;border-radius:10px;object-fit:cover;border:2px solid ${c.hex||'#ccc'};"/>`
+                  : `<div style="width:60px;height:60px;border-radius:50%;background:${c.hex||'#ccc'};border:2px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.08);"></div>`;
+                return `<button data-cp-color="${i}" ${sem?'disabled':''} style="background:#fff;border:2px solid ${c.hex||'#ccc'};border-radius:12px;padding:14px 12px;cursor:${sem?'not-allowed':'pointer'};display:flex;flex-direction:column;align-items:center;gap:8px;opacity:${sem?0.45:1};">
+                  ${visual}
                   <div style="font-weight:700;font-size:13px;color:#1F2937;">${c.name}</div>
                   <div style="font-size:11px;color:#6B7280;">R$ ${totalP}${(c.priceAdjust||0)!==0 ? ` <span style="color:${c.priceAdjust>0?'#D97706':'#059669'};">(${c.priceAdjust>0?'+':''}${c.priceAdjust.toFixed(2).replace('.',',')})</span>` : ''}</div>
                   <div style="font-size:10px;color:${sem?'var(--red)':'var(--leaf)'};">${sem?'Sem estoque':`${c.stock} em estoque`}</div>

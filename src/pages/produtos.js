@@ -488,7 +488,52 @@ export async function showNewProductModal(prod=null){
     if (!list) return;
     const row = document.createElement('div');
     row.setAttribute('data-color-row', '');
-    row.style.cssText = 'display:grid;grid-template-columns:36px 1fr 110px 100px 32px;gap:8px;align-items:center;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid var(--border);';
+    row.style.cssText = 'display:grid;grid-template-columns:48px 36px 1fr 110px 100px 32px;gap:8px;align-items:center;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid var(--border);';
+
+    // ── Foto da cor (thumbnail clicavel) ─────────────────────────
+    // Usuario clica no thumbnail para abrir seletor de arquivo.
+    // base64 fica armazenado em dataset.colorImage (lido em collectColors)
+    const imgWrap = document.createElement('label');
+    imgWrap.style.cssText = 'width:48px;height:48px;border:2px dashed var(--border);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#FAF7F5;font-size:18px;color:var(--muted);position:relative;';
+    imgWrap.title = 'Clique para escolher foto desta cor';
+    if (data.image || data.imagem) {
+      imgWrap.style.borderStyle = 'solid';
+      imgWrap.innerHTML = `<img src="${data.image || data.imagem}" style="width:100%;height:100%;object-fit:cover;"/>`;
+    } else {
+      imgWrap.textContent = '📷';
+    }
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file'; fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    fileInput.dataset.colorImage = '';
+    // armazena base64 atual em data attribute (lido em collectColors)
+    fileInput.setAttribute('data-color-image-base64', data.image || data.imagem || '');
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      if (f.size > 1.5 * 1024 * 1024) {
+        alert('Imagem muito grande (max 1.5 MB). Reduza antes de subir.');
+        e.target.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const b64 = ev.target.result;
+        fileInput.setAttribute('data-color-image-base64', b64);
+        imgWrap.style.borderStyle = 'solid';
+        imgWrap.innerHTML = '';
+        const im = document.createElement('img');
+        im.src = b64;
+        im.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+        imgWrap.appendChild(im);
+        // re-anexa o input dentro do label para continuar funcionando
+        imgWrap.appendChild(fileInput);
+      };
+      reader.readAsDataURL(f);
+    });
+    fileInput.addEventListener('click', e => e.stopPropagation());
+    imgWrap.appendChild(fileInput);
+    imgWrap.addEventListener('click', e => e.stopPropagation());
 
     // Color picker
     const ihex = document.createElement('input');
@@ -531,7 +576,7 @@ export async function showNewProductModal(prod=null){
       row.remove();
     });
 
-    row.append(ihex, inome, ipreco, istk, brm);
+    row.append(imgWrap, ihex, inome, ipreco, istk, brm);
     // Stop propagation no row inteiro pra blindar contra fechamento do modal
     row.addEventListener('click', e => e.stopPropagation());
     list.appendChild(row);
@@ -562,11 +607,14 @@ function collectColors(){
   rows.forEach(r => {
     const name = r.querySelector('[data-color-name]')?.value?.trim();
     if (!name) return; // ignora linha sem nome
+    const imgInput = r.querySelector('[data-color-image]');
+    const image = imgInput?.getAttribute('data-color-image-base64') || '';
     colors.push({
       name,
       hex: r.querySelector('[data-color-hex]')?.value || '#FF6FA8',
       priceAdjust: parseFloat(r.querySelector('[data-color-price]')?.value) || 0,
       stock: parseInt(r.querySelector('[data-color-stock]')?.value) || 0,
+      image: image || undefined,
     });
   });
   return colors;
