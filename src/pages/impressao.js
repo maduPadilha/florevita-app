@@ -1,4 +1,4 @@
-import { S } from '../state.js';
+import { S, API } from '../state.js';
 import { $c } from '../utils/formatters.js';
 import { GET, PUT } from '../services/api.js';
 import { toast, parseLocalDate, formatOrderDate } from '../utils/helpers.js';
@@ -383,9 +383,39 @@ export function printCard(orderId){
 }
 
 // ── PRINT COMANDA ───────────────────────────────────────────────
-export function printComanda(orderId){
+// Antes de imprimir, garante que os produtos do pedido tem imagem
+// carregada em S.products (caso a listagem inicial tenha vindo lite).
+async function ensureProductImagesForOrder(orderId){
+  try {
+    const o = S.orders.find(x => x._id === orderId);
+    if (!o || !Array.isArray(o.items)) return;
+    const need = [];
+    for (const it of o.items) {
+      const pid = it.product;
+      if (!pid || !/^[a-f0-9]{24}$/i.test(String(pid))) continue;
+      const p = S.products.find(x => String(x._id) === String(pid));
+      if (p && !(p.imagem || p.images?.[0] || p.image)) {
+        need.push(pid);
+      }
+    }
+    if (!need.length) return;
+    const tk = S.token || localStorage.getItem('fv2_token') || '';
+    const res = await fetch(API + '/products/images?ids=' + encodeURIComponent(need.join(',')), {
+      headers: { 'Authorization':'Bearer '+tk }
+    });
+    if (!res.ok) return;
+    const map = await res.json();
+    for (const id of Object.keys(map||{})) {
+      const p = S.products.find(x => String(x._id) === String(id));
+      if (p && map[id]) p.imagem = map[id];
+    }
+  } catch(_){}
+}
+
+export async function printComanda(orderId){
   console.log('[printComanda] chamado com orderId=', orderId);
   try {
+    await ensureProductImagesForOrder(orderId);
     return _printComandaInternal(orderId);
   } catch (err) {
     console.error('[printComanda] ERRO:', err);
@@ -650,24 +680,15 @@ function _printComandaInternal(orderId){
     <!-- Cobranca -->
     ${cobrancaBlock}
 
-    <!-- Entregador + QR + Recebimento (compacto, fim) -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:auto;border-top:1px dashed #aaa;padding-top:4px;">
+    <!-- Entregador + QR (sem assinatura/foto a pedido da Marcia) -->
+    <div style="display:flex;align-items:center;justify-content:space-between;background:#f0f0f0;border-radius:6px;padding:6px 10px;margin-top:auto;border-top:1px dashed #aaa;">
       <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;background:#f0f0f0;border-radius:5px;padding:3px 7px;margin-bottom:3px;">
-          <div>
-            <div style="font-size:7px;color:#555;">ENTREGADOR</div>
-            <div style="font-size:11px;font-weight:900;color:#111;line-height:1.1;">${UC(truncate(entregador,18))}</div>
-          </div>
-          <img src="${qrSrc}" style="width:42px;height:42px;"/>
-        </div>
-        <div style="font-size:7px;color:#666;font-weight:700;">NOME / ASSINATURA</div>
-        <div style="border-bottom:1.5px solid #333;height:14px;"></div>
-        <div style="font-size:7px;color:#666;font-weight:700;margin-top:3px;">DATA / HORA</div>
-        <div style="border-bottom:1.5px solid #333;height:14px;"></div>
+        <div style="font-size:8px;color:#555;">ENTREGADOR RESPONSÁVEL</div>
+        <div style="font-size:13px;font-weight:900;color:#111;line-height:1.1;">${UC(truncate(entregador,28))}</div>
       </div>
-      <div style="border:1.5px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:3px;">
-        <div style="font-size:13px;line-height:1;">\u{1F4F7}</div>
-        <div style="font-size:7px;color:#888;text-align:center;font-weight:700;text-transform:none;line-height:1.1;">FOTO/PROVA<br/>DE ENTREGA</div>
+      <div style="text-align:center;">
+        <img src="${qrSrc}" style="width:54px;height:54px;"/>
+        <div style="font-size:7px;color:#555;text-transform:none;">QR = ENTREGUE ✅</div>
       </div>
     </div>
   </div>`;
