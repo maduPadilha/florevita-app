@@ -679,16 +679,26 @@ function _printComandaInternal(orderId){
     <!-- Cobranca -->
     ${cobrancaBlock}
 
-    <!-- Entregador + QR (sem assinatura/foto a pedido da Marcia) -->
-    <div style="display:flex;align-items:center;justify-content:space-between;background:#f0f0f0;border-radius:6px;padding:6px 10px;margin-top:auto;border-top:1px dashed #aaa;">
+    <!-- Entregador + QR -->
+    <div style="display:flex;align-items:center;justify-content:space-between;background:#f0f0f0;border-radius:6px;padding:6px 10px;border-top:1px dashed #aaa;">
       <div>
-        <div style="font-size:8px;color:#555;">ENTREGADOR RESPONSÁVEL</div>
-        <div style="font-size:13px;font-weight:900;color:#111;line-height:1.1;">${UC(truncate(entregador,28))}</div>
+        <div style="font-size:9px;color:#555;font-weight:700;">ENTREGADOR RESPONSÁVEL</div>
+        <div style="font-size:14px;font-weight:900;color:#111;line-height:1.1;">${UC(truncate(entregador,28))}</div>
       </div>
       <div style="text-align:center;">
         <img src="${qrSrc}" style="width:54px;height:54px;"/>
         <div style="font-size:7px;color:#555;text-transform:none;">QR = ENTREGUE ✅</div>
       </div>
+    </div>
+
+    <!-- Recebimento: nome / assinatura / data e hora -->
+    <div style="margin-top:auto;padding-top:6px;border-top:1px dashed #aaa;">
+      <div style="font-size:9px;color:#666;font-weight:700;letter-spacing:.5px;">NOME DE QUEM RECEBE</div>
+      <div style="border-bottom:1.5px solid #333;height:18px;"></div>
+      <div style="font-size:9px;color:#666;font-weight:700;letter-spacing:.5px;margin-top:6px;">ASSINATURA</div>
+      <div style="border-bottom:1.5px solid #333;height:18px;"></div>
+      <div style="font-size:9px;color:#666;font-weight:700;letter-spacing:.5px;margin-top:6px;">DATA E HORA DA ENTREGA</div>
+      <div style="border-bottom:1.5px solid #333;height:18px;"></div>
     </div>
   </div>`;
 
