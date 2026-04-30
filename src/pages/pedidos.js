@@ -5,7 +5,7 @@ import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab } from '../services/auth.js';
 import { invalidateCache } from '../services/cache.js';
 import { getTurnoPedido } from '../utils/zonasManaus.js';
-import { isAdmin, normalizeUnidade, filtrarPedidosParaListagem, siglaUnidade } from '../utils/unidadeRules.js';
+import { isAdmin, normalizeUnidade, labelUnidade, filtrarPedidosParaListagem, siglaUnidade } from '../utils/unidadeRules.js';
 
 // ── PRIORIDADE por antecedencia ──────────────────────────────
 // Quanto mais antigo o pedido (diff entre createdAt e scheduledDate),
@@ -493,7 +493,12 @@ export function renderPedidos(){
 </div>
 
 <div class="card">
-  <div class="card-title">Pedidos <span class="notif">${filtered.length}</span>
+  <div class="card-title">Pedidos <span class="notif">${filtered.length}</span>${(() => {
+      if (isAdmin(S.user)) return '';
+      const lbl = labelUnidade(normalizeUnidade(S.user?.unidade || S.user?.unit));
+      if (!lbl || lbl === '—') return '';
+      return ` <span style="display:inline-flex;align-items:center;gap:5px;background:#FAE8E6;color:#9F1239;border:1.5px solid #FECDD3;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;margin-left:8px;">🏬 ${lbl}</span>`;
+    })()}
     <div style="display:flex;gap:6px">
       <button class="btn btn-ghost btn-sm" id="btn-rel-orders">🔄</button>
       ${S.user?.role === 'Administrador' ? `

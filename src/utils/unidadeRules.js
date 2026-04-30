@@ -93,16 +93,16 @@ function isDelivery(pedido) {
   return t === 'delivery';
 }
 
+// REGRA STRICT: cada unidade so ve pedidos onde ELA opera OU vendeu.
+// Delivery segue mesma regra (sem mais 'visivel para todas').
 export function podeVerPedido(user, pedido) {
   if (isAdmin(user)) return true;
   if (!pedido) return false;
-  // DELIVERY: todas as unidades podem ver (pois sai do CDLE central
-  // mas foi cadastrado por qualquer uma das lojas)
-  if (isDelivery(pedido)) return true;
   const userUnit = normalizeUnidade(user?.unidade || user?.unit);
-  const orderUnit = normalizeUnidade(pedido.unidade || pedido.unit);
   if (!userUnit) return false;
-  return userUnit === orderUnit;
+  const orderUnit = normalizeUnidade(pedido.unidade || pedido.unit);
+  const orderSale = normalizeUnidade(pedido.saleUnit);
+  return userUnit === orderUnit || userUnit === orderSale;
 }
 
 export function filtrarPedidosPorUnidade(user, pedidos) {
@@ -110,9 +110,9 @@ export function filtrarPedidosPorUnidade(user, pedidos) {
   const unidade = normalizeUnidade(user?.unidade || user?.unit);
   if (!unidade) return [];
   return (pedidos || []).filter(p => {
-    // Delivery aparece para todas as unidades
-    if (isDelivery(p)) return true;
-    return normalizeUnidade(p.unidade || p.unit) === unidade;
+    const oUnit = normalizeUnidade(p.unidade || p.unit);
+    const oSale = normalizeUnidade(p.saleUnit);
+    return oUnit === unidade || oSale === unidade;
   });
 }
 
@@ -139,12 +139,13 @@ export function filtrarPedidosParaProducao(user, pedidos) {
 //   - Quem vendeu precisa acompanhar e aprovar pagamento
 //   - Quem produz precisa acompanhar status do pedido
 //   - Delivery e visivel para todos (e operacao da rede)
+// STRICT: cada unidade so ve pedidos onde ELA opera (unidade) OU
+// vendeu (saleUnit). Sem mais excecao para Delivery.
 export function filtrarPedidosParaListagem(user, pedidos) {
   if (isAdmin(user)) return pedidos || [];
   const unidade = normalizeUnidade(user?.unidade || user?.unit);
   if (!unidade || unidade === 'todas') return pedidos || [];
   return (pedidos || []).filter(p => {
-    if (isDelivery(p)) return true; // delivery operacional para todos
     const oUnit = normalizeUnidade(p.unidade || p.unit);
     const oSale = normalizeUnidade(p.saleUnit);
     return oUnit === unidade || oSale === unidade;

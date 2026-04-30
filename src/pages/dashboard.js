@@ -369,12 +369,20 @@ export function renderDashboard(){
   const hasOrders = filtered.length > 0;
   const selCount = selectedOrders.length;
 
+  // Badge da unidade do colaborador (admin nao mostra)
+  const unidadeBadge = (() => {
+    if (isAdmin(S.user)) return '';
+    const lbl = labelUnidade(normalizeUnidade(S.user?.unidade || S.user?.unit));
+    if (!lbl || lbl === '\u2014') return '';
+    return `<span style="display:inline-flex;align-items:center;gap:5px;background:#FAE8E6;color:#9F1239;border:1.5px solid #FECDD3;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;">\ud83c\udfec ${lbl}</span>`;
+  })();
+
   return `
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
   <div style="display:flex;align-items:center;gap:10px;">
     <span style="font-size:20px;">&#127919;</span>
     <div>
-      <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:#1E293B;">Dashboard de Pedidos</div>
+      <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:#1E293B;">Dashboard de Pedidos ${unidadeBadge}</div>
       <div style="font-size:11px;color:#94A3B8;">Atualizado \u00e0s ${hh}:${mm}</div>
     </div>
   </div>
