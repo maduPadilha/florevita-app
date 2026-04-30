@@ -2262,6 +2262,32 @@ function bindPageActions(){
 
   // ── Produtos ──────────────────────────────────────────────────
   if(S.page==='produtos'){
+    // Lazy-load das imagens dos produtos visiveis (placeholder -> img real)
+    // Backend nao manda mais base64 na listagem (pesado demais), entao
+    // buscamos thumbnails dos produtos na tela em lotes de 60.
+    setTimeout(() => {
+      try{
+        const phs = Array.from(document.querySelectorAll('.prod-img-placeholder[data-pid]')).slice(0, 60);
+        const ids = phs.map(el => el.dataset.pid).filter(Boolean);
+        if (!ids.length) return;
+        // Filtra IDs ja com imagem em S.products
+        const need = ids.filter(id => {
+          const p = S.products.find(x => String(x._id||x.id) === String(id));
+          return p && !(p.imagem || p.images?.[0] || p.image);
+        });
+        if (!need.length) return;
+        fetch(API+'/products/images?ids='+encodeURIComponent(need.join(',')), {
+          headers:{ 'Authorization':'Bearer '+(S.token||localStorage.getItem('fv2_token')||'') }
+        }).then(r => r.ok ? r.json() : {}).then(map => {
+          let touched = 0;
+          for (const id of Object.keys(map||{})){
+            const p = S.products.find(x => String(x._id||x.id) === String(id));
+            if (p && map[id]) { p.imagem = map[id]; touched++; }
+          }
+          if (touched) render();
+        }).catch(()=>{});
+      }catch(_){}
+    }, 50);
     {const _el=document.getElementById('btn-new-prod');if(_el)_el.onclick=()=>showNewProductModal();}
     {const _el=document.getElementById('btn-new-prod2');if(_el)_el.onclick=()=>showNewProductModal();}
     {const _el=document.getElementById('btn-rel-prods');if(_el)_el.onclick=async()=>{S.loading=true;render();const pr=await GET('/products').catch(()=>null);if(pr?.length){S.products=pr;saveCachedData();}S.loading=false;render();toast('✅ '+S.products.length+' produtos carregados');};}

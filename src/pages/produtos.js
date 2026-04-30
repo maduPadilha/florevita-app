@@ -223,7 +223,7 @@ export function renderProdutos(){
     return`<tr>
       <td style="font-family:monospace;font-size:12px;font-weight:700;color:#7C3AED;white-space:nowrap;">${codigoProd ? codigoProd : '<span style="color:var(--muted);font-weight:400;">—</span>'}</td>
       <td><div style="display:flex;align-items:center;gap:8px;">
-        ${p.images?.[0]?`<img src="${p.images[0]}" loading="lazy" decoding="async" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer" title="${p.name}" onclick="showFullImg('${p.images[0]}')">`:`<span style="font-size:20px">${emoji(p.category)}</span>`}
+        ${(()=>{const img=p.imagem||p.images?.[0]||p.image||'';return img?`<img src="${img}" loading="lazy" decoding="async" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer" title="${p.name}" onclick="showFullImg('${img}')">`:`<span class="prod-img-placeholder" data-pid="${p._id||p.id||''}" style="font-size:20px;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:6px;background:var(--cream);">${emoji(p.category)}</span>`;})()}
         <div style="display:flex;flex-direction:column;gap:2px;">
           <span style="font-weight:500">${p.name}</span>
           ${(p.colors||[]).length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;">
