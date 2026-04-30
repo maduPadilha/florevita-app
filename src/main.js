@@ -1809,9 +1809,11 @@ function bindPageActions(){
           // Pre-indexa cada produto (lazy, so se nao tem cache)
           const filtered = S.products
             .filter(p => {
-              // Filtra apenas produtos DESATIVADOS. 'activeOnSite' e do
-              // e-commerce — NAO afeta PDV.
-              if(p.active === false || p.ativo === false) return false;
+              // No PDV, so escondemos produtos EXPLICITAMENTE arquivados.
+              // 'active===false' legado nao bloqueia mais (causava sumir
+              // produtos recadastrados como Rosa Unidade Cores).
+              if (p.archived === true) return false;
+              if (p.ativo === false && p.active !== true) return false;
               const name = (p.name || p.nome || '');
               const sku  = (p.sku || p.code || '');
               const cat  = (p.categoria || p.category || (Array.isArray(p.categories) ? p.categories[0] : '') || '');
@@ -1861,7 +1863,11 @@ function bindPageActions(){
                 const exists = S.products.find(x => String(x._id||x.id) === String(p._id));
                 if (!exists) S.products.push(p);
               }
-              const ativos = remote.filter(p => p.active!==false && p.ativo!==false);
+              const ativos = remote.filter(p => {
+                if (p.archived === true) return false;
+                if (p.ativo === false && p.active !== true) return false;
+                return true;
+              });
               console.log(`[pdv-search] backend retornou ${remote.length} (${ativos.length} ativos)`);
               renderSuggestions(ativos.slice(0, 20));
             }).catch(()=>{
