@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260430-1';
+const APP_VERSION = '20260430-2';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2216,6 +2216,40 @@ function bindPageActions(){
 
   // ── Pedidos ───────────────────────────────────────────────────
   if(S.page==='pedidos'){
+    // Dropdown inline para alterar Status de Pagamento direto na lista
+    document.querySelectorAll('select[data-pay-status]').forEach(sel => {
+      sel.addEventListener('change', async (e) => {
+        e.stopPropagation();
+        const orderId = sel.dataset.payStatus;
+        const novo = sel.value;
+        const antigo = sel.dataset.current;
+        if (novo === antigo) return;
+        const order = S.orders.find(o => o._id === orderId);
+        const num = order?.orderNumber || order?.numero || orderId.slice(-5);
+        if (!confirm(`Alterar pagamento do pedido ${num} de "${antigo}" para "${novo}"?`)) {
+          sel.value = antigo;
+          return;
+        }
+        try {
+          const updated = await PATCH('/orders/' + orderId, { paymentStatus: novo });
+          // Atualiza estado local com o objeto retornado pelo backend
+          if (updated && updated._id) {
+            S.orders = S.orders.map(o => o._id === orderId ? { ...o, ...updated } : o);
+          } else {
+            S.orders = S.orders.map(o => o._id === orderId ? { ...o, paymentStatus: novo } : o);
+          }
+          sel.dataset.current = novo;
+          toast(`✅ Pagamento atualizado: ${novo}`);
+          // Re-render para refletir cor + sumir notificacao se aprovado
+          render();
+        } catch (err) {
+          toast('❌ ' + (err.message || 'Erro ao atualizar'), true);
+          sel.value = antigo;
+        }
+      });
+      // Evita que clicar abrir o modal de visualizacao
+      sel.addEventListener('click', e => e.stopPropagation());
+    });
     document.querySelectorAll('[data-ped-status]').forEach(b=>{b.onclick=()=>{S._fStatus=b.dataset.pedStatus; render();};});
     document.querySelectorAll('[data-ped-turno]').forEach(b=>{b.onclick=()=>{S._fTurno=b.dataset.pedTurno; render();};});
     document.querySelectorAll('[data-ped-agrupar]').forEach(b=>{b.onclick=()=>{S._pedAgrupar=b.dataset.pedAgrupar; render();};});

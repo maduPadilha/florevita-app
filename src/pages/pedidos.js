@@ -355,6 +355,34 @@ export function renderPedidos(){
         </td>
         <td style="text-align:center;">${canalIcon}</td>
         <td>
+          ${(() => {
+            const ps = o.paymentStatus || 'Aguardando Pagamento';
+            const opts = [
+              'Aguardando Pagamento',
+              'Aguardando Comprovante',
+              'Ag. Pagamento na Entrega',
+              'Aprovado',
+              'Pago',
+              'Cancelado',
+              'Estornado',
+            ];
+            // Cor do badge conforme status
+            const styleByStatus = {
+              'Aprovado':       'background:#DCFCE7;color:#15803D;border:1px solid #86EFAC;',
+              'Pago':           'background:#DCFCE7;color:#15803D;border:1px solid #86EFAC;',
+              'Aguardando Pagamento': 'background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;',
+              'Aguardando Comprovante':'background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;',
+              'Ag. Pagamento na Entrega':'background:#E0E7FF;color:#3730A3;border:1px solid #A5B4FC;',
+              'Cancelado':      'background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;',
+              'Estornado':      'background:#F3F4F6;color:#4B5563;border:1px solid #D1D5DB;',
+            };
+            const st = styleByStatus[ps] || 'background:#F3F4F6;color:#4B5563;border:1px solid #D1D5DB;';
+            return `<select data-pay-status="${o._id}" data-current="${ps}" style="${st}font-size:10px;font-weight:700;padding:4px 6px;border-radius:8px;cursor:pointer;max-width:140px;">
+              ${opts.map(s => `<option value="${s}" ${s===ps?'selected':''}>${s}</option>`).join('')}
+            </select>`;
+          })()}
+        </td>
+        <td>
           ${o.status==='Saiu p/ entrega'
             ?`<div style="display:flex;flex-direction:column;gap:3px;"><span class="tag ${sc(o.status)}">${o.status}${o.reentregaCount > 0 ? `<span style="background:#F59E0B;color:#fff;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:4px;">🔄 ${o.reentregaCount}x</span>` : ''}</span>${o.driverName?`<span style="background:#DBEAFE;color:#1D4ED8;border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;white-space:nowrap;">🚚 ${o.driverName}</span>`:''}</div>`
             :o.status==='Entregue'
@@ -520,7 +548,7 @@ export function renderPedidos(){
           <table>
             <thead><tr>
               <th>#</th><th>Cliente / Dest.</th><th>Bairro</th><th>Unidade</th>
-              <th>Itens</th><th>Total</th><th>Data da Venda</th><th>Data da Entrega</th><th>Canal</th><th>Status</th><th></th>
+              <th>Itens</th><th>Total</th><th>Data da Venda</th><th>Data da Entrega</th><th>Canal</th><th>Pagamento</th><th>Status</th><th></th>
             </tr></thead>
             <tbody>${renderRows(ped)}</tbody>
           </table>
@@ -532,7 +560,7 @@ export function renderPedidos(){
   <table>
     <thead><tr>
       <th>#</th><th>Cliente / Dest.</th><th>Bairro</th><th>Unidade</th>
-      <th>Itens</th><th>Total</th><th>Data da Venda</th><th>Data da Entrega</th><th>Canal</th><th>Status</th><th></th>
+      <th>Itens</th><th>Total</th><th>Data da Venda</th><th>Data da Entrega</th><th>Canal</th><th>Pagamento</th><th>Status</th><th></th>
     </tr></thead>
     <tbody>${renderRows(filtered)}</tbody>
   </table>
