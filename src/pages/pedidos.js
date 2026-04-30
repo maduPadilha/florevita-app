@@ -197,6 +197,7 @@ export function renderPedidos(){
   const fTurno   = S._fTurno||'';
   const fUnidade = S._fUnidade||'';
   const fCanal   = S._fCanal||'';
+  const fPagamento = S._fPagamento||''; // forma de pagamento (Pix, Cartão, etc)
   const fPrior   = S._fPrioridade||'';
   const fDate1   = S._fDate1||'';
   const fDate2   = S._fDate2||'';
@@ -245,6 +246,11 @@ export function renderPedidos(){
       if(fCanal==='E-commerce' && !(src.includes('ecomm')||src.includes('e-comm')||src==='site')) return false;
       if(fCanal==='iFood' && !src.includes('ifood')) return false;
     }
+    if (fPagamento) {
+      const p = String(o.payment||'').toLowerCase();
+      const f = fPagamento.toLowerCase();
+      if (!p.includes(f)) return false;
+    }
     if(fPrior && (o.priority||'Normal')!==fPrior) return false;
     // Filtro de data: aceita pedido se SCHEDULED OU CREATED bate no range.
     // Pedido vendido HOJE com entrega para AMANHA aparece em 'Hoje' (vendido)
@@ -277,7 +283,7 @@ export function renderPedidos(){
   // Expor filtrados para export (admin)
   S._filteredOrders = filtered;
 
-  const hasFilter = fStatus!=='Todos'||fBairro||fTurno||fUnidade||fCanal||fPrior||fDate1||fDate2||(S._orderSearch||'');
+  const hasFilter = fStatus!=='Todos'||fBairro||fTurno||fUnidade||fCanal||fPagamento||fPrior||fDate1||fDate2||(S._orderSearch||'');
 
   // Helper: renderiza array de pedidos como linhas <tr>. Extraido para
   // permitir agrupamento (visualizacao 'Por Unidade' usa esta funcao).
@@ -482,6 +488,13 @@ export function renderPedidos(){
       </select>
     </div>
     <div>
+      <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">💳 PAGAMENTO</label>
+      <select class="fi" id="ped-filter-pagamento" style="font-size:11px;">
+        <option value="">Todos</option>
+        ${['Pix','Dinheiro','Cartão','Crédito','Débito','Link','Pagar na Entrega','Boleto','Transferência'].map(p=>`<option value="${p}" ${fPagamento===p?'selected':''}>${p}</option>`).join('')}
+      </select>
+    </div>
+    <div>
       <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">⭐ PRIORIDADE</label>
       <select class="fi" id="ped-filter-prioridade" style="font-size:11px;">
         <option value="">Todas</option>
@@ -491,6 +504,58 @@ export function renderPedidos(){
     </div>
   </div>
 </div>
+
+${(() => {
+  // Cards de TOTAL DE VENDAS APROVADAS — usa filtros aplicados.
+  // Considera 'Aprovado' / 'Pago' como pagamento confirmado.
+  const APROVADOS = new Set(['Aprovado', 'Pago', 'aprovado', 'pago']);
+  const aprovados = filtered.filter(o => APROVADOS.has(String(o.paymentStatus||'')));
+  const totalAprovado = aprovados.reduce((s,o) => s + (Number(o.total)||0), 0);
+  // Breakdown por unidade
+  const porUnidade = {};
+  for (const o of aprovados) {
+    const u = labelUnidade(normalizeUnidade(o.saleUnit || o.unidade || o.unit)) || 'Outras';
+    if (!porUnidade[u]) porUnidade[u] = { count:0, total:0 };
+    porUnidade[u].count++;
+    porUnidade[u].total += Number(o.total)||0;
+  }
+  // Breakdown por forma de pagamento
+  const porPag = {};
+  for (const o of aprovados) {
+    const p = o.payment || '—';
+    if (!porPag[p]) porPag[p] = { count:0, total:0 };
+    porPag[p].count++;
+    porPag[p].total += Number(o.total)||0;
+  }
+  return `
+<div class="card" style="background:linear-gradient(135deg,#F0FDF4,#ECFDF5);border:1px solid #BBF7D0;margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+    <div>
+      <div style="font-size:11px;color:#15803D;font-weight:700;letter-spacing:.5px;">✅ TOTAL DE VENDAS APROVADAS</div>
+      <div style="font-size:26px;font-weight:900;color:#15803D;line-height:1.1;">${$c(totalAprovado)}</div>
+      <div style="font-size:11px;color:#16A34A;">${aprovados.length} pedido${aprovados.length===1?'':'s'} confirmado${aprovados.length===1?'':'s'}</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${Object.entries(porUnidade).sort((a,b) => b[1].total - a[1].total).map(([u, v]) => `
+        <div style="background:#fff;border:1px solid #BBF7D0;border-radius:8px;padding:6px 10px;min-width:120px;">
+          <div style="font-size:9px;color:#16A34A;font-weight:700;">🏬 ${u}</div>
+          <div style="font-size:14px;font-weight:900;color:#15803D;">${$c(v.total)}</div>
+          <div style="font-size:9px;color:#86EFAC;">${v.count} venda${v.count===1?'':'s'}</div>
+        </div>`).join('')}
+    </div>
+  </div>
+  ${Object.keys(porPag).length > 0 ? `
+  <div style="display:flex;gap:6px;flex-wrap:wrap;border-top:1px dashed #BBF7D0;padding-top:8px;">
+    <span style="font-size:10px;color:#15803D;font-weight:700;align-self:center;">💳 POR PAGAMENTO:</span>
+    ${Object.entries(porPag).sort((a,b) => b[1].total - a[1].total).map(([p, v]) => `
+      <div style="background:#fff;border:1px solid #DCFCE7;border-radius:6px;padding:4px 8px;">
+        <span style="font-size:10px;font-weight:700;color:#15803D;">${p}:</span>
+        <span style="font-size:11px;font-weight:800;color:#15803D;">${$c(v.total)}</span>
+        <span style="font-size:9px;color:#86EFAC;">(${v.count})</span>
+      </div>`).join('')}
+  </div>` : ''}
+</div>`;
+})()}
 
 <div class="card">
   <div class="card-title">Pedidos <span class="notif">${filtered.length}</span>${(() => {

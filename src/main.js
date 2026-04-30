@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260430-11';
+const APP_VERSION = '20260430-12';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2267,8 +2267,9 @@ function bindPageActions(){
     }
     document.getElementById('ped-filter-unidade')?.addEventListener('change',e=>{S._fUnidade=e.target.value;render();});
     document.getElementById('ped-filter-canal')?.addEventListener('change',e=>{S._fCanal=e.target.value;render();});
+    document.getElementById('ped-filter-pagamento')?.addEventListener('change',e=>{S._fPagamento=e.target.value;render();});
     document.getElementById('ped-filter-prioridade')?.addEventListener('change',e=>{S._fPrioridade=e.target.value;render();});
-    const clearFilters=()=>{S._fStatus='Todos';S._fBairro='';S._fTurno='';S._fUnidade='';S._fCanal='';S._fPrioridade='';S._fDate1='';S._fDate2='';S._orderSearch=''; render();};
+    const clearFilters=()=>{S._fStatus='Todos';S._fBairro='';S._fTurno='';S._fUnidade='';S._fCanal='';S._fPagamento='';S._fPrioridade='';S._fDate1='';S._fDate2='';S._orderSearch=''; render();};
     {const _el=document.getElementById('btn-clear-ped-filters');if(_el)_el.onclick=clearFilters;}
     {const _el=document.getElementById('btn-clear-ped-filters2');if(_el)_el.onclick=clearFilters;}
     {const _el=document.getElementById('btn-rel-orders');if(_el)_el.onclick=async()=>{S.loading=true;render();S.orders=await GET('/orders').catch(()=>S.orders);S.loading=false;render();};}
