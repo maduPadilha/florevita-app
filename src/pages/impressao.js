@@ -479,7 +479,7 @@ function _printComandaInternal(orderId){
     || (o.scheduledTimeEnd && o.scheduledTimeEnd !== '00:00' && o.scheduledTimeEnd !== o.scheduledTime);
   // Badge GRANDE para destacar na comanda (fundo amarelo alerta)
   const horarioEspecificoBadge = isHorarioEspecifico && horario
-    ? `<div style="background:#FEF3C7;border:3px solid #F59E0B;border-radius:8px;padding:10px 14px;text-align:center;font-size:16px;font-weight:900;color:#92400E;margin:8px 0;box-shadow:0 2px 6px rgba(245,158,11,.3);">
+    ? `<div style="background:#FEF3C7;border:3px solid #F59E0B;border-radius:10px;padding:10px 16px;text-align:center;font-size:18px;font-weight:900;color:#92400E;margin:6px 0;letter-spacing:.5px;box-shadow:0 2px 6px rgba(245,158,11,.3);">
         \u23F0 HOR\u00C1RIO ESPEC\u00CDFICO: ${horario}
        </div>` : '';
 
@@ -520,14 +520,14 @@ function _printComandaInternal(orderId){
     const prod = S.products.find(p=>p._id===i.product||p.name===i.name);
     const img  = prod?.imagem || prod?.images?.[0] || prod?.image || '';
     const foto = img
-      ? `<img src="${img}" style="width:56px;height:56px;object-fit:cover;border-radius:5px;border:2px solid ${cor};flex-shrink:0;"/>`
-      : `<div style="width:56px;height:56px;border-radius:5px;background:#F5D6E0;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">\u{1F338}</div>`;
-    const complements = [prod?.productionNotes, i.complement, i.notes].filter(Boolean).map(c => truncate(c, 80));
-    return `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid #e5e5e5;">
+      ? `<img src="${img}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:2px solid ${cor};flex-shrink:0;"/>`
+      : `<div style="width:72px;height:72px;border-radius:6px;background:#F5D6E0;display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0;">\u{1F338}</div>`;
+    const complements = [prod?.productionNotes, i.complement, i.notes].filter(Boolean).map(c => truncate(c, 90));
+    return `<div style="display:flex;align-items:center;gap:12px;padding:5px 0;border-bottom:1px solid #e5e5e5;">
       ${foto}
       <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:900;color:#111;line-height:1.2;">${UC(i.qty)}\u00d7 ${UC(truncate(i.name, 60))}</div>
-        ${complements.map(c=>`<div style="font-size:10px;color:#555;margin-top:2px;line-height:1.2;">\u{1F4CB} ${UC(c)}</div>`).join('')}
+        <div style="font-size:17px;font-weight:900;color:#111;line-height:1.2;">${UC(i.qty)}\u00d7 ${UC(truncate(i.name, 60))}</div>
+        ${complements.map(c=>`<div style="font-size:11px;color:#555;margin-top:3px;line-height:1.25;">\u{1F4CB} ${UC(c)}</div>`).join('')}
       </div>
     </div>`;
   }).join('');
@@ -651,27 +651,26 @@ function _printComandaInternal(orderId){
     <!-- Produto (com foto para conferencia) -->
     <div>${itemsHtml}</div>
 
-    <!-- DESTINATARIO compactado -->
-    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:4px;">
-      <div style="background:#f5f5f5;border-left:4px solid #333;border-radius:0 6px 6px 0;padding:5px 8px;">
-        <div style="font-size:8px;color:#555;font-weight:700;">\u{1F4E6} DESTINAT\u00c1RIO</div>
-        <div style="font-size:14px;font-weight:900;color:#111;line-height:1.1;text-transform:uppercase;">${UC(truncate(o.recipient||'\u2014',26))}</div>
+    <!-- DESTINATARIO + TURNO/HORARIO ampliados -->
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:5px;">
+      <div style="background:#f5f5f5;border-left:5px solid #333;border-radius:0 8px 8px 0;padding:8px 12px;">
+        <div style="font-size:10px;color:#555;font-weight:700;letter-spacing:.5px;">\u{1F4E6} DESTINAT\u00c1RIO</div>
+        <div style="font-size:20px;font-weight:900;color:#111;line-height:1.15;text-transform:uppercase;margin-top:2px;">${UC(truncate(o.recipient||'\u2014',30))}</div>
       </div>
-      <div style="background:#C8436A;border-radius:6px;padding:4px 7px;text-align:center;">
-        <div style="font-size:8px;color:rgba(255,255,255,.85);">\u{1F4C5} ${UC(o.scheduledDate?formatOrderDate(o.scheduledDate,'curta'):'\u2014')}</div>
-        <div style="font-size:11px;font-weight:900;color:#FFD700;">${UC(turno||'\u2014')}</div>
-        ${horario?`<div style="font-size:11px;font-weight:900;color:#fff;background:rgba(0,0,0,0.3);border-radius:3px;padding:1px 4px;">\u23f0 ${UC(horario)}</div>`:''}
+      <div style="background:#C8436A;border-radius:8px;padding:7px 10px;text-align:center;display:flex;flex-direction:column;justify-content:center;">
+        <div style="font-size:10px;color:rgba(255,255,255,.85);font-weight:700;">\u{1F4C5} ${UC(o.scheduledDate?formatOrderDate(o.scheduledDate,'curta'):'\u2014')}</div>
+        <div style="font-size:16px;font-weight:900;color:#FFD700;line-height:1.1;">${UC(turno||'\u2014')}</div>
+        ${horario?`<div style="font-size:13px;font-weight:900;color:#fff;background:rgba(0,0,0,0.3);border-radius:4px;padding:2px 6px;margin-top:3px;">\u23f0 ${UC(horario)}</div>`:''}
       </div>
     </div>
 
-
-    <!-- Endereco compactado -->
-    <div style="background:#f8f8f8;border-left:4px solid #1E5AA8;border-radius:0 6px 6px 0;padding:4px 8px;">
-      <div style="font-size:8px;color:#555;font-weight:700;">\u{1F4CD} ENDERE\u00c7O</div>
-      ${rua?`<div style="font-size:12px;font-weight:800;color:#111;line-height:1.2;">${UC(truncate(rua,55))}</div>`:''}
-      ${bairro?`<div style="font-size:13px;font-weight:900;color:#1E5AA8;line-height:1.1;">${UC(bairro)} \u2014 ${UC(cidade)}</div>`:''}
-      ${cond?`<div style="font-size:11px;font-weight:700;color:#333;line-height:1.1;">\u{1F3E2} ${UC(truncate(cond,50))}</div>`:''}
-      ${ref?`<div style="font-size:9px;color:#555;line-height:1.1;">\u{1F4CD} REF: ${UC(truncate(ref,60))}</div>`:''}
+    <!-- Endereco AMPLIADO -->
+    <div style="background:#f8f8f8;border-left:5px solid #1E5AA8;border-radius:0 8px 8px 0;padding:8px 12px;">
+      <div style="font-size:10px;color:#555;font-weight:700;letter-spacing:.5px;">\u{1F4CD} ENDERE\u00c7O</div>
+      ${rua?`<div style="font-size:16px;font-weight:800;color:#111;line-height:1.2;margin-top:2px;">${UC(truncate(rua,60))}</div>`:''}
+      ${bairro?`<div style="font-size:18px;font-weight:900;color:#1E5AA8;line-height:1.15;margin-top:2px;">${UC(bairro)} \u2014 ${UC(cidade)}</div>`:''}
+      ${cond?`<div style="font-size:13px;font-weight:700;color:#333;line-height:1.2;margin-top:2px;">\u{1F3E2} ${UC(truncate(cond,55))}</div>`:''}
+      ${ref?`<div style="font-size:11px;color:#555;line-height:1.2;margin-top:2px;">\u{1F4CD} REF: ${UC(truncate(ref,70))}</div>`:''}
     </div>
 
     <!-- Horario Especifico -->
