@@ -535,18 +535,18 @@ function _printComandaInternal(orderId){
   // VIA CD -- Arquivo interno
   // ═══════════════════════════════════════════════════════════
   const viaCD = `
-  <div style="padding:16px 18px 12px;font-family:Arial,sans-serif;text-transform:uppercase;box-sizing:border-box;width:100%;display:flex;flex-direction:column;gap:6px;">
+  <div style="padding:8px 14px;font-family:Arial,sans-serif;text-transform:uppercase;box-sizing:border-box;width:100%;height:100%;display:flex;flex-direction:column;gap:4px;">
 
     <!-- Header CD -->
-    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid ${cor};padding-bottom:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid ${cor};padding-bottom:4px;">
       <div>
-        <div style="font-size:14px;font-weight:900;color:${cor};">${empresa}</div>
-        <div style="font-size:11px;color:#555;text-transform:none;">${whats}</div>
-        <div style="background:${cor};color:#fff;display:inline-block;padding:1px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-top:3px;">\u{1F4C2} VIA CD \u2014 ARQUIVO</div>
+        <div style="font-size:12px;font-weight:900;color:${cor};">${empresa}</div>
+        <div style="font-size:9px;color:#555;text-transform:none;">${whats}</div>
+        <div style="background:${cor};color:#fff;display:inline-block;padding:1px 7px;border-radius:20px;font-size:9px;font-weight:700;margin-top:2px;">\u{1F4C2} VIA CD \u2014 ARQUIVO</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:32px;font-weight:900;color:#111;">${orderNumFmt}</div>
-        <div style="font-size:10px;color:#666;">PEDIDO</div>
+        <div style="font-size:24px;font-weight:900;color:#111;line-height:1;">${orderNumFmt}</div>
+        <div style="font-size:8px;color:#666;">PEDIDO</div>
       </div>
     </div>
 
@@ -604,96 +604,72 @@ function _printComandaInternal(orderId){
   const floriSite  = (layout.site||cfg.site||'').toLowerCase();
 
   const viaEntregador = `
-  <div style="padding:14px 18px 10px;font-family:Arial,sans-serif;text-transform:uppercase;box-sizing:border-box;width:100%;display:flex;flex-direction:column;gap:5px;">
+  <div style="padding:8px 14px;font-family:Arial,sans-serif;text-transform:uppercase;box-sizing:border-box;width:100%;height:100%;display:flex;flex-direction:column;gap:4px;">
 
     <!-- Header Entregador -->
-    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #333;padding-bottom:7px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #333;padding-bottom:4px;">
       <div>
-        <div style="font-size:14px;font-weight:900;color:#111;">${empresa}</div>
-        <div style="background:#333;color:#fff;display:inline-block;padding:1px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-top:3px;">\u{1F69A} VIA ENTREGADOR</div>
+        <div style="font-size:12px;font-weight:900;color:#111;">${empresa}</div>
+        <div style="background:#333;color:#fff;display:inline-block;padding:1px 7px;border-radius:20px;font-size:9px;font-weight:700;margin-top:2px;">\u{1F69A} VIA ENTREGADOR</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:32px;font-weight:900;color:#111;">${orderNumFmt}</div>
-        <div style="font-size:10px;color:#666;">PEDIDO</div>
+        <div style="font-size:24px;font-weight:900;color:#111;line-height:1;">${orderNumFmt}</div>
+        <div style="font-size:8px;color:#666;">PEDIDO</div>
       </div>
     </div>
 
-    <!-- Produto -->
+    <!-- Produto (com foto para conferencia) -->
     <div>${itemsHtml}</div>
 
-    <!-- DESTINATARIO em destaque -->
-    <div style="background:#f5f5f5;border-left:6px solid #333;border-radius:0 8px 8px 0;padding:10px 14px;">
-      <div style="font-size:10px;color:#555;font-weight:700;letter-spacing:1px;margin-bottom:3px;">\u{1F4E6} DESTINAT\u00c1RIO</div>
-      <div style="font-size:26px;font-weight:900;color:#111;letter-spacing:0.8px;text-transform:uppercase;">${UC(o.recipient||'\u2014')}</div>
-    </div>
-
-    <!-- BAIRRO + TURNO/HORARIO em destaque -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
-      <div style="background:#1E5AA8;border-radius:6px;padding:7px 10px;text-align:center;">
-        <div style="font-size:9px;color:rgba(255,255,255,.7);margin-bottom:1px;">BAIRRO / ZONA</div>
-        <div style="font-size:17px;font-weight:900;color:#fff;line-height:1.1;">${UC(bairro||'\u2014')}</div>
+    <!-- DESTINATARIO compactado -->
+    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:4px;">
+      <div style="background:#f5f5f5;border-left:4px solid #333;border-radius:0 6px 6px 0;padding:5px 8px;">
+        <div style="font-size:8px;color:#555;font-weight:700;">\u{1F4E6} DESTINAT\u00c1RIO</div>
+        <div style="font-size:14px;font-weight:900;color:#111;line-height:1.1;text-transform:uppercase;">${UC(truncate(o.recipient||'\u2014',26))}</div>
       </div>
-      <div style="background:#C8436A;border-radius:6px;padding:7px 10px;text-align:center;">
-        <div style="font-size:9px;color:rgba(255,255,255,.85);margin-bottom:1px;">\u{1F4C5} DATA \u00b7 TURNO \u00b7 HORA</div>
-        <div style="font-size:12px;font-weight:700;color:#fff;">${UC(o.scheduledDate?formatOrderDate(o.scheduledDate, 'curta'):'\u2014')}</div>
-        <div style="font-size:15px;font-weight:900;color:#FFD700;">${UC(turno||'\u2014')}</div>
-        ${horario?`<div style="font-size:16px;font-weight:900;color:#fff;background:rgba(0,0,0,0.25);border-radius:4px;padding:2px 6px;margin-top:2px;">\u23F0 ${UC(horario)}</div>`:''}
+      <div style="background:#C8436A;border-radius:6px;padding:4px 7px;text-align:center;">
+        <div style="font-size:8px;color:rgba(255,255,255,.85);">\u{1F4C5} ${UC(o.scheduledDate?formatOrderDate(o.scheduledDate,'curta'):'\u2014')}</div>
+        <div style="font-size:11px;font-weight:900;color:#FFD700;">${UC(turno||'\u2014')}</div>
+        ${horario?`<div style="font-size:11px;font-weight:900;color:#fff;background:rgba(0,0,0,0.3);border-radius:3px;padding:1px 4px;">\u23f0 ${UC(horario)}</div>`:''}
       </div>
     </div>
 
-    <!-- Endereco completo (SEM telefone e nome do cliente) -->
-    <div style="background:#f8f8f8;border-left:5px solid #333;border-radius:0 8px 8px 0;padding:10px 14px;">
-      <div style="font-size:10px;color:#555;font-weight:700;letter-spacing:1px;margin-bottom:4px;">\u{1F4CD} ENDERE\u00c7O DE ENTREGA</div>
-      ${rua?`<div style="font-size:17px;font-weight:800;color:#111;text-transform:uppercase;">${UC(rua)}</div>`:''}
-      ${bairro?`<div style="font-size:19px;font-weight:900;color:#1E5AA8;margin-top:3px;text-transform:uppercase;">${UC(bairro)} \u2014 ${UC(cidade)}</div>`:''}
-      ${cond?`<div style="font-size:14px;font-weight:700;color:#333;margin-top:3px;">\u{1F3E2} ${UC(cond)}</div>`:''}
-      ${ref?`<div style="font-size:13px;color:#555;margin-top:3px;">\u{1F4CD} REF: ${UC(ref)}</div>`:''}
+
+    <!-- Endereco compactado -->
+    <div style="background:#f8f8f8;border-left:4px solid #1E5AA8;border-radius:0 6px 6px 0;padding:4px 8px;">
+      <div style="font-size:8px;color:#555;font-weight:700;">\u{1F4CD} ENDERE\u00c7O</div>
+      ${rua?`<div style="font-size:12px;font-weight:800;color:#111;line-height:1.2;">${UC(truncate(rua,55))}</div>`:''}
+      ${bairro?`<div style="font-size:13px;font-weight:900;color:#1E5AA8;line-height:1.1;">${UC(bairro)} \u2014 ${UC(cidade)}</div>`:''}
+      ${cond?`<div style="font-size:11px;font-weight:700;color:#333;line-height:1.1;">\u{1F3E2} ${UC(truncate(cond,50))}</div>`:''}
+      ${ref?`<div style="font-size:9px;color:#555;line-height:1.1;">\u{1F4CD} REF: ${UC(truncate(ref,60))}</div>`:''}
     </div>
 
-    <!-- Horario Especifico (destaque se aplicavel) -->
+    <!-- Horario Especifico -->
     ${horarioEspecificoBadge}
 
     <!-- Cobranca -->
     ${cobrancaBlock}
 
-    <!-- Entregador + QR -->
-    <div style="background:#f0f0f0;border-radius:6px;padding:6px 10px;display:flex;align-items:center;justify-content:space-between;">
+    <!-- Entregador + QR + Recebimento (compacto, fim) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:auto;border-top:1px dashed #aaa;padding-top:4px;">
       <div>
-        <div style="font-size:9px;color:#555;">ENTREGADOR RESPONS\u00c1VEL</div>
-        <div style="font-size:15px;font-weight:900;color:#111;">${entregador}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:#f0f0f0;border-radius:5px;padding:3px 7px;margin-bottom:3px;">
+          <div>
+            <div style="font-size:7px;color:#555;">ENTREGADOR</div>
+            <div style="font-size:11px;font-weight:900;color:#111;line-height:1.1;">${UC(truncate(entregador,18))}</div>
+          </div>
+          <img src="${qrSrc}" style="width:42px;height:42px;"/>
+        </div>
+        <div style="font-size:7px;color:#666;font-weight:700;">NOME / ASSINATURA</div>
+        <div style="border-bottom:1.5px solid #333;height:14px;"></div>
+        <div style="font-size:7px;color:#666;font-weight:700;margin-top:3px;">DATA / HORA</div>
+        <div style="border-bottom:1.5px solid #333;height:14px;"></div>
       </div>
-      <div style="text-align:center;">
-        <img src="${qrSrc}" style="width:65px;height:65px;"/>
-        <div style="font-size:8px;color:#555;margin-top:1px;text-transform:none;">ESCANEAR = ENTREGUE \u2705</div>
-      </div>
-    </div>
-
-    <!-- Recebimento -->
-    <div style="border-top:1px dashed #aaa;padding-top:5px;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto;">
-      <div>
-        <div style="font-size:9px;color:#666;font-weight:700;margin-bottom:3px;">NOME DE QUEM RECEBEU</div>
-        <div style="border-bottom:2px solid #333;height:20px;"></div>
-        <div style="font-size:9px;color:#666;font-weight:700;margin-top:7px;margin-bottom:3px;">ASSINATURA</div>
-        <div style="border-bottom:2px solid #333;height:20px;"></div>
-        <div style="font-size:9px;color:#666;font-weight:700;margin-top:7px;margin-bottom:3px;">DATA E HORA DA ENTREGA</div>
-        <div style="border-bottom:2px solid #333;height:20px;"></div>
-      </div>
-      <div style="border:2px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;min-height:80px;">
-        <div style="font-size:18px;">\u{1F4F7}</div>
-        <div style="font-size:8px;color:#888;text-align:center;font-weight:700;text-transform:none;">FOTO / PROVA<br/>DE ENTREGA</div>
+      <div style="border:1.5px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:3px;">
+        <div style="font-size:13px;line-height:1;">\u{1F4F7}</div>
+        <div style="font-size:7px;color:#888;text-align:center;font-weight:700;text-transform:none;line-height:1.1;">FOTO/PROVA<br/>DE ENTREGA</div>
       </div>
     </div>
-
-    <!-- Rodape: Info da Floricultura -->
-    <div style="border-top:1px solid #ddd;padding-top:3px;margin-top:2px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
-      <div style="font-size:8px;color:#666;text-transform:none;">
-        <strong style="color:#111;font-size:9px;">${empresa}</strong>${floriAddr?' \u00b7 '+floriAddr:''}
-      </div>
-      <div style="font-size:8px;color:#666;text-transform:none;text-align:right;">
-        ${whats}${floriEmail?' \u00b7 '+floriEmail:''}${floriSite?' \u00b7 '+floriSite:''}
-      </div>
-    </div>
-
   </div>`;
 
   // ── HTML final ─────────────────────────────────────────────
@@ -704,57 +680,60 @@ function _printComandaInternal(orderId){
   *{margin:0;padding:0;box-sizing:border-box;}
   body{background:#f0f0f0;font-family:${cmdFonte},Arial,sans-serif;font-size:${cmdTam}px;text-transform:uppercase;}
   .page{width:210mm;margin:0 auto;background:${cmdBg};}
-  /* Cada via e um bloco que CABE em UMA pagina A4 inteira.
-     Usa altura fixa + overflow:hidden para garantir 1 folha so. */
+  /* AS DUAS VIAS EM 1 SO A4 — corta no meio:
+     - Cima: arquivo CD (148mm)
+     - Baixo: entregador (148mm)
+     overflow:hidden garante que conteudo grande nao empurra. */
+  .page{
+    width:210mm;
+    height:297mm;
+    margin:0 auto;
+    background:${cmdBg};
+    page-break-after:auto;
+  }
   .comanda{
     width:210mm;
-    height:281mm;          /* 297 - 16 (margem 8 em cima/baixo) */
+    height:148mm;          /* metade exata de A4 */
     background:${cmdBg};
-    margin:0 auto 8mm;
-    box-shadow:0 2px 12px rgba(0,0,0,.08);
-    page-break-after:always;
-    break-after:page;
+    overflow:hidden;
+    box-sizing:border-box;
+    position:relative;
     page-break-inside:avoid;
     break-inside:avoid;
-    overflow:hidden;       /* corta caso ultrapasse — nunca quebra */
-    box-sizing:border-box;
   }
-  .comanda:last-child{
-    page-break-after:auto;
-    break-after:auto;
-    margin-bottom:0;
+  .comanda.tipo-arquivo{
+    border-bottom:2px dashed #888;
   }
-  /* Filho direto da comanda preenche a altura toda */
-  .comanda > div{
-    height:100%;
-    overflow:hidden;
+  .cut-label{
+    position:absolute;
+    bottom:-9px;
+    left:50%;
+    transform:translateX(-50%);
+    background:#fff;
+    padding:0 14px;
+    font-size:9px;
+    color:#888;
+    white-space:nowrap;
+    font-family:Arial;
+    letter-spacing:2px;
+    z-index:5;
   }
   .btn-print{display:block;margin:16px auto;background:#8B2252;color:#fff;border:none;padding:12px 36px;border-radius:8px;font-size:15px;cursor:pointer;font-family:Arial;font-weight:bold;}
   @media print{
     body{background:#fff;margin:0;}
     .btn-print{display:none!important;}
-    .page{width:100%;margin:0;}
+    .page{width:100%;height:auto;margin:0;}
     .comanda{
       width:100%;
-      height:auto;
-      max-height:none;
+      height:50vh;
       box-shadow:none;
-      margin:0;
-      page-break-after:always;
-      break-after:page;
+      overflow:hidden;
       page-break-inside:avoid;
       break-inside:avoid;
-      overflow:hidden;
+      page-break-after:avoid;
+      break-after:avoid;
     }
-    .comanda > div{
-      height:auto;
-      overflow:visible;
-    }
-    .comanda:last-child{
-      page-break-after:auto;
-      break-after:auto;
-    }
-    @page{size:A4 portrait;margin:8mm;}
+    @page{size:A4 portrait;margin:0;}
   }
 </style></head>
 <body>
@@ -762,6 +741,7 @@ function _printComandaInternal(orderId){
 <div class="page">
   <div class="comanda tipo-arquivo">
     ${viaCD}
+    <div class="cut-label">✂ ─────── DESTACAR AQUI ─────── ✂</div>
   </div>
   <div class="comanda tipo-entregador">
     ${viaEntregador}
