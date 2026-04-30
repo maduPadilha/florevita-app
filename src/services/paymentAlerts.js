@@ -21,6 +21,25 @@ const STATUS_PENDENTE = [
   'Pendente',
   'Aguardando',
 ];
+
+// Status do PEDIDO (nao do pagamento) que ENCERRAM a notificacao.
+// Se o pedido ja foi entregue / cancelado / etc, nao faz sentido alertar
+// que o pagamento esta pendente — o fluxo ja terminou.
+const STATUS_ENCERRADO = new Set([
+  'Entregue',
+  'Cancelado',
+  'Saiu para Entrega',
+  'Pronto',
+  'Em preparo',
+  'Em produção',
+  'Em Producao',
+  'Em Expedição',
+  'Em Expedicao',
+  'Em expedição',
+  'Concluido',
+  'Concluído',
+  'Finalizado',
+]);
 const TEN_MIN_MS = 10 * 60 * 1000;
 
 let _timer = null;
@@ -208,6 +227,13 @@ function check(){
     scanned++;
     if (!STATUS_PENDENTE.includes(o.paymentStatus)) {
       // Pagamento aprovado/cancelado/etc — para de notificar
+      SHOWN_AT.delete(o._id);
+      continue;
+    }
+    // Pedido ja foi adiante (em producao/expedicao/entregue/cancelado)
+    // → nao faz sentido alertar pagamento pendente. So vale para
+    // pedidos em 'Aguardando' (ainda nao iniciados).
+    if (STATUS_ENCERRADO.has(o.status)) {
       SHOWN_AT.delete(o._id);
       continue;
     }
