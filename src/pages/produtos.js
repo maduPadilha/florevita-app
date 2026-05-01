@@ -451,11 +451,16 @@ export async function showNewProductModal(prod=null){
 
   <!-- SECAO 6: CONFIGURACOES DE SITE -->
   <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">🌐 Configuracoes</div>
+  <!-- Toggle DESTACADO de Ativo no E-commerce — controle exclusivo
+       de visibilidade no site. Admin liga/desliga aqui. -->
+  <label style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#FAE8E6,#FAF7F5);border:2px solid #FECDD3;border-radius:12px;padding:12px 16px;margin-bottom:12px;cursor:pointer;">
+    <input type="checkbox" id="mp-site" ${(draft.site!==undefined?draft.site:prod?.activeOnSite)?'checked':''} style="width:20px;height:20px;accent-color:#C8736A;cursor:pointer;"/>
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:14px;color:#9F1239;">🛒 Aparecer no E-commerce (loja online)</div>
+      <div style="font-size:11px;color:#9F1239;opacity:.7;">Quando ativo, o produto fica VISIVEL para clientes no site floriculturalacoseternos.com.br. Estoque é único entre PDV e site.</div>
+    </div>
+  </label>
   <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;">
-    <label class="cb">
-      <input type="checkbox" id="mp-site" ${(draft.site!==undefined?draft.site:prod?.activeOnSite)?'checked':''}/>
-      <span style="font-size:13px;">✅ Ativo no site / e-commerce</span>
-    </label>
     <label class="cb">
       <input type="checkbox" id="mp-composto" ${(draft.composto||prod?.composto)?'checked':''}/>
       <span style="font-size:13px;">🧩 Produto composto (kit de insumos)</span>
