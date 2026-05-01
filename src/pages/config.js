@@ -563,6 +563,66 @@ export function renderConfig(){
       <div id="migrate-codes-result" style="margin-top:10px;font-size:12px;"></div>
     </div>
 
+    <!-- ── INTEGRAÇÕES E APIs (admin only) ──────────────────────── -->
+    ${(S.user?.role==='Administrador') ? `
+    <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#FEFAF8,#FFF);border:1px solid #FECDD3;">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>🌐 Integrações e APIs <span style="font-size:10px;background:#9F1239;color:#fff;padding:2px 6px;border-radius:6px;font-weight:700;">ADM</span></span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Tokens secretos ficam apenas no servidor. IDs públicos são lidos pelo e-commerce automaticamente.</div>
+
+      <!-- Google -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:700;font-size:13px;color:#4285F4;margin-bottom:8px;">📊 Google</div>
+        <div class="fr2" style="gap:8px;">
+          <div class="fg"><label class="fl">Google Analytics 4 ID</label>
+            <input class="fi" id="int-ga-id" placeholder="G-XXXXXXXXXX"/></div>
+          <div class="fg"><label class="fl">Tag Manager ID</label>
+            <input class="fi" id="int-gtm-id" placeholder="GTM-XXXXXXX"/></div>
+        </div>
+        <div class="fg"><label class="fl">Google Ads — ID de Conversão</label>
+          <input class="fi" id="int-gads-id" placeholder="AW-XXXXXXXXX/yyyyyyy"/></div>
+      </div>
+
+      <!-- Meta -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:700;font-size:13px;color:#1877F2;margin-bottom:8px;">📘 Meta (Facebook / Instagram)</div>
+        <div class="fr2" style="gap:8px;">
+          <div class="fg"><label class="fl">Meta Pixel ID</label>
+            <input class="fi" id="int-meta-pixel" placeholder="123456789012345"/></div>
+          <div class="fg"><label class="fl">Conversions API Token <span style="font-size:9px;color:var(--red);">(secreto)</span></label>
+            <input class="fi" id="int-meta-token" type="password" placeholder="EAAB..."/></div>
+        </div>
+      </div>
+
+      <!-- Mercado Pago -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:700;font-size:13px;color:#009EE3;margin-bottom:8px;">💳 Mercado Pago</div>
+        <div class="fg"><label class="fl">Access Token <span style="font-size:9px;color:var(--red);">(secreto)</span></label>
+          <input class="fi" id="int-mp-token" type="password" placeholder="APP_USR-..."/></div>
+        <div class="fg"><label class="fl">Public Key</label>
+          <input class="fi" id="int-mp-public" placeholder="APP_USR-..."/></div>
+        <div style="font-size:10px;color:var(--muted);background:#F0F9FF;padding:6px 8px;border-radius:6px;">
+          ℹ️ Webhook automático: <code>https://florevita-backend-2-0.onrender.com/api/public/mp/webhook</code>
+        </div>
+      </div>
+
+      <!-- WhatsApp -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:700;font-size:13px;color:#25D366;margin-bottom:8px;">💬 WhatsApp</div>
+        <div class="fg"><label class="fl">Número (com DDI+DDD, sem espaços)</label>
+          <input class="fi" id="int-wpp-num" placeholder="5592994064132"/></div>
+        <div class="fg"><label class="fl">Mensagem padrão de saudação</label>
+          <input class="fi" id="int-wpp-msg" placeholder="Olá! Quero comprar 🌹"/></div>
+      </div>
+
+      <button class="btn btn-primary" id="btn-save-integracoes" style="width:100%;">
+        💾 Salvar Integrações
+      </button>
+      <div id="integracoes-status" style="margin-top:8px;font-size:11px;text-align:center;color:var(--muted);"></div>
+    </div>
+    ` : ''}
+
     <div class="card" style="margin-bottom:14px;">
       <div class="card-title">🖼️ Logo da Tela de Login</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">
@@ -937,6 +997,60 @@ export function renderConfig(){
 
 // ── BIND CONFIG PAGE ACTIONS ─────────────────────────────────
 export function bindConfigActions(){
+  // ── INTEGRAÇÕES E APIs (admin) ────────────────────────────────
+  // Carrega valores salvos no banco
+  (async () => {
+    if (S.user?.role !== 'Administrador') return;
+    try {
+      const r = await api('GET', '/settings/integracoes');
+      const cfg = r?.value || {};
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v||''; };
+      set('int-ga-id',     cfg.google?.analyticsId);
+      set('int-gtm-id',    cfg.google?.tagManagerId);
+      set('int-gads-id',   cfg.google?.adsConversionId);
+      set('int-meta-pixel',cfg.meta?.pixelId);
+      set('int-meta-token',cfg.meta?.conversionsToken);
+      set('int-mp-token',  cfg.mercadoPago?.accessToken);
+      set('int-mp-public', cfg.mercadoPago?.publicKey);
+      set('int-wpp-num',   cfg.whatsapp?.number);
+      set('int-wpp-msg',   cfg.whatsapp?.defaultMessage);
+    } catch(_){}
+  })();
+
+  // Salvar integracoes
+  {const _el=document.getElementById('btn-save-integracoes'); if(_el) _el.onclick = async () => {
+    const get = (id) => document.getElementById(id)?.value?.trim() || '';
+    const value = {
+      google: {
+        analyticsId:     get('int-ga-id'),
+        tagManagerId:    get('int-gtm-id'),
+        adsConversionId: get('int-gads-id'),
+      },
+      meta: {
+        pixelId:          get('int-meta-pixel'),
+        conversionsToken: get('int-meta-token'),
+      },
+      mercadoPago: {
+        accessToken: get('int-mp-token'),
+        publicKey:   get('int-mp-public'),
+      },
+      whatsapp: {
+        number: get('int-wpp-num') || '5592994064132',
+        defaultMessage: get('int-wpp-msg'),
+      },
+    };
+    const status = document.getElementById('integracoes-status');
+    if (status) status.textContent = 'Salvando...';
+    try {
+      await api('PUT', '/settings/integracoes', { value });
+      if (status) { status.textContent = '✅ Salvo! E-commerce já reflete em até 5min.'; status.style.color = '#15803D'; }
+      toast('✅ Integrações salvas');
+    } catch(e) {
+      if (status) { status.textContent = '❌ '+(e.message||'erro'); status.style.color = '#DC2626'; }
+      toast('❌ Erro ao salvar', true);
+    }
+  };}
+
   // Reset system
   {const _el=document.getElementById('btn-reset-system');if(_el)_el.onclick=()=>showResetModal();}
 
