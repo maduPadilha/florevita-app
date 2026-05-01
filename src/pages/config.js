@@ -563,6 +563,40 @@ export function renderConfig(){
       <div id="migrate-codes-result" style="margin-top:10px;font-size:12px;"></div>
     </div>
 
+    <!-- ── E-COMMERCE (admin only) ─────────────────────────────── -->
+    ${(S.user?.role==='Administrador') ? `
+    <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#FAF7F5,#FFF);border:1px solid #FECDD3;">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>🛒 E-commerce <span style="font-size:10px;background:#9F1239;color:#fff;padding:2px 6px;border-radius:6px;font-weight:700;">ADM</span></span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Configurações da loja online (floriculturalacoseternos.com.br).</div>
+
+      <label style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;cursor:pointer;">
+        <input type="checkbox" id="ec-accepting" style="width:18px;height:18px;accent-color:#15803D;"/>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:13px;">🟢 Aceitando pedidos online</div>
+          <div style="font-size:10px;color:var(--muted);">Desligue para pausar pedidos (loja mostra mensagem de fechado)</div>
+        </div>
+      </label>
+
+      <div class="fr2" style="gap:8px;">
+        <div class="fg"><label class="fl">Frete fixo (R$)</label>
+          <input class="fi" type="number" step="0.01" id="ec-delivery-fee" placeholder="15.00"/></div>
+        <div class="fg"><label class="fl">Frete grátis acima de (R$)</label>
+          <input class="fi" type="number" step="0.01" id="ec-free-above" placeholder="0 = desativado"/></div>
+      </div>
+      <div class="fg"><label class="fl">Pedido mínimo (R$)</label>
+        <input class="fi" type="number" step="0.01" id="ec-min-order" placeholder="0 = sem mínimo"/></div>
+      <div class="fg"><label class="fl">Mensagem do frete (visível no checkout)</label>
+        <input class="fi" id="ec-shipping-note" placeholder="Entrega em toda Manaus. Taxa fixa."/></div>
+      <div class="fg"><label class="fl">Mensagem quando fechado</label>
+        <input class="fi" id="ec-closed-msg" placeholder="No momento estamos fora do horário online."/></div>
+
+      <button class="btn btn-primary" id="btn-save-ecommerce" style="width:100%;margin-top:6px;">💾 Salvar E-commerce</button>
+      <div id="ecommerce-status" style="margin-top:6px;font-size:11px;text-align:center;color:var(--muted);"></div>
+    </div>
+    ` : ''}
+
     <!-- ── INTEGRAÇÕES E APIs (admin only) ──────────────────────── -->
     ${(S.user?.role==='Administrador') ? `
     <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#FEFAF8,#FFF);border:1px solid #FECDD3;">
@@ -997,6 +1031,46 @@ export function renderConfig(){
 
 // ── BIND CONFIG PAGE ACTIONS ─────────────────────────────────
 export function bindConfigActions(){
+  // ── E-COMMERCE CONFIG (admin) ──────────────────────────────
+  (async () => {
+    if (S.user?.role !== 'Administrador') return;
+    try {
+      const r = await api('GET', '/settings/ecommerce');
+      const cfg = r?.value || {};
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+      const setCb = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v !== false; };
+      setCb('ec-accepting', cfg.acceptingOrders);
+      set('ec-delivery-fee',   cfg.deliveryFee);
+      set('ec-free-above',     cfg.freeShippingAbove);
+      set('ec-min-order',      cfg.minOrderValue);
+      set('ec-shipping-note',  cfg.shippingNote);
+      set('ec-closed-msg',     cfg.closedMessage);
+    } catch(_){}
+  })();
+
+  // Salvar E-commerce
+  {const _el = document.getElementById('btn-save-ecommerce'); if (_el) _el.onclick = async () => {
+    const get = (id) => document.getElementById(id)?.value?.trim() || '';
+    const value = {
+      acceptingOrders: document.getElementById('ec-accepting')?.checked !== false,
+      deliveryFee:       Number(get('ec-delivery-fee')) || 0,
+      freeShippingAbove: Number(get('ec-free-above'))   || 0,
+      minOrderValue:     Number(get('ec-min-order'))    || 0,
+      shippingNote: get('ec-shipping-note') || 'Entrega em toda Manaus. Taxa fixa.',
+      closedMessage: get('ec-closed-msg') || 'No momento estamos fora do horário online.',
+    };
+    const status = document.getElementById('ecommerce-status');
+    if (status) status.textContent = 'Salvando...';
+    try {
+      await api('PUT', '/settings/ecommerce', { value });
+      if (status) { status.textContent = '✅ Salvo! Loja online reflete em até 60s.'; status.style.color = '#15803D'; }
+      toast('✅ E-commerce salvo');
+    } catch(e) {
+      if (status) { status.textContent = '❌ '+(e.message||'erro'); status.style.color = '#DC2626'; }
+      toast('❌ Erro ao salvar', true);
+    }
+  };}
+
   // ── INTEGRAÇÕES E APIs (admin) ────────────────────────────────
   // Carrega valores salvos no banco
   (async () => {
