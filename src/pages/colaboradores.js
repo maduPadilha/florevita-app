@@ -359,7 +359,10 @@ export async function showColabModal(colabId=null, overrideCargo=null){
     </div>
     <div class="fg"><label class="fl">Unidade</label>
       <select class="fi" id="cl-unidade">
-        ${UNIDADES_COLABS.map(u=>`<option value="${u}" ${colab?.unidade===u?'selected':''}>${u}</option>`).join('')}
+        ${UNIDADES_COLABS.map(u=>{
+          const lbl = u==='Loja Novo Aleixo'?'N. Aleixo':u==='Loja Allegro Mall'?'Allegro':u;
+          return `<option value="${u}" ${colab?.unidade===u?'selected':''}>${lbl}</option>`;
+        }).join('')}
       </select>
     </div>
   </div>

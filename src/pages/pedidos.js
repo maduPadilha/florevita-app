@@ -301,7 +301,7 @@ export function renderPedidos(){
       } else if (canalLow.includes('ifood')) {
         canalKey = 'ifood'; canalLabel = 'iFood';
       } else if (canalLow.includes('ecomm') || canalLow.includes('e-comm') || canalLow === 'site') {
-        canalKey = 'ecommerce'; canalLabel = 'E-commerce';
+        canalKey = 'ecommerce'; canalLabel = 'Site';
       } else if (o.type === 'Balcão' || o.type === 'Balcao' || canalLow.includes('balc')) {
         canalKey = 'balcao'; canalLabel = 'Balcão';
       } else {
@@ -477,14 +477,24 @@ export function renderPedidos(){
       <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">🏪 UNIDADE</label>
       <select class="fi" id="ped-filter-unidade" style="font-size:11px;">
         <option value="">Todas</option>
-        ${['Loja Novo Aleixo','Loja Allegro Mall','CDLE','E-commerce'].map(u=>`<option value="${u}" ${fUnidade===u?'selected':''}>${u}</option>`).join('')}
+        ${[
+          { value:'Loja Novo Aleixo', label:'N. Aleixo' },
+          { value:'Loja Allegro Mall', label:'Allegro' },
+          { value:'CDLE', label:'CDLE' },
+          { value:'E-commerce', label:'Site' },
+        ].map(u=>`<option value="${u.value}" ${fUnidade===u.value?'selected':''}>${u.label}</option>`).join('')}
       </select>
     </div>
     <div>
       <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">📲 CANAL</label>
       <select class="fi" id="ped-filter-canal" style="font-size:11px;">
         <option value="">Todos</option>
-        ${['WhatsApp/Online','E-commerce','iFood','Balcão'].map(c=>`<option value="${c}" ${fCanal===c?'selected':''}>${c}</option>`).join('')}
+        ${[
+          { value:'WhatsApp/Online', label:'WhatsApp/Online' },
+          { value:'E-commerce',      label:'Site' },
+          { value:'iFood',           label:'iFood' },
+          { value:'Balcão',          label:'Balcão' },
+        ].map(c=>`<option value="${c.value}" ${fCanal===c.value?'selected':''}>${c.label}</option>`).join('')}
       </select>
     </div>
     <div>

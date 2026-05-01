@@ -598,10 +598,10 @@ export function renderRelatorios(){
     ${(( S.user?.role==='Administrador'||S.user?.cargo==='admin')||S.user.role==='Gerente')?`
     <select class="fi" id="rel-unit-filter" style="width:auto;">
       <option value="">Todas as unidades</option>
-      <option value="Loja Novo Aleixo" ${unit==='Loja Novo Aleixo'?'selected':''}>Loja Novo Aleixo</option>
-      <option value="Loja Allegro Mall" ${unit==='Loja Allegro Mall'?'selected':''}>Loja Allegro Mall</option>
+      <option value="Loja Novo Aleixo" ${unit==='Loja Novo Aleixo'?'selected':''}>N. Aleixo</option>
+      <option value="Loja Allegro Mall" ${unit==='Loja Allegro Mall'?'selected':''}>Allegro</option>
       <option value="CDLE" ${unit==='CDLE'?'selected':''}>CDLE</option>
-      <option value="E-commerce" ${unit==='E-commerce'?'selected':''}>E-commerce</option>
+      <option value="E-commerce" ${unit==='E-commerce'?'selected':''}>Site</option>
     </select>`:''}
     <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨️ Imprimir</button>
   </div>

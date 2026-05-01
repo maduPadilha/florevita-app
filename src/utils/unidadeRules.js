@@ -22,18 +22,28 @@ export function siglaUnidade(unitOrSlug) {
   if (raw.includes('cdle') || raw.includes('distribui')) return { sigla:'CDLE', cor:'#DC2626', bg:'#FEE2E2' };
   if (raw.includes('aleixo')) return { sigla:'NA',   cor:'#1D4ED8', bg:'#DBEAFE' };
   if (raw.includes('allegro')) return { sigla:'AL',  cor:'#047857', bg:'#D1FAE5' };
-  if (raw.includes('ecomm') || raw.includes('e-comm')) return { sigla:'EC', cor:'#6D28D9', bg:'#EDE9FE' };
+  if (raw.includes('ecomm') || raw.includes('e-comm') || raw === 'site') return { sigla:'SITE', cor:'#6D28D9', bg:'#EDE9FE' };
   return { sigla: raw.slice(0,3).toUpperCase(), cor:'#4B5563', bg:'#F3F4F6' };
 }
 
 export function labelUnidade(slug) {
   const s = normalizeUnidade(slug);
   return ({
-    novo_aleixo: 'Loja Novo Aleixo',
-    allegro: 'Loja Allegro Mall',
+    novo_aleixo: 'N. Aleixo',
+    allegro: 'Allegro',
     cdle: 'CDLE',
     todas: 'Todas',
   })[s] || slug || '—';
+}
+
+// Renomeia label de canal/source (apenas para exibicao)
+export function labelCanal(source) {
+  const s = String(source||'').toLowerCase();
+  if (s.includes('ecomm') || s.includes('e-comm') || s === 'site') return 'Site';
+  if (s.includes('whatsapp') || s === 'pdv' || s === 'online') return 'WhatsApp/Online';
+  if (s.includes('ifood')) return 'iFood';
+  if (s.includes('balc')) return 'Balcão';
+  return source || '—';
 }
 
 export function isAdmin(user) {

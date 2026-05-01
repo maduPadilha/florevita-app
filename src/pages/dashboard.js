@@ -446,8 +446,8 @@ export function renderDashboard(){
     <select class="fi" id="dash-filter-unit" style="width:auto;min-width:130px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;">
       <option value="">Todas Unidades</option>
       <option ${filterUnit==='CDLE'?'selected':''}>CDLE</option>
-      <option ${filterUnit==='Loja Novo Aleixo'?'selected':''}>Loja Novo Aleixo</option>
-      <option ${filterUnit==='Loja Allegro Mall'?'selected':''}>Loja Allegro Mall</option>
+      <option value="Loja Novo Aleixo" ${filterUnit==='Loja Novo Aleixo'?'selected':''}>N. Aleixo</option>
+      <option value="Loja Allegro Mall" ${filterUnit==='Loja Allegro Mall'?'selected':''}>Allegro</option>
     </select>
     <!-- Filtro por Bairro especifico -->
     <select class="fi" id="dash-filter-bairro" style="width:auto;min-width:160px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;">
