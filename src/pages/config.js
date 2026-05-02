@@ -622,6 +622,53 @@ export function renderConfig(){
       <div class="fg"><label class="fl">Mensagem quando fechado</label>
         <input class="fi" id="ec-closed-msg" placeholder="No momento estamos fora do horário online."/></div>
 
+      <!-- ── APARÊNCIA DO SITE ─────────────────────────── -->
+      <details style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:12px;color:var(--ink);padding:4px 0;">🎨 Aparência do Site</summary>
+        <div class="fr2" style="gap:8px;margin-top:8px;">
+          <div class="fg"><label class="fl">Nome do Site</label>
+            <input class="fi" id="ec-site-name" placeholder="Floricultura Laços Eternos"/></div>
+          <div class="fg"><label class="fl">Tagline / Subtítulo</label>
+            <input class="fi" id="ec-site-tagline" placeholder="Flores que dizem tudo por você"/></div>
+        </div>
+        <div class="fr2" style="gap:8px;">
+          <div class="fg"><label class="fl">Cor Principal</label>
+            <input class="fi" id="ec-color-primary" type="color" value="#C8736A" style="height:38px;padding:2px;"/></div>
+          <div class="fg"><label class="fl">Cor Secundária</label>
+            <input class="fi" id="ec-color-secondary" type="color" value="#B8915E" style="height:38px;padding:2px;"/></div>
+        </div>
+        <div class="fg"><label class="fl">URL do Logo (PNG/SVG)</label>
+          <input class="fi" id="ec-site-logo" placeholder="https://... ou cole base64"/></div>
+        <div class="fg"><label class="fl">URL do Favicon</label>
+          <input class="fi" id="ec-site-favicon" placeholder="https://... ou cole base64"/></div>
+      </details>
+
+      <!-- ── HERO (banner principal) ─────────────────────── -->
+      <details style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:12px;color:var(--ink);padding:4px 0;">🖼️ Banner Principal (Hero)</summary>
+        <div class="fg"><label class="fl">Título Principal</label>
+          <input class="fi" id="ec-hero-title" placeholder="Surpreenda quem você ama"/></div>
+        <div class="fg"><label class="fl">Subtítulo</label>
+          <input class="fi" id="ec-hero-subtitle" placeholder="Buquês, cestas e arranjos..."/></div>
+        <div class="fg"><label class="fl">URL da Imagem Hero</label>
+          <input class="fi" id="ec-hero-banner" placeholder="https://..."/></div>
+      </details>
+
+      <!-- ── DEPOIMENTOS ──────────────────────────────────── -->
+      <details style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:12px;color:var(--ink);padding:4px 0;">⭐ Depoimentos / Avaliações</summary>
+        <div id="ec-reviews-list" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-add-review" style="margin-top:6px;">+ Adicionar Depoimento</button>
+      </details>
+
+      <!-- ── PÁGINAS INSTITUCIONAIS ──────────────────────── -->
+      <details style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:12px;color:var(--ink);padding:4px 0;">📄 Páginas Institucionais</summary>
+        <div style="font-size:10px;color:var(--muted);margin:4px 0 8px;">Edite os textos das páginas: Quem Somos, Trocas e Devoluções, Política de Privacidade, etc.</div>
+        <div id="ec-pages-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-add-page" style="margin-top:6px;">+ Adicionar Página</button>
+      </details>
+
       <button class="btn btn-primary" id="btn-save-ecommerce" style="width:100%;margin-top:6px;">💾 Salvar E-commerce</button>
       <div id="ecommerce-status" style="margin-top:6px;font-size:11px;text-align:center;color:var(--muted);"></div>
     </div>
@@ -1101,6 +1148,54 @@ export function bindConfigActions(){
   };
   document.querySelectorAll('input[name="ec-mode"]').forEach(r => r.onchange = _applyModeHighlight);
 
+  // Estado local para reviews + pages
+  let _ecReviews = [];
+  let _ecPages = [];
+  const _renderReviews = () => {
+    const list = document.getElementById('ec-reviews-list');
+    if (!list) return;
+    list.innerHTML = _ecReviews.map((r, i) => `
+      <div style="background:var(--cream);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px;">
+        <div style="display:flex;gap:6px;">
+          <input value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Nome do cliente" data-rev-name="${i}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11px;"/>
+          <select data-rev-stars="${i}" style="padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11px;">
+            ${[5,4,3,2,1].map(n=>`<option value="${n}" ${(r.stars||5)===n?'selected':''}>${'★'.repeat(n)}</option>`).join('')}
+          </select>
+          <button type="button" data-rev-del="${i}" style="background:#FEE2E2;border:none;color:#991B1B;width:28px;border-radius:5px;cursor:pointer;">×</button>
+        </div>
+        <textarea data-rev-text="${i}" placeholder="Texto do depoimento" rows="2" style="padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11px;resize:vertical;">${(r.text||'').replace(/</g,'&lt;')}</textarea>
+      </div>
+    `).join('');
+    list.querySelectorAll('[data-rev-name]').forEach(el => el.oninput = e => _ecReviews[+el.dataset.revName].name = e.target.value);
+    list.querySelectorAll('[data-rev-text]').forEach(el => el.oninput = e => _ecReviews[+el.dataset.revText].text = e.target.value);
+    list.querySelectorAll('[data-rev-stars]').forEach(el => el.onchange = e => _ecReviews[+el.dataset.revStars].stars = +e.target.value);
+    list.querySelectorAll('[data-rev-del]').forEach(b => b.onclick = () => { _ecReviews.splice(+b.dataset.revDel,1); _renderReviews(); });
+  };
+  {const _el = document.getElementById('btn-add-review'); if (_el) _el.onclick = () => { _ecReviews.push({ name:'', stars:5, text:'' }); _renderReviews(); };}
+
+  const _renderPages = () => {
+    const list = document.getElementById('ec-pages-list');
+    if (!list) return;
+    list.innerHTML = _ecPages.map((p, i) => `
+      <div style="background:var(--cream);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px;">
+        <div style="display:flex;gap:6px;">
+          <input value="${(p.title||'').replace(/"/g,'&quot;')}" placeholder="Título (ex: Quem Somos)" data-pg-title="${i}" style="flex:2;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11px;"/>
+          <input value="${(p.slug||'').replace(/"/g,'&quot;')}" placeholder="URL (ex: quem-somos)" data-pg-slug="${i}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11px;"/>
+          <button type="button" data-pg-del="${i}" style="background:#FEE2E2;border:none;color:#991B1B;width:28px;border-radius:5px;cursor:pointer;">×</button>
+        </div>
+        <textarea data-pg-content="${i}" placeholder="Conteúdo (suporta quebras de linha)" rows="4" style="padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11px;resize:vertical;">${(p.content||'').replace(/</g,'&lt;')}</textarea>
+      </div>
+    `).join('');
+    list.querySelectorAll('[data-pg-title]').forEach(el => el.oninput = e => _ecPages[+el.dataset.pgTitle].title = e.target.value);
+    list.querySelectorAll('[data-pg-slug]').forEach(el => el.oninput = e => _ecPages[+el.dataset.pgSlug].slug = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'-'));
+    list.querySelectorAll('[data-pg-content]').forEach(el => el.oninput = e => _ecPages[+el.dataset.pgContent].content = e.target.value);
+    list.querySelectorAll('[data-pg-del]').forEach(b => b.onclick = () => { _ecPages.splice(+b.dataset.pgDel,1); _renderPages(); });
+  };
+  {const _el = document.getElementById('btn-add-page'); if (_el) _el.onclick = () => {
+    _ecPages.push({ title:'', slug:'', content:'' });
+    _renderPages();
+  };}
+
   (async () => {
     if (S.user?.role !== 'Administrador') return;
     try {
@@ -1108,7 +1203,6 @@ export function bindConfigActions(){
       const cfg = r?.value || {};
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
       const setCb = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v !== false; };
-      // Modo (radio)
       const mode = cfg.mode === 'loja' ? 'loja' : 'catalogo';
       const r1 = document.getElementById('ec-mode-' + (mode === 'loja' ? 'loja' : 'cat'));
       if (r1) r1.checked = true;
@@ -1120,8 +1214,22 @@ export function bindConfigActions(){
       set('ec-shipping-note',  cfg.shippingNote);
       set('ec-closed-msg',     cfg.closedMessage);
       set('ec-wpp-order-msg',  cfg.whatsappOrderMsg);
+      // Aparencia
+      set('ec-site-name',      cfg.siteName);
+      set('ec-site-tagline',   cfg.siteTagline);
+      set('ec-color-primary',  cfg.colorPrimary || '#C8736A');
+      set('ec-color-secondary',cfg.colorSecondary || '#B8915E');
+      set('ec-site-logo',      cfg.siteLogo);
+      set('ec-site-favicon',   cfg.siteFavicon);
+      set('ec-hero-title',     cfg.heroTitle);
+      set('ec-hero-subtitle',  cfg.heroSubtitle);
+      set('ec-hero-banner',    cfg.heroBanner);
       _ecBlockedDates = Array.isArray(cfg.blockedDates) ? [...cfg.blockedDates] : [];
+      _ecReviews = Array.isArray(cfg.reviews) ? cfg.reviews.map(r=>({...r})) : [];
+      _ecPages   = Array.isArray(cfg.pages)   ? cfg.pages.map(p=>({...p}))   : [];
       _renderBlockedList();
+      _renderReviews();
+      _renderPages();
     } catch(_){}
   })();
 
@@ -1139,6 +1247,18 @@ export function bindConfigActions(){
       closedMessage: get('ec-closed-msg') || 'No momento estamos fora do horário online.',
       whatsappOrderMsg: get('ec-wpp-order-msg') || 'Olá! Fiquei interessado(a) no(s) produto(s) abaixo. Pode me ajudar?',
       blockedDates: [..._ecBlockedDates],
+      // Aparencia
+      siteName:       get('ec-site-name') || 'Floricultura Laços Eternos',
+      siteTagline:    get('ec-site-tagline') || 'Flores que dizem tudo por você',
+      siteLogo:       get('ec-site-logo'),
+      siteFavicon:    get('ec-site-favicon'),
+      colorPrimary:   get('ec-color-primary')   || '#C8736A',
+      colorSecondary: get('ec-color-secondary') || '#B8915E',
+      heroTitle:      get('ec-hero-title') || 'Surpreenda quem você ama',
+      heroSubtitle:   get('ec-hero-subtitle') || 'Buquês, cestas e arranjos com entrega rápida em Manaus',
+      heroBanner:     get('ec-hero-banner'),
+      reviews:        _ecReviews.filter(r => r.name && r.text),
+      pages:          _ecPages.filter(p => p.title && p.slug),
     };
     const status = document.getElementById('ecommerce-status');
     if (status) status.textContent = 'Salvando...';
