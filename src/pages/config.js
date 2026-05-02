@@ -571,13 +571,43 @@ export function renderConfig(){
       </div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Configurações da loja online (floriculturalacoseternos.com.br).</div>
 
+      <!-- MODO: catálogo ou loja completa -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:700;font-size:12px;color:var(--ink);margin-bottom:6px;">⚙️ MODO DE OPERAÇÃO</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <label style="display:flex;flex-direction:column;background:var(--cream);border:2px solid transparent;border-radius:8px;padding:10px;cursor:pointer;" id="ec-mode-cat-label">
+            <div style="display:flex;align-items:center;gap:6px;"><input type="radio" name="ec-mode" value="catalogo" id="ec-mode-cat" style="accent-color:#C8736A;"/><strong style="font-size:12px;">📚 Catálogo Online</strong></div>
+            <div style="font-size:10px;color:var(--muted);margin-top:4px;">Apenas vitrine de produtos. Cliente pede pelo WhatsApp. Sem checkout/pagamento.</div>
+          </label>
+          <label style="display:flex;flex-direction:column;background:var(--cream);border:2px solid transparent;border-radius:8px;padding:10px;cursor:pointer;" id="ec-mode-loja-label">
+            <div style="display:flex;align-items:center;gap:6px;"><input type="radio" name="ec-mode" value="loja" id="ec-mode-loja" style="accent-color:#C8736A;"/><strong style="font-size:12px;">🛒 Loja Completa</strong></div>
+            <div style="font-size:10px;color:var(--muted);margin-top:4px;">Cliente compra direto no site, paga via Pix/cartão (Mercado Pago).</div>
+          </label>
+        </div>
+      </div>
+
       <label style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;cursor:pointer;">
         <input type="checkbox" id="ec-accepting" style="width:18px;height:18px;accent-color:#15803D;"/>
         <div style="flex:1;">
-          <div style="font-weight:700;font-size:13px;">🟢 Aceitando pedidos online</div>
-          <div style="font-size:10px;color:var(--muted);">Desligue para pausar pedidos (loja mostra mensagem de fechado)</div>
+          <div style="font-weight:700;font-size:13px;">🟢 Aceitando pedidos / contatos</div>
+          <div style="font-size:10px;color:var(--muted);">Desligue para pausar (loja mostra mensagem de fechado)</div>
         </div>
       </label>
+
+      <!-- Mensagem WhatsApp ao pedir -->
+      <div class="fg"><label class="fl">Mensagem padrão do WhatsApp ao pedir</label>
+        <input class="fi" id="ec-wpp-order-msg" placeholder="Olá! Fiquei interessado(a) no(s) produto(s) abaixo. Pode me ajudar?"/></div>
+
+      <!-- Datas bloqueadas para entrega -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
+        <div style="font-weight:700;font-size:12px;color:var(--ink);margin-bottom:6px;">📅 Datas bloqueadas para entrega</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Adicione datas em que NÃO entregamos (feriados, folgas, eventos).</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <input type="date" id="ec-block-date-input" class="fi" style="flex:1;font-size:12px;"/>
+          <button type="button" id="btn-add-blocked-date" class="btn btn-primary btn-sm">+ Bloquear</button>
+        </div>
+        <div id="ec-blocked-dates-list" style="display:flex;flex-wrap:wrap;gap:5px;min-height:24px;"></div>
+      </div>
 
       <div class="fr2" style="gap:8px;">
         <div class="fg"><label class="fl">Frete fixo (R$)</label>
@@ -618,7 +648,7 @@ export function renderConfig(){
           <input class="fi" id="int-gads-id" placeholder="AW-XXXXXXXXX/yyyyyyy"/></div>
       </div>
 
-      <!-- Meta -->
+      <!-- Meta + Shopping Feed -->
       <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
         <div style="font-weight:700;font-size:13px;color:#1877F2;margin-bottom:8px;">📘 Meta (Facebook / Instagram)</div>
         <div class="fr2" style="gap:8px;">
@@ -626,6 +656,12 @@ export function renderConfig(){
             <input class="fi" id="int-meta-pixel" placeholder="123456789012345"/></div>
           <div class="fg"><label class="fl">Conversions API Token <span style="font-size:9px;color:var(--red);">(secreto)</span></label>
             <input class="fi" id="int-meta-token" type="password" placeholder="EAAB..."/></div>
+        </div>
+        <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:8px 10px;margin-top:8px;">
+          <div style="font-size:11px;color:#1E40AF;font-weight:700;margin-bottom:4px;">🛍️ Facebook / Instagram Shopping</div>
+          <div style="font-size:10px;color:#3730A3;line-height:1.4;">URL do feed (use no Catalog Manager):</div>
+          <input readonly value="https://florevita-backend-2-0.onrender.com/api/public/feed/facebook.xml" style="width:100%;margin-top:4px;padding:5px 8px;border:1px solid #BFDBFE;border-radius:5px;background:#fff;font-size:10px;font-family:monospace;color:#1E40AF;cursor:pointer;" onclick="this.select();document.execCommand('copy');alert('URL copiada — cole no Catalog Manager do Facebook')"/>
+          <div style="font-size:9px;color:#1E40AF;margin-top:4px;">Como ativar: Business Manager → Catálogos → Criar → URL do feed → Frequência: Diária</div>
         </div>
       </div>
 
@@ -1032,6 +1068,39 @@ export function renderConfig(){
 // ── BIND CONFIG PAGE ACTIONS ─────────────────────────────────
 export function bindConfigActions(){
   // ── E-COMMERCE CONFIG (admin) ──────────────────────────────
+  // Estado local de datas bloqueadas (array de YYYY-MM-DD)
+  let _ecBlockedDates = [];
+  const _renderBlockedList = () => {
+    const list = document.getElementById('ec-blocked-dates-list');
+    if (!list) return;
+    list.innerHTML = _ecBlockedDates.length
+      ? _ecBlockedDates.map(d => `<span style="display:inline-flex;align-items:center;gap:4px;background:#FEE2E2;color:#991B1B;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;">📅 ${d}<button type="button" data-del-date="${d}" style="background:rgba(220,38,38,.2);border:none;color:#991B1B;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;padding:0;">×</button></span>`).join('')
+      : '<span style="font-size:11px;color:var(--muted);font-style:italic;">Nenhuma data bloqueada.</span>';
+    list.querySelectorAll('[data-del-date]').forEach(b => {
+      b.onclick = () => { _ecBlockedDates = _ecBlockedDates.filter(x => x !== b.dataset.delDate); _renderBlockedList(); };
+    });
+  };
+  // Botao adicionar data
+  {const _el = document.getElementById('btn-add-blocked-date'); if (_el) _el.onclick = () => {
+    const inp = document.getElementById('ec-block-date-input');
+    const v = inp?.value;
+    if (!v) return;
+    if (!_ecBlockedDates.includes(v)) _ecBlockedDates.push(v);
+    _ecBlockedDates.sort();
+    if (inp) inp.value = '';
+    _renderBlockedList();
+  };}
+  // Highlight do modo selecionado
+  const _applyModeHighlight = () => {
+    const cat  = document.getElementById('ec-mode-cat');
+    const loja = document.getElementById('ec-mode-loja');
+    const lblCat  = document.getElementById('ec-mode-cat-label');
+    const lblLoja = document.getElementById('ec-mode-loja-label');
+    if (lblCat)  lblCat.style.borderColor  = cat?.checked  ? '#C8736A' : 'transparent';
+    if (lblLoja) lblLoja.style.borderColor = loja?.checked ? '#C8736A' : 'transparent';
+  };
+  document.querySelectorAll('input[name="ec-mode"]').forEach(r => r.onchange = _applyModeHighlight);
+
   (async () => {
     if (S.user?.role !== 'Administrador') return;
     try {
@@ -1039,25 +1108,37 @@ export function bindConfigActions(){
       const cfg = r?.value || {};
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
       const setCb = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v !== false; };
+      // Modo (radio)
+      const mode = cfg.mode === 'loja' ? 'loja' : 'catalogo';
+      const r1 = document.getElementById('ec-mode-' + (mode === 'loja' ? 'loja' : 'cat'));
+      if (r1) r1.checked = true;
+      _applyModeHighlight();
       setCb('ec-accepting', cfg.acceptingOrders);
       set('ec-delivery-fee',   cfg.deliveryFee);
       set('ec-free-above',     cfg.freeShippingAbove);
       set('ec-min-order',      cfg.minOrderValue);
       set('ec-shipping-note',  cfg.shippingNote);
       set('ec-closed-msg',     cfg.closedMessage);
+      set('ec-wpp-order-msg',  cfg.whatsappOrderMsg);
+      _ecBlockedDates = Array.isArray(cfg.blockedDates) ? [...cfg.blockedDates] : [];
+      _renderBlockedList();
     } catch(_){}
   })();
 
   // Salvar E-commerce
   {const _el = document.getElementById('btn-save-ecommerce'); if (_el) _el.onclick = async () => {
     const get = (id) => document.getElementById(id)?.value?.trim() || '';
+    const modeRadio = document.querySelector('input[name="ec-mode"]:checked');
     const value = {
+      mode: modeRadio?.value === 'loja' ? 'loja' : 'catalogo',
       acceptingOrders: document.getElementById('ec-accepting')?.checked !== false,
       deliveryFee:       Number(get('ec-delivery-fee')) || 0,
       freeShippingAbove: Number(get('ec-free-above'))   || 0,
       minOrderValue:     Number(get('ec-min-order'))    || 0,
       shippingNote: get('ec-shipping-note') || 'Entrega em toda Manaus. Taxa fixa.',
       closedMessage: get('ec-closed-msg') || 'No momento estamos fora do horário online.',
+      whatsappOrderMsg: get('ec-wpp-order-msg') || 'Olá! Fiquei interessado(a) no(s) produto(s) abaixo. Pode me ajudar?',
+      blockedDates: [..._ecBlockedDates],
     };
     const status = document.getElementById('ecommerce-status');
     if (status) status.textContent = 'Salvando...';
