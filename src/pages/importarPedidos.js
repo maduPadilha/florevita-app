@@ -11,12 +11,14 @@
 // Importa SEQUENCIAL com delay (200ms) e progresso visual.
 import { S } from '../state.js';
 import { $c } from '../utils/formatters.js';
-import { POST, GET } from '../services/api.js';
+import { POST, GET, DELETE } from '../services/api.js';
 import { toast } from '../utils/helpers.js';
 
 let _importData = null;
 let _importProgress = { running: false, ok: 0, fail: 0, total: 0, current: '' };
 let _importResults = []; // [{numero, status, message}]
+let _revertProgress = { running: false, ok: 0, fail: 0, total: 0, current: '' };
+let _revertResults = [];
 
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -34,6 +36,46 @@ export function renderImportarPedidos() {
     <div style="font-size:12px;color:var(--muted);">Lança em massa pedidos do PDF antigo no sistema novo</div>
   </div>
 </div>
+
+${(() => {
+  // Reverter — conta quantos pedidos importados existem
+  const importados = (S.orders||[]).filter(o => String(o.source||'').includes('Importado-DiaMaes'));
+  if (!importados.length && !_revertResults.length) return '';
+  const rprog = _revertProgress;
+  return `
+<div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#FEF3C7,#FFFBEB);border:2px solid #FCD34D;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <div style="font-weight:800;color:#92400E;font-size:15px;">⚠️ Reverter Importação</div>
+      <div style="font-size:12px;color:#92400E;opacity:.85;margin-top:2px;">
+        ${importados.length > 0
+          ? `${importados.length} pedido(s) importado(s) encontrado(s) — pode deletar todos de uma vez`
+          : 'Nenhum pedido importado restante'}
+      </div>
+    </div>
+    ${importados.length > 0 ? (rprog.running
+      ? `<button class="btn btn-red" disabled>⏳ Deletando ${rprog.ok+rprog.fail}/${rprog.total}...</button>`
+      : `<button class="btn btn-red" id="btn-imp-revert" style="font-size:14px;font-weight:800;">🗑️ Deletar ${importados.length} importado(s)</button>`
+    ) : ''}
+  </div>
+  ${rprog.running ? `
+  <div style="margin-top:10px;height:8px;background:rgba(255,255,255,.6);border-radius:4px;overflow:hidden;">
+    <div style="height:100%;width:${Math.round(((rprog.ok+rprog.fail)/rprog.total)*100)}%;background:#DC2626;transition:width .3s;"></div>
+  </div>
+  <div style="margin-top:6px;font-size:11px;color:#92400E;">
+    🗑️ ${rprog.ok} deletados · ❌ ${rprog.fail} falhas · Atual: <strong>#${rprog.current}</strong>
+  </div>
+  ` : ''}
+  ${_revertResults.length > 0 && !rprog.running ? `
+  <div style="margin-top:10px;display:grid;gap:3px;max-height:180px;overflow-y:auto;">
+    ${_revertResults.map(r => `<div style="display:flex;justify-content:space-between;padding:4px 8px;background:${r.status==='ok'?'#DCFCE7':'#FEE2E2'};border-radius:4px;font-size:11px;">
+      <span>${r.status==='ok'?'✅':'❌'} #${r.numero}</span>
+      <span style="font-size:10px;color:${r.status==='ok'?'#15803D':'#991B1B'};">${esc(r.message)}</span>
+    </div>`).join('')}
+  </div>
+  ` : ''}
+</div>`;
+})()}
 
 ${!data ? `
 <div class="card" style="margin-bottom:14px;">
@@ -211,6 +253,40 @@ export function bindImportarPedidosEvents() {
     _importProgress.running = false;
     _importProgress.current = '';
     toast(`✅ ${_importProgress.ok} importados · ❌ ${_importProgress.fail} falhas`);
+    render();
+  });
+
+  // ── REVERTER IMPORTAÇÃO — deleta todos com source 'Importado-DiaMaes-*'
+  document.getElementById('btn-imp-revert')?.addEventListener('click', async () => {
+    const importados = (S.orders||[]).filter(o => String(o.source||'').includes('Importado-DiaMaes'));
+    if (!importados.length) { toast('Nada para deletar', true); return; }
+    if (!confirm(`⚠️ ATENÇÃO: vai DELETAR ${importados.length} pedido(s) importado(s) do banco.\n\nEssa ação NÃO pode ser desfeita. Confirma?`)) return;
+    if (!confirm(`Confirmação final: deletar ${importados.length} pedido(s)?`)) return;
+
+    _revertProgress = { running:true, ok:0, fail:0, total:importados.length, current:'' };
+    _revertResults = [];
+    render();
+
+    for (const o of importados) {
+      const numCurto = String(o.orderNumber||o.numero||o._id||'').replace(/^PED-?/i,'').slice(-6);
+      _revertProgress.current = numCurto;
+      render();
+      try {
+        await DELETE('/orders/' + o._id);
+        _revertProgress.ok++;
+        _revertResults.push({ numero: numCurto, status:'ok', message:'deletado' });
+        // Remove da memoria local imediatamente
+        if (S.orders) S.orders = S.orders.filter(x => x._id !== o._id);
+      } catch(e) {
+        _revertProgress.fail++;
+        _revertResults.push({ numero: numCurto, status:'fail', message: e?.message || String(e) });
+      }
+      await new Promise(r => setTimeout(r, 250));
+    }
+
+    _revertProgress.running = false;
+    _revertProgress.current = '';
+    toast(`🗑️ ${_revertProgress.ok} deletados · ❌ ${_revertProgress.fail} falhas`);
     render();
   });
 }
