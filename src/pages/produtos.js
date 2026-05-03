@@ -199,22 +199,36 @@ export function renderProdutos(){
       if (!cats.includes(catFilter)) return false;
     }
     if (statusFilter === 'active') {
-      const isActive = p.active===true || p.activeOnSite===true || p.ativo===true;
-      if (!isActive) return false;
+      // Ativo no site (visivel no e-commerce)
+      if (p.activeOnSite !== true) return false;
     } else if (statusFilter === 'inactive') {
-      const isActive = p.active===true || p.activeOnSite===true || p.ativo===true;
-      if (isActive) return false;
+      if (p.activeOnSite === true) return false;
+    } else if (statusFilter === 'destaque') {
+      if (p.destaque !== true) return false;
+    } else if (statusFilter === 'archived') {
+      if (p.archived !== true) return false;
     }
+    // Por padrao esconde arquivados (so mostra se filter='archived')
+    if (statusFilter !== 'archived' && p.archived === true) return false;
     return true;
   });
   // Expose filtered list for export consumers (full filtered list, not paginated)
   S._prodFiltered = filtered;
   const hasFilter = !!(S._prodSearch || S._prodCat || S._prodStatus);
+  // Reset paginação ao mudar filtros (evita pagina vazia)
+  if (hasFilter && (S._prodPage||1) > Math.ceil(filtered.length/(Number(S._prodPerPage||30))) && filtered.length>0) {
+    S._prodPage = 1;
+  }
 
-  // Pagination: only render the first N products to avoid lag with large catalogs
+  // Pagination com tamanho selecionavel + navegacao por pagina
   const total = filtered.length;
-  const limit = S._prodLimit || 50;
-  const displayed = filtered.slice(0, limit);
+  const perPage = Math.max(1, Number(S._prodPerPage || 30));
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  let page = Math.max(1, Number(S._prodPage || 1));
+  if (page > totalPages) { page = totalPages; S._prodPage = page; }
+  const start = (page - 1) * perPage;
+  const displayed = filtered.slice(start, start + perPage);
+  const limit = perPage; // compat com codigo legado
 
   return`
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
@@ -240,10 +254,12 @@ export function renderProdutos(){
       <option value="">Todas as categorias</option>
       ${allCats.map(c=>`<option value="${esc(c)}" ${S._prodCat===c?'selected':''}>${esc(c)}</option>`).join('')}
     </select>
-    <select id="prod-filter-status" class="fi" style="min-width:140px;flex:0 0 auto;">
-      <option value="" ${!S._prodStatus?'selected':''}>Todos</option>
-      <option value="active" ${S._prodStatus==='active'?'selected':''}>Ativos</option>
-      <option value="inactive" ${S._prodStatus==='inactive'?'selected':''}>Inativos</option>
+    <select id="prod-filter-status" class="fi" style="min-width:160px;flex:0 0 auto;">
+      <option value="" ${!S._prodStatus?'selected':''}>Todos os status</option>
+      <option value="active" ${S._prodStatus==='active'?'selected':''}>🛒 Ativo no site</option>
+      <option value="inactive" ${S._prodStatus==='inactive'?'selected':''}>⏸ Inativo no site</option>
+      <option value="destaque" ${S._prodStatus==='destaque'?'selected':''}>⭐ Em destaque</option>
+      <option value="archived" ${S._prodStatus==='archived'?'selected':''}>📁 Arquivados</option>
     </select>
     ${hasFilter?`<button class="btn btn-ghost btn-sm" id="btn-clear-filters">✖ Limpar filtros</button>`:''}
   </div>
@@ -293,12 +309,30 @@ export function renderProdutos(){
       </td>
     </tr>`;
   }).join('')}</tbody></table></div>
-  ${total > displayed.length ? `
-    <div style="text-align:center;padding:16px;">
-      <button class="btn btn-outline" id="btn-prod-more">
-        Mostrar mais (${displayed.length} de ${total})
-      </button>
-    </div>` : ''}`}
+  ${(() => {
+    if (total === 0) return '';
+    // Paginacao com seletor de tamanho + numeros
+    const pages = [];
+    const maxBtns = 7;
+    let from = Math.max(1, page - 3), to = Math.min(totalPages, from + maxBtns - 1);
+    from = Math.max(1, to - maxBtns + 1);
+    for (let i = from; i <= to; i++) pages.push(i);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:14px 4px 0;border-top:1px solid var(--border);margin-top:8px;">
+      <div style="font-size:11px;color:var(--muted);">
+        Mostrando <strong>${start+1}–${Math.min(start+perPage,total)}</strong> de <strong>${total}</strong>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--muted);">Por página:</span>
+        <select id="prod-per-page" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;">
+          ${[10,30,50,100].map(n=>`<option value="${n}" ${perPage===n?'selected':''}>${n}</option>`).join('')}
+        </select>
+        ${page>1?`<button class="btn btn-ghost btn-sm" data-prod-page="${page-1}">‹ Anterior</button>`:''}
+        ${pages.map(n=>`<button class="btn btn-sm ${n===page?'btn-primary':'btn-ghost'}" data-prod-page="${n}" ${n===page?'style="font-weight:700;"':''}>${n}</button>`).join('')}
+        ${page<totalPages?`<button class="btn btn-ghost btn-sm" data-prod-page="${page+1}">Próxima ›</button>`:''}
+      </div>
+    </div>`;
+  })()}
+  `}
 </div>`;
 }
 

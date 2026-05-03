@@ -174,10 +174,12 @@ export function renderEcommerce(){
     {k:'paginas',l:'📄 Páginas'},
     {k:'redes',l:'📱 Redes Sociais'},
     {k:'banners',l:'🖼️ Banners'},
-    {k:'produtos',l:'🌸 Produtos'},
     {k:'cores',l:'🎨 Aparência'},
     {k:'preview',l:'👁️ Preview'},
   ].map(t=>`<button class="tab ${tab===t.k?'active':''}" onclick="S._ecTab='${t.k}';render()">${t.l}</button>`).join('')}
+  <div style="font-size:11px;color:var(--muted);background:#FAE8E6;padding:8px 14px;border-radius:8px;margin-left:6px;">
+    🌸 <strong>Produtos do site:</strong> editados em <a href="javascript:setPage('produtos')" style="color:#9F1239;font-weight:700;">Produtos</a> · marque <em>"Aparecer no E-commerce"</em>
+  </div>
 </div>
 
 <!-- ══ ABA GERAL ══════════════════════════════════════════════ -->

@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260502-2';
+const APP_VERSION = '20260502-3';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2267,8 +2267,11 @@ function bindPageActions(){
     }
     document.getElementById('ped-filter-unidade')?.addEventListener('change',e=>{S._fUnidade=e.target.value;render();});
     document.getElementById('ped-filter-canal')?.addEventListener('change',e=>{S._fCanal=e.target.value;render();});
-    document.getElementById('ped-filter-pagamento')?.addEventListener('change',e=>{S._fPagamento=e.target.value;render();});
-    document.getElementById('ped-filter-prioridade')?.addEventListener('change',e=>{S._fPrioridade=e.target.value;render();});
+    document.getElementById('ped-filter-pagamento')?.addEventListener('change',e=>{S._fPagamento=e.target.value;S._pedPage=1;render();});
+    document.getElementById('ped-filter-prioridade')?.addEventListener('change',e=>{S._fPrioridade=e.target.value;S._pedPage=1;render();});
+    // Paginacao Pedidos
+    {const _el = document.getElementById('ped-per-page'); if(_el) _el.onchange = e => { S._pedPerPage = Number(e.target.value)||30; S._pedPage=1; render(); };}
+    document.querySelectorAll('[data-ped-page]').forEach(b => { b.onclick = () => { S._pedPage = Number(b.dataset.pedPage)||1; render(); window.scrollTo({top:200,behavior:'smooth'}); };});
     const clearFilters=()=>{S._fStatus='Todos';S._fBairro='';S._fTurno='';S._fUnidade='';S._fCanal='';S._fPagamento='';S._fPrioridade='';S._fDate1='';S._fDate2='';S._orderSearch=''; render();};
     {const _el=document.getElementById('btn-clear-ped-filters');if(_el)_el.onclick=clearFilters;}
     {const _el=document.getElementById('btn-clear-ped-filters2');if(_el)_el.onclick=clearFilters;}
@@ -2389,7 +2392,7 @@ function bindPageActions(){
       let _prodSearchTimer = null;
       _el.addEventListener('input', e=>{
         S._prodSearch = e.target.value;
-        S._prodLimit = 50; // reset pagination when search changes
+        S._prodPage = 1; // reset pagination when search changes
         clearTimeout(_prodSearchTimer);
         _prodSearchTimer = setTimeout(()=>render(), 300);
       });
@@ -2400,14 +2403,18 @@ function bindPageActions(){
       // Keep focus & caret at end after re-render while user is typing
       if(S._prodSearch){ _el.focus(); const v=_el.value; try{ _el.setSelectionRange(v.length,v.length); }catch(_e){} }
     }}
-    {const _el=document.getElementById('prod-filter-cat');if(_el)_el.addEventListener('change', e=>{ S._prodCat = e.target.value; S._prodLimit = 50; render(); });}
-    {const _el=document.getElementById('prod-filter-status');if(_el)_el.addEventListener('change', e=>{ S._prodStatus = e.target.value; S._prodLimit = 50; render(); });}
-    {const _el=document.getElementById('btn-clear-filters');if(_el)_el.onclick=()=>{ S._prodSearch=''; S._prodCat=''; S._prodStatus=''; S._prodLimit=50; render(); };}
-    // ── "Mostrar mais" button: incrementally render more products ──
-    {const _el=document.getElementById('btn-prod-more');if(_el)_el.onclick=()=>{
-      S._prodLimit = (S._prodLimit || 50) + 50;
+    {const _el=document.getElementById('prod-filter-cat');if(_el)_el.addEventListener('change', e=>{ S._prodCat = e.target.value; S._prodPage = 1; render(); });}
+    {const _el=document.getElementById('prod-filter-status');if(_el)_el.addEventListener('change', e=>{ S._prodStatus = e.target.value; S._prodPage = 1; render(); });}
+    {const _el=document.getElementById('btn-clear-filters');if(_el)_el.onclick=()=>{ S._prodSearch=''; S._prodCat=''; S._prodStatus=''; S._prodPage=1; render(); };}
+    // ── Pagination: per-page selector + page numbers ──
+    {const _el=document.getElementById('prod-per-page');if(_el)_el.onchange = e => {
+      S._prodPerPage = Number(e.target.value) || 30;
+      S._prodPage = 1;
       render();
     };}
+    document.querySelectorAll('[data-prod-page]').forEach(b => {
+      b.onclick = () => { S._prodPage = Number(b.dataset.prodPage) || 1; render(); window.scrollTo({top:0,behavior:'smooth'}); };
+    });
     // ── Import/Export (admin only) ──
     {const _bi=document.getElementById('btn-import-prod');if(_bi)_bi.onclick=()=>document.getElementById('file-import-prod')?.click();}
     {const _fi=document.getElementById('file-import-prod');if(_fi)_fi.onchange=async e=>{

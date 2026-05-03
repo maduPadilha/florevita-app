@@ -642,9 +642,44 @@ ${(() => {
       <th>#</th><th>Cliente / Dest.</th><th>Bairro</th><th>Unidade</th>
       <th>Itens</th><th>Total</th><th>Data da Venda</th><th>Data da Entrega</th><th>Canal</th><th>Pagamento</th><th>Status</th><th></th>
     </tr></thead>
-    <tbody>${renderRows(filtered)}</tbody>
+    <tbody>${(() => {
+      // Paginação: 30 por padrão, navegacao
+      const perPage = Math.max(1, Number(S._pedPerPage || 30));
+      const totalP  = Math.max(1, Math.ceil(filtered.length / perPage));
+      let pg = Math.max(1, Number(S._pedPage || 1));
+      if (pg > totalP) { pg = totalP; S._pedPage = pg; }
+      const startP = (pg - 1) * perPage;
+      return renderRows(filtered.slice(startP, startP + perPage));
+    })()}</tbody>
   </table>
-  </div>`}
+  </div>
+  ${(() => {
+    if (filtered.length === 0) return '';
+    const perPage = Math.max(1, Number(S._pedPerPage || 30));
+    const totalP  = Math.max(1, Math.ceil(filtered.length / perPage));
+    let pg = Math.max(1, Number(S._pedPage || 1));
+    if (pg > totalP) pg = totalP;
+    const startP = (pg - 1) * perPage;
+    const pages = [];
+    let from = Math.max(1, pg - 3), to = Math.min(totalP, from + 6);
+    from = Math.max(1, to - 6);
+    for (let i = from; i <= to; i++) pages.push(i);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:14px 4px 0;border-top:1px solid var(--border);margin-top:8px;">
+      <div style="font-size:11px;color:var(--muted);">
+        Mostrando <strong>${startP+1}–${Math.min(startP+perPage, filtered.length)}</strong> de <strong>${filtered.length}</strong>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--muted);">Por página:</span>
+        <select id="ped-per-page" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;">
+          ${[10,30,50,100].map(n=>`<option value="${n}" ${perPage===n?'selected':''}>${n}</option>`).join('')}
+        </select>
+        ${pg>1?`<button class="btn btn-ghost btn-sm" data-ped-page="${pg-1}">‹</button>`:''}
+        ${pages.map(n=>`<button class="btn btn-sm ${n===pg?'btn-primary':'btn-ghost'}" data-ped-page="${n}">${n}</button>`).join('')}
+        ${pg<totalP?`<button class="btn btn-ghost btn-sm" data-ped-page="${pg+1}">›</button>`:''}
+      </div>
+    </div>`;
+  })()}
+  `}
 `}
 </div>`;
 }
