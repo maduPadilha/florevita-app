@@ -274,12 +274,36 @@ export function renderProdutos(){
       </div>`).join('')}
   ` : `<div class="empty"><div class="empty-icon">🌹</div><p>Sem produtos</p><button class="btn btn-primary" id="btn-new-prod2" style="margin-top:10px">+ Cadastrar Produto</button>
         <button class="btn btn-ghost" style="margin-top:6px;font-size:11px" onclick="recarregarDados()">🔄 Recarregar dados do servidor</button></div>`):filtered.length===0?`<div class="empty"><div class="empty-icon">🔍</div><p>Nenhum produto encontrado com os filtros aplicados</p></div>`:`
-  <div class="tw"><table><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Estoque</th><th>Site</th><th>Status</th><th>NCM</th><th></th></tr></thead>
+  ${(() => {
+    // Barra de acoes em massa — aparece quando ha selecionados
+    const sel = S._prodSelected instanceof Set ? S._prodSelected : new Set();
+    if (sel.size === 0) return '';
+    return `<div style="background:linear-gradient(135deg,#FAE8E6,#FEFAF8);border:2px solid #FECDD3;border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div style="font-size:13px;color:#9F1239;font-weight:700;">
+        ✓ <strong>${sel.size}</strong> produto${sel.size===1?'':'s'} selecionado${sel.size===1?'':'s'}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-sm" data-bulk="destacar" style="background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;">⭐ Destacar</button>
+        <button class="btn btn-sm" data-bulk="undestacar" style="background:#fff;color:#92400E;border:1px solid #F59E0B;">☆ Tirar destaque</button>
+        <button class="btn btn-sm" data-bulk="estoque" style="background:#DBEAFE;color:#1E40AF;border:1px solid #3B82F6;">📦 Definir estoque</button>
+        <button class="btn btn-sm" data-bulk="ativar" style="background:#DCFCE7;color:#15803D;border:1px solid #22C55E;">✅ Ativar (desarquivar)</button>
+        <button class="btn btn-sm" data-bulk="arquivar" style="background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;">📁 Arquivar</button>
+        ${S.user?.role === 'Administrador' ? `<button class="btn btn-sm" data-bulk="excluir" style="background:#7F1D1D;color:#fff;">🗑️ Excluir</button>` : ''}
+        <button class="btn btn-ghost btn-sm" data-bulk="clear">✕ Limpar seleção</button>
+      </div>
+    </div>`;
+  })()}
+  <div class="tw"><table><thead><tr>
+    <th style="width:30px;text-align:center;"><input type="checkbox" id="prod-sel-all" style="cursor:pointer;accent-color:var(--primary);"/></th>
+    <th>Código</th><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Estoque</th><th>Site</th><th>Status</th><th>NCM</th><th></th>
+  </tr></thead>
   <tbody>${displayed.map(p=>{
     const mg=p.salePrice>0?((p.salePrice-(p.costPrice||0))/p.salePrice*100).toFixed(0):0;
     const low=(p.stock||0)<=(p.minStock||5);
     const codigoProd = p.code || p.sku || '';
-    return`<tr>
+    const isSelected = (S._prodSelected instanceof Set) && S._prodSelected.has(p._id);
+    return`<tr ${isSelected?'style="background:#FEF7F5;"':''}>
+      <td style="text-align:center;"><input type="checkbox" data-prod-sel="${p._id}" ${isSelected?'checked':''} style="cursor:pointer;accent-color:var(--primary);"/></td>
       <td style="font-family:monospace;font-size:12px;font-weight:700;color:#7C3AED;white-space:nowrap;">${codigoProd ? codigoProd : '<span style="color:var(--muted);font-weight:400;">—</span>'}</td>
       <td><div style="display:flex;align-items:center;gap:8px;">
         ${(()=>{const img=p.imagem||p.images?.[0]||p.image||'';return img?`<img src="${img}" loading="lazy" decoding="async" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer" title="${p.name}" onclick="showFullImg('${img}')">`:`<span class="prod-img-placeholder" data-pid="${p._id||p.id||''}" style="font-size:20px;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:6px;background:var(--cream);">${emoji(p.category)}</span>`;})()}

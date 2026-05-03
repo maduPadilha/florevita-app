@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260502-4';
+const APP_VERSION = '20260502-5';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2412,6 +2412,96 @@ function bindPageActions(){
       S._prodPage = 1;
       render();
     };}
+    // ── SELEÇÃO EM MASSA / AÇÕES BULK ─────────────────────────
+    if (!(S._prodSelected instanceof Set)) S._prodSelected = new Set();
+    // checkbox "selecionar todos" da pagina visivel
+    {const _selAll=document.getElementById('prod-sel-all'); if(_selAll){
+      const visiveis = (S._prodFiltered||[]).slice(((S._prodPage||1)-1)*(S._prodPerPage||30), (S._prodPage||1)*(S._prodPerPage||30));
+      const allSel = visiveis.length>0 && visiveis.every(p => S._prodSelected.has(p._id));
+      _selAll.checked = allSel;
+      _selAll.onchange = () => {
+        if (_selAll.checked) visiveis.forEach(p => S._prodSelected.add(p._id));
+        else visiveis.forEach(p => S._prodSelected.delete(p._id));
+        render();
+      };
+    }}
+    // checkbox de cada linha
+    document.querySelectorAll('[data-prod-sel]').forEach(cb => {
+      cb.onchange = () => {
+        const id = cb.dataset.prodSel;
+        if (cb.checked) S._prodSelected.add(id);
+        else S._prodSelected.delete(id);
+        render();
+      };
+    });
+    // Botoes de acao em massa
+    document.querySelectorAll('[data-bulk]').forEach(btn => {
+      btn.onclick = async () => {
+        const action = btn.dataset.bulk;
+        const ids = Array.from(S._prodSelected);
+        if (action === 'clear') { S._prodSelected.clear(); render(); return; }
+        if (ids.length === 0) return;
+
+        if (action === 'excluir') {
+          if (!confirm(`Excluir DEFINITIVAMENTE ${ids.length} produto(s)? Não dá para desfazer.`)) return;
+          const conf = prompt('Para confirmar, digite EXCLUIR:');
+          if (conf !== 'EXCLUIR') return toast('Cancelado', true);
+          let ok = 0;
+          for (const id of ids) {
+            try { await DELETE('/products/' + id); ok++; } catch(_) {}
+          }
+          S._prodSelected.clear();
+          await GET('/products').then(p => { if(Array.isArray(p)) S.products = p; }).catch(()=>{});
+          toast(`✅ ${ok} produto(s) excluído(s)`);
+          render();
+          return;
+        }
+
+        if (action === 'estoque') {
+          const v = prompt(`Definir estoque para ${ids.length} produto(s):\n(número inteiro, ex: 50)`);
+          if (v === null) return;
+          const n = parseInt(v);
+          if (isNaN(n) || n < 0) return toast('❌ Valor inválido', true);
+          let ok = 0;
+          for (const id of ids) {
+            try {
+              await PUT('/products/' + id, { estoque: n, stock: n });
+              const p = S.products.find(x => x._id === id);
+              if (p) { p.estoque = n; p.stock = n; }
+              ok++;
+            } catch(_){}
+          }
+          toast(`✅ Estoque definido em ${ok} produto(s)`);
+          render();
+          return;
+        }
+
+        // Ativar/Arquivar/Destacar
+        const updates = {
+          ativar: { archived: false },
+          arquivar: { archived: true },
+          destacar: { destaque: true },
+          undestacar: { destaque: false },
+        }[action];
+        if (!updates) return;
+        if (action === 'arquivar' && !confirm(`Arquivar ${ids.length} produto(s)? Eles não vão mais aparecer no PDV nem no site.`)) return;
+
+        let ok = 0;
+        for (const id of ids) {
+          try {
+            await PUT('/products/' + id, updates);
+            const p = S.products.find(x => x._id === id);
+            if (p) Object.assign(p, updates);
+            ok++;
+          } catch(_){}
+        }
+        S._prodSelected.clear();
+        const labels = { ativar:'ativados', arquivar:'arquivados', destacar:'destacados', undestacar:'sem destaque' };
+        toast(`✅ ${ok} produto(s) ${labels[action]}`);
+        render();
+      };
+    });
+
     document.querySelectorAll('[data-prod-page]').forEach(b => {
       b.onclick = () => { S._prodPage = Number(b.dataset.prodPage) || 1; render(); window.scrollTo({top:0,behavior:'smooth'}); };
     });
