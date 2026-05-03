@@ -210,7 +210,10 @@ function renderMetasList() {
                   <div style="font-size:14px;font-weight:800;color:#1E293B;">${tipoLabel} ${status.emoji} ${escHtml(m.nome||'')}</div>
                   <div style="font-size:11px;color:var(--muted);">${labelPeriodo(m.periodoTipo)} · ${fmtData(m.dataInicio)} a ${fmtData(m.dataFim)} · ${bonusLbl}</div>
                 </div>
-                <div style="display:flex;gap:6px;">
+                <div style="display:flex;gap:6px;align-items:center;">
+                  ${m.visivel
+                    ? `<button class="btn btn-ghost btn-sm" data-metas-toggle="${m.id}" title="Visível p/ a colab — clique para OCULTAR" style="background:#DCFCE7;color:#15803D;border:1px solid #86EFAC;">👁️ Visível</button>`
+                    : `<button class="btn btn-ghost btn-sm" data-metas-toggle="${m.id}" title="Privada (só ADM vê) — clique para PUBLICAR no Meu Painel" style="background:#F1F5F9;color:#64748B;border:1px solid #CBD5E1;">🔒 Privada</button>`}
                   <button class="btn btn-ghost btn-sm" data-metas-edit="${m.id}">✏️</button>
                   <button class="btn btn-ghost btn-sm" data-metas-del="${m.id}" style="color:#DC2626;">🗑️</button>
                 </div>
@@ -306,6 +309,18 @@ function renderMetasNova() {
       <div class="fg">
         <label class="fl">💰 Valor do bônus (R$)</label>
         <input type="number" class="fi" id="meta-bonus-valor" min="0" step="0.01" value="${meta.bonusValor||''}" placeholder="Ex: 500"/>
+      </div>
+
+      <div class="fg" style="grid-column:span 2;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;">
+          <input type="checkbox" id="meta-visivel" ${meta.visivel?'checked':''} style="width:18px;height:18px;cursor:pointer;accent-color:#F59E0B;"/>
+          <span style="font-size:13px;font-weight:600;color:#92400E;">
+            👁️ Publicar no Meu Painel da colaboradora
+          </span>
+          <span style="font-size:11px;color:#92400E;opacity:.8;margin-left:auto;">
+            Se desmarcado, a meta fica privada — só você (ADM) vê.
+          </span>
+        </label>
       </div>
     </div>
 
@@ -494,6 +509,7 @@ export function bindMetasEvents() {
     const valorMeta   = Number(document.getElementById('meta-valor')?.value) || 0;
     const bonusModo   = document.getElementById('meta-bonus-modo')?.value;
     const bonusValor  = Number(document.getElementById('meta-bonus-valor')?.value) || 0;
+    const visivel     = !!document.getElementById('meta-visivel')?.checked;
 
     if (!nome)       { toast('Informe o nome da meta', true); return; }
     if (!colabId)    { toast('Selecione uma colaboradora', true); return; }
@@ -504,7 +520,7 @@ export function bindMetasEvents() {
 
     const metas = getMetas();
     const editId = S._metasEditId;
-    const payload = { nome, tipo, colabId, periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor };
+    const payload = { nome, tipo, colabId, periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor, visivel };
     if (editId) {
       const idx = metas.findIndex(m => m.id === editId);
       if (idx >= 0) {
@@ -541,13 +557,29 @@ export function bindMetasEvents() {
       render();
     });
   });
+
+  // Toggle visivel/privada — publica ou oculta no Meu Painel
+  document.querySelectorAll('[data-metas-toggle]').forEach(b => {
+    b.addEventListener('click', () => {
+      const id = b.dataset.metasToggle;
+      const metas = getMetas();
+      const idx = metas.findIndex(m => m.id === id);
+      if (idx < 0) return;
+      metas[idx].visivel = !metas[idx].visivel;
+      setMetas(metas);
+      toast(metas[idx].visivel ? '👁️ Meta publicada no Meu Painel' : '🔒 Meta ocultada (privada)');
+      render();
+    });
+  });
 }
 
 // ── VIEW ATENDENTE (Meu Painel) ──────────────────────────────
-// Cada colab ve apenas as proprias metas + barra de progresso colorida.
+// Cada colab ve apenas as proprias metas que o ADM marcou como
+// VISIVEL (m.visivel === true). Enquanto o ADM nao publica, a meta
+// fica privada — so o ADM ve no modulo Metas.
 export function renderMetasParaAtendente(user, ordersList = S.orders) {
   const myKey = String(user?._id || user?.id || '');
-  const metas = getMetas().filter(m => String(m.colabId) === myKey);
+  const metas = getMetas().filter(m => String(m.colabId) === myKey && m.visivel === true);
   if (!metas.length) return '';
 
   const blocos = metas.map(m => {
