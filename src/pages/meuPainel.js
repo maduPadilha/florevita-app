@@ -14,14 +14,25 @@ let _pontosCache = null;
 let _pontosCacheAt = 0;
 
 async function loadPontos(userId) {
-  if (_pontosCache && (Date.now() - _pontosCacheAt) < 15_000) return _pontosCache;
+  if (_pontosCache && (Date.now() - _pontosCacheAt) < 10_000) return _pontosCache;
   try {
     // Backend /ponto retorna TODOS os registros (ignora query). Filtramos
     // local por userId para nao misturar pontos de outras colaboradoras.
+    // Aceita match por _id, id, colabId ou email para tolerar diferencas
+    // de formato do user (uuid local vs ObjectId backend).
     const r = await GET('/ponto').catch(() => null);
     const all = Array.isArray(r) ? r : (r?.records || r?.data || []);
-    const uid = String(userId);
-    _pontosCache = all.filter(rec => String(rec.userId||'') === uid);
+    const uid = String(userId||'');
+    // Constroi conjunto de identificadores aceitos a partir do user logado
+    const meusIds = new Set([uid, String(S.user?._id||''), String(S.user?.id||''), String(S.user?.colabId||'')].filter(Boolean));
+    const meuEmail = String(S.user?.email||'').toLowerCase();
+    _pontosCache = all.filter(rec => {
+      const ridStr = String(rec.userId||rec.colabId||rec.user||'');
+      if (ridStr && meusIds.has(ridStr)) return true;
+      const remail = String(rec.userEmail||rec.email||'').toLowerCase();
+      if (meuEmail && remail && remail === meuEmail) return true;
+      return false;
+    });
     _pontosCacheAt = Date.now();
     return _pontosCache;
   } catch { return []; }
@@ -154,21 +165,54 @@ function fmtHora(iso) {
   } catch { return '—'; }
 }
 
-// Agrupa registros (type+date+time) por data, montando entrada/almoco/volta/saida
+// Os registros do backend ja vem CONSOLIDADOS por dia — cada registro
+// tem chegada/saidaAlmoco/voltaAlmoco/saida como CAMPOS DIRETOS.
+// Antes este helper assumia 'type'+'time' (formato antigo de eventos),
+// resultando em pontos vazios para TODAS as colaboradoras.
+//
+// Fallback: tambem aceita o formato antigo (event-based com r.type/r.time)
+// para compatibilidade com registros legados.
 function agruparPontosPorDia(records) {
-  const grupos = {};
-  for (const r of records) {
-    const data = r.date || (r.createdAt ? r.createdAt.slice(0,10) : '');
-    if (!data) continue;
-    if (!grupos[data]) grupos[data] = { data, entrada:'', saidaAlmoco:'', voltaAlmoco:'', saida:'' };
-    const t = String(r.type||'').toLowerCase();
-    const hora = r.time || '';
-    if (t.includes('entrada')) grupos[data].entrada = hora;
-    else if (t.includes('saida_almoco') || t.includes('saidaalmoco') || (t === 'almoco' && !grupos[data].saidaAlmoco)) grupos[data].saidaAlmoco = hora;
-    else if (t.includes('volta_almoco') || t.includes('voltaalmoco') || t === 'volta') grupos[data].voltaAlmoco = hora;
-    else if (t.includes('saida')) grupos[data].saida = hora;
+  // Detecta formato: se tem chegada/saidaAlmoco direto, usa formato consolidado
+  const consolidados = records.filter(r => r && (r.chegada || r.entrada || r.saidaAlmoco || r.voltaAlmoco || r.saida));
+  const eventos     = records.filter(r => r && r.type && r.time && !(r.chegada || r.saidaAlmoco));
+
+  // Formato consolidado: 1 record = 1 dia
+  const out = consolidados.map(r => ({
+    data: r.date || (r.createdAt||'').slice(0,10),
+    entrada:     r.chegada     || r.entrada     || '',
+    saidaAlmoco: r.saidaAlmoco || '',
+    voltaAlmoco: r.voltaAlmoco || '',
+    saida:       r.saida       || '',
+  })).filter(p => p.data);
+
+  // Formato antigo (event-based): agrupa por data
+  if (eventos.length) {
+    const grupos = {};
+    for (const r of eventos) {
+      const data = r.date || (r.createdAt ? r.createdAt.slice(0,10) : '');
+      if (!data) continue;
+      if (!grupos[data]) grupos[data] = { data, entrada:'', saidaAlmoco:'', voltaAlmoco:'', saida:'' };
+      const t = String(r.type||'').toLowerCase();
+      const hora = r.time || '';
+      if (t.includes('entrada') || t === 'chegada') grupos[data].entrada = hora;
+      else if (t.includes('saida_almoco') || t.includes('saidaalmoco') || (t === 'almoco' && !grupos[data].saidaAlmoco)) grupos[data].saidaAlmoco = hora;
+      else if (t.includes('volta_almoco') || t.includes('voltaalmoco') || t === 'volta') grupos[data].voltaAlmoco = hora;
+      else if (t.includes('saida')) grupos[data].saida = hora;
+    }
+    // Mescla com consolidados (consolidado ganha se tiver os dois)
+    for (const [data, g] of Object.entries(grupos)) {
+      const ja = out.find(p => p.data === data);
+      if (ja) {
+        ja.entrada     = ja.entrada     || g.entrada;
+        ja.saidaAlmoco = ja.saidaAlmoco || g.saidaAlmoco;
+        ja.voltaAlmoco = ja.voltaAlmoco || g.voltaAlmoco;
+        ja.saida       = ja.saida       || g.saida;
+      } else out.push(g);
+    }
   }
-  return Object.values(grupos).sort((a,b) => b.data.localeCompare(a.data));
+
+  return out.sort((a,b) => (b.data||'').localeCompare(a.data||''));
 }
 
 export function renderMeuPainel() {
