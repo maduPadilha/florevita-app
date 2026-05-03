@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-5';
+const APP_VERSION = '20260503-6';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2155,6 +2155,82 @@ function bindPageActions(){
     document.getElementById('rel-date-clear')?.addEventListener('click',()=>{ S._relDate1=''; S._relDate2=''; render(); });
     document.getElementById('rel-driver-filter')?.addEventListener('change',e=>{S._relDriver=e.target.value;render();});
     document.getElementById('rel-colab-filter')?.addEventListener('change',e=>{S._relColab=e.target.value;render();});
+
+    // ── Relatório por Colaborador ────────────────────────────
+    document.getElementById('rel-colab-id')?.addEventListener('change', e => { S._relColabId = e.target.value; render(); });
+    document.getElementById('rel-setor')?.addEventListener('change', e => { S._relSetor = e.target.value; render(); });
+    document.getElementById('rel-ordenar')?.addEventListener('change', e => { S._relOrdenar = e.target.value; render(); });
+    document.getElementById('btn-export-por-colab')?.addEventListener('click', () => {
+      const orders = (S._relFiltered || S.orders).filter(o => {
+        const id = String(S._relColabId);
+        const setor = S._relSetor || 'todos';
+        if (setor === 'vendas')    return String(o.vendedorId||o.createdByColabId||'') === id;
+        if (setor === 'montagem')  return String(o.montadorId||'') === id;
+        if (setor === 'expedicao') return String(o.expedidorId||'') === id;
+        return [o.vendedorId, o.createdByColabId, o.montadorId, o.expedidorId].some(x => String(x||'') === id);
+      });
+      const rows = [['Pedido','Cliente','Produto','Cod','Qtd','Vlr Unit','Vlr Total','Vlr Pedido','Data Venda','Data Expedicao']];
+      for (const o of orders) {
+        for (const it of (o.items||[])) {
+          rows.push([
+            o.orderNumber||'', o.clientName||'', it.name||'', it.code||it.product||'',
+            it.qty, it.unitPrice||'', it.totalPrice||(it.unitPrice*it.qty)||'',
+            o.total||'',
+            o.createdAt ? new Date(o.createdAt).toLocaleDateString('pt-BR') : '',
+            o.expedidoEm ? new Date(o.expedidoEm).toLocaleDateString('pt-BR') : '',
+          ]);
+        }
+      }
+      const csv = '﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+      const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `relatorio-colaborador-${Date.now()}.csv`; a.click();
+      URL.revokeObjectURL(url);
+      toast('✅ CSV exportado');
+    });
+
+    // ── Relatório Chão de Datas Comemorativas ─────────────────
+    document.getElementById('chao-data')?.addEventListener('change', e => { S._chaoData = e.target.value; render(); });
+    document.getElementById('chao-hora')?.addEventListener('input',  e => {
+      clearTimeout(window._chaoHTimer);
+      window._chaoHTimer = setTimeout(()=>{ S._chaoHora = e.target.value; render(); }, 300);
+    });
+    document.getElementById('chao-bairro')?.addEventListener('input', e => {
+      clearTimeout(window._chaoBTimer);
+      window._chaoBTimer = setTimeout(()=>{ S._chaoBairro = e.target.value; render(); }, 300);
+    });
+    document.getElementById('chao-turno')?.addEventListener('change', e => { S._chaoTurno = e.target.value; render(); });
+    document.getElementById('btn-export-chao')?.addEventListener('click', () => {
+      // Reconstroi map (mesmo da pagina)
+      const orders = S.orders || [];
+      const fData    = S._chaoData || '';
+      const fHora    = S._chaoHora || '';
+      const fBairro  = (S._chaoBairro || '').toLowerCase().trim();
+      const fTurno   = S._chaoTurno || '';
+      let pedidos = orders;
+      if (fData)   pedidos = pedidos.filter(o => String(o.scheduledDate||'').slice(0,10) === fData);
+      if (fHora)   pedidos = pedidos.filter(o => String(o.scheduledTime||'').includes(fHora));
+      if (fBairro) pedidos = pedidos.filter(o => String(o.deliveryNeighborhood||o.deliveryZone||'').toLowerCase().includes(fBairro));
+      if (fTurno)  pedidos = pedidos.filter(o => String(o.scheduledPeriod||'').toLowerCase() === fTurno.toLowerCase());
+      const map = {};
+      for (const o of pedidos) for (const it of (o.items||[])) {
+        const key = String(it.code || it.product || it.name || '?');
+        if (!map[key]) map[key] = { code: it.code || it.product || '', name: it.name || '', qty: 0, valor: 0 };
+        map[key].qty += Number(it.qty)||0;
+        map[key].valor += Number(it.totalPrice||(it.unitPrice*it.qty))||0;
+      }
+      const produtos = Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
+      const rows = [['Codigo','Produto','Qtd Total','Valor Total']];
+      for (const p of produtos) rows.push([p.code, p.name, p.qty, p.valor.toFixed(2)]);
+      const csv = '﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+      const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `chao-datas-${fData||'tudo'}-${Date.now()}.csv`; a.click();
+      URL.revokeObjectURL(url);
+      toast('✅ CSV exportado');
+    });
     // Vendas por Unidade
     document.getElementById('rep-prod-filter')?.addEventListener('input', e => {
       clearTimeout(window._repProdTimer);

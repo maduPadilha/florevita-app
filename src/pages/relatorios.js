@@ -644,6 +644,8 @@ export function renderRelatorios(){
   ${tabBtn('metas','🎯 Metas')}
   ${(S.user?.cargo==='admin'||S.user?.role==='Administrador'||(S.user?.modulos&&S.user.modulos.reportsOperacao===true))?tabBtn('operacao','⏰ Operação'):''}
   ${tabBtn('altademanda','💐 Alta Demanda')}
+  ${tabBtn('porColaborador','👤 Por Colaborador')}
+  ${tabBtn('chaoDatas','🌹 Chão de Datas Comemorativas')}
   ${tabBtn('custom','📋 Meus Relatórios')}
 </div>
 
@@ -1350,8 +1352,249 @@ ${tab==='operacao'?renderTabOperacao(period, periodLabel):''}
 
 ${tab==='altademanda'?renderTabAltaDemanda():''}
 
+${tab==='porColaborador'?renderPorColaborador(base, period, periodLabel):''}
+
+${tab==='chaoDatas'?renderChaoDatas(base):''}
+
 ${tab==='custom'?renderCustomReports():''}
 
+`;
+}
+
+// ── RELATORIO POR COLABORADOR ────────────────────────────────
+function renderPorColaborador(orders, period, periodLabel) {
+  const colabId  = S._relColabId  || '';
+  const setor    = S._relSetor    || 'todos';
+  const ordenar  = S._relOrdenar  || 'data';
+
+  const colabs = (S.colaboradores || []).filter(c => c.active !== false && c.cargo !== 'Entregador');
+  const colab  = colabs.find(c => String(c._id) === String(colabId));
+
+  // Filtra pedidos atribuidos ao colab por setor
+  let pedidos = [];
+  if (colabId) {
+    const matchVendedor = (o) => String(o.vendedorId||o.createdByColabId||o.criadoPor||'') === String(colabId);
+    const matchMontador = (o) => String(o.montadorId||'') === String(colabId);
+    const matchExpedidor = (o) => String(o.expedidorId||'') === String(colabId);
+    pedidos = orders.filter(o => {
+      if (setor === 'vendas') return matchVendedor(o);
+      if (setor === 'montagem') return matchMontador(o);
+      if (setor === 'expedicao') return matchExpedidor(o);
+      return matchVendedor(o) || matchMontador(o) || matchExpedidor(o);
+    });
+  }
+
+  // Ordenacao
+  const sortFn = {
+    data:  (a,b) => new Date(b.createdAt) - new Date(a.createdAt),
+    valor: (a,b) => (Number(b.total)||0) - (Number(a.total)||0),
+    qtd:   (a,b) => (b.items||[]).reduce((s,i)=>s+i.qty,0) - (a.items||[]).reduce((s,i)=>s+i.qty,0),
+  }[ordenar] || ((a,b) => 0);
+  pedidos = [...pedidos].sort(sortFn);
+
+  // Totais
+  const totalVendas    = pedidos.reduce((s,o) => s + (Number(o.total)||0), 0);
+  const totalProdutos  = pedidos.reduce((s,o) => s + (o.items||[]).reduce((x,i)=>x+(Number(i.qty)||0), 0), 0);
+
+  return `
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">👤 Relatório por Colaborador <span style="font-size:11px;color:var(--muted);font-weight:400;">· ${periodLabel}</span></div>
+  <div class="g3" style="gap:10px;align-items:end;">
+    <div class="fg"><label class="fl">Colaborador</label>
+      <select class="fi" id="rel-colab-id">
+        <option value="">— Selecione —</option>
+        ${colabs.sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(c => `<option value="${c._id}" ${colabId===c._id?'selected':''}>${c.name} (${c.cargo})</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Setor</label>
+      <select class="fi" id="rel-setor">
+        <option value="todos" ${setor==='todos'?'selected':''}>Todos</option>
+        <option value="vendas" ${setor==='vendas'?'selected':''}>💰 Vendas</option>
+        <option value="montagem" ${setor==='montagem'?'selected':''}>🌸 Montagem</option>
+        <option value="expedicao" ${setor==='expedicao'?'selected':''}>📦 Expedição</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Ordenar por</label>
+      <select class="fi" id="rel-ordenar">
+        <option value="data" ${ordenar==='data'?'selected':''}>Data (mais recente)</option>
+        <option value="valor" ${ordenar==='valor'?'selected':''}>Valor (maior)</option>
+        <option value="qtd" ${ordenar==='qtd'?'selected':''}>Quantidade (maior)</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="btn-export-por-colab" ${!colabId?'disabled':''}>📤 Exportar CSV</button>
+  </div>
+</div>
+
+${!colabId ? `
+<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+  <div style="font-size:48px;margin-bottom:12px;">👤</div>
+  <h3>Selecione um colaborador</h3>
+  <p style="font-size:13px;margin-top:6px;">Escolha quem você quer analisar acima.</p>
+</div>
+` : pedidos.length === 0 ? `
+<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+  <div style="font-size:48px;margin-bottom:12px;">📭</div>
+  <p>${colab?.name || 'Colaborador'} não tem registros em ${setor==='todos'?'nenhum setor':setor} no período.</p>
+</div>
+` : `
+<div class="card" style="margin-bottom:10px;background:linear-gradient(135deg,#FAE8E6,#FAF7F5);">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Colaborador</div>
+      <div style="font-size:18px;font-weight:700;color:#9F1239;">${colab?.name || '—'}</div>
+      <div style="font-size:11px;color:var(--muted);">${colab?.cargo || ''}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Pedidos</div>
+      <div style="font-size:24px;font-weight:900;">${pedidos.length}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Total Vendas</div>
+      <div style="font-size:20px;font-weight:900;color:#15803D;">${$c(totalVendas)}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Produtos</div>
+      <div style="font-size:24px;font-weight:900;">${totalProdutos}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="overflow-x:auto;">
+  <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
+      <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Pedido</th>
+      <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Cliente</th>
+      <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Produtos</th>
+      <th style="padding:10px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Valor</th>
+      <th style="padding:10px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Data Venda</th>
+      <th style="padding:10px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Data Expedição</th>
+      <th style="padding:10px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Setor</th>
+    </tr></thead>
+    <tbody>
+      ${pedidos.map(o => {
+        const setores = [];
+        if (String(o.vendedorId||o.createdByColabId||'') === String(colabId)) setores.push('💰');
+        if (String(o.montadorId||'') === String(colabId)) setores.push('🌸');
+        if (String(o.expedidorId||'') === String(colabId)) setores.push('📦');
+        const dataVenda = o.createdAt ? new Date(o.createdAt).toLocaleDateString('pt-BR') : '—';
+        const dataExp   = o.expedidoEm ? new Date(o.expedidoEm).toLocaleDateString('pt-BR') : '—';
+        return `<tr style="border-bottom:1px solid #F1F5F9;">
+          <td style="padding:8px 10px;font-weight:700;color:#7C3AED;">#${o.orderNumber||'—'}</td>
+          <td style="padding:8px 10px;">${o.clientName||o.client?.name||'—'}</td>
+          <td style="padding:8px 10px;font-size:11px;">${(o.items||[]).map(i => `<div>${i.qty}× ${i.name||'?'} <span style="color:var(--muted);">(${i.code||i.product||'—'})</span> · ${$c(i.unitPrice)} = ${$c(i.totalPrice||i.unitPrice*i.qty)}</div>`).join('')}</td>
+          <td style="padding:8px 10px;text-align:right;font-weight:700;">${$c(o.total)}</td>
+          <td style="padding:8px 10px;text-align:center;font-size:11px;">${dataVenda}</td>
+          <td style="padding:8px 10px;text-align:center;font-size:11px;">${dataExp}</td>
+          <td style="padding:8px 10px;text-align:center;font-size:14px;">${setores.join(' ')}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+</div>
+`}
+`;
+}
+
+// ── RELATORIO CHAO DE DATAS COMEMORATIVAS ────────────────────
+function renderChaoDatas(orders) {
+  const fData    = S._chaoData || '';
+  const fHora    = S._chaoHora || '';
+  const fBairro  = (S._chaoBairro || '').toLowerCase().trim();
+  const fTurno   = S._chaoTurno || '';
+
+  // Filtra pedidos
+  let pedidos = orders;
+  if (fData) pedidos = pedidos.filter(o => String(o.scheduledDate||'').slice(0,10) === fData);
+  if (fHora) pedidos = pedidos.filter(o => String(o.scheduledTime||'').includes(fHora));
+  if (fBairro) pedidos = pedidos.filter(o => String(o.deliveryNeighborhood||o.deliveryZone||'').toLowerCase().includes(fBairro));
+  if (fTurno) pedidos = pedidos.filter(o => String(o.scheduledPeriod||'').toLowerCase() === fTurno.toLowerCase());
+
+  // Agrupa produtos
+  const map = {};
+  for (const o of pedidos) {
+    for (const it of (o.items || [])) {
+      const key = String(it.code || it.product || it.name || '?');
+      if (!map[key]) map[key] = { code: it.code || it.product || '—', name: it.name || '?', qty: 0, valor: 0 };
+      map[key].qty   += Number(it.qty) || 0;
+      map[key].valor += Number(it.totalPrice || (it.unitPrice * it.qty)) || 0;
+    }
+  }
+  const produtos = Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
+  const totalQtd  = produtos.reduce((s,p) => s+p.qty, 0);
+  const totalProd = produtos.length;
+
+  return `
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">🌹 Chão de Datas Comemorativas <span style="font-size:11px;color:var(--muted);font-weight:400;">· Visão estratégica de produção</span></div>
+  <div class="g3" style="gap:10px;align-items:end;">
+    <div class="fg"><label class="fl">Data de entrega</label>
+      <input type="date" class="fi" id="chao-data" value="${fData}"/></div>
+    <div class="fg"><label class="fl">Horário (parcial)</label>
+      <input type="text" class="fi" id="chao-hora" value="${fHora}" placeholder="14:30"/></div>
+    <div class="fg"><label class="fl">Bairro</label>
+      <input type="text" class="fi" id="chao-bairro" value="${S._chaoBairro||''}" placeholder="Centro"/></div>
+    <div class="fg"><label class="fl">Turno</label>
+      <select class="fi" id="chao-turno">
+        <option value="">Todos</option>
+        <option value="Manhã" ${fTurno==='Manhã'?'selected':''}>🌅 Manhã</option>
+        <option value="Tarde" ${fTurno==='Tarde'?'selected':''}>☀️ Tarde</option>
+        <option value="Noite" ${fTurno==='Noite'?'selected':''}>🌙 Noite</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="btn-export-chao">📤 Exportar CSV</button>
+  </div>
+</div>
+
+<div class="card" style="background:linear-gradient(135deg,#FAE8E6,#FAF7F5);margin-bottom:10px;">
+  <div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:10px;">
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Pedidos no filtro</div>
+      <div style="font-size:24px;font-weight:900;">${pedidos.length}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Produtos diferentes</div>
+      <div style="font-size:24px;font-weight:900;color:#9F1239;">${totalProd}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Total de unidades</div>
+      <div style="font-size:24px;font-weight:900;color:#15803D;">${totalQtd}</div>
+    </div>
+  </div>
+</div>
+
+${produtos.length === 0 ? `
+<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+  <div style="font-size:48px;margin-bottom:12px;">📭</div>
+  <p>Nenhum produto encontrado com esses filtros.</p>
+</div>
+` : `
+<div class="card" style="overflow-x:auto;">
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
+      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">#</th>
+      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Código</th>
+      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Produto</th>
+      <th style="padding:12px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Qtd Total</th>
+      <th style="padding:12px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Valor Total</th>
+    </tr></thead>
+    <tbody>
+      ${produtos.map((p, i) => `
+        <tr style="border-bottom:1px solid #F1F5F9;">
+          <td style="padding:10px 12px;color:var(--muted);font-size:11px;">${i+1}</td>
+          <td style="padding:10px 12px;font-family:Monaco,monospace;color:#7C3AED;font-weight:700;">${p.code}</td>
+          <td style="padding:10px 12px;font-weight:600;">${p.name}</td>
+          <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;background:#15803D;color:#fff;padding:5px 14px;border-radius:999px;font-weight:900;font-size:14px;">${p.qty}</span></td>
+          <td style="padding:10px 12px;text-align:right;font-weight:700;color:#15803D;">${$c(p.valor)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+</div>
+
+<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px;margin-top:10px;font-size:12px;color:#1E40AF;">
+  💡 <strong>Use este relatório para:</strong> Produção (saber o que montar antes) · Logística (organizar rotas) · Compras (planejar estoque)
+</div>
+`}
 `;
 }
 
