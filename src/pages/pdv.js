@@ -238,8 +238,16 @@ export function renderPDV(){
         const sel = String(PDV.vendedorId) === cid ? 'selected' : '';
         return `<option value="${cid}|${cn}|${ce}" ${sel}>${c.name||'?'}</option>`;
       }).join('');
+      const meuNomeCurto = (S.user?.name || S.user?.nome || '').split(' ')[0] || 'Eu';
+      const souEuSelecionada = String(PDV.vendedorId) === myId;
       return `<div class="fg"><label class="fl">\uD83D\uDC64 Vendedor (quem fez a venda) *</label>
-        <select class="fi" id="pdv-vendedor">${optsHtml}</select>
+        <div style="display:flex;gap:6px;align-items:stretch;">
+          <select class="fi" id="pdv-vendedor" style="flex:1;">${optsHtml}</select>
+          ${S.user ? `<button type="button" id="pdv-vendedor-eu" title="Selecionar voc\u00EA mesma como vendedora"
+            style="white-space:nowrap;padding:0 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid ${souEuSelecionada?'#15803D':'#FECDD3'};background:${souEuSelecionada?'#DCFCE7':'#FFF'};color:${souEuSelecionada?'#15803D':'#9F1239'};">
+            ${souEuSelecionada?'\u2705 ':''}\uD83D\uDC4B Sou eu (${meuNomeCurto})
+          </button>` : ''}
+        </div>
         <div style="font-size:10px;color:var(--muted);margin-top:3px;">${todos.length} colaborador${todos.length===1?'':'es'} dispon\u00EDveis \u00B7 Comiss\u00E3o de venda vai para o selecionado</div>
       </div>`;
     })()}
@@ -257,27 +265,35 @@ export function renderPDV(){
 
       // Define padrao se ainda nao escolhido
       if (!PDV.salesChannel) {
-        PDV.salesChannel = isLojaFisica ? 'Balcão' : 'WhatsApp/Online';
+        PDV.salesChannel = isLojaFisica ? 'Balcão' : 'WhatsApp';
       }
 
       const opcoes = [
-        { v:'WhatsApp/Online', l:'WhatsApp/Online', icon:'/icones/whatsapp.png' },
-        { v:'Balcão',          l:'Balcão',          icon:'/icones/balcao.png' },
-        { v:'iFood',           l:'iFood',           icon:'/icones/ifood.png' },
+        { v:'WhatsApp',  l:'WhatsApp',  icon:'/icones/whatsapp.png' },
+        { v:'Balcão',    l:'Balcão',    icon:'/icones/balcao.png' },
+        { v:'Instagram', l:'Instagram', icon:'/icones/instagram.png' },
+        { v:'Giuliana',  l:'Giuliana',  icon:'/icones/giuliana.png' },
+        { v:'iFood',     l:'iFood',     icon:'/icones/ifood.png' },
+        { v:'Site',      l:'Site',      icon:'/icones/ecommerce.png' },
       ];
-      if (podeEcommerce) opcoes.push({ v:'E-commerce', l:'E-commerce', icon:'/icones/ecommerce.png' });
+      // Compat: legado 'WhatsApp/Online' vira 'WhatsApp' ao carregar
+      if (PDV.salesChannel === 'WhatsApp/Online') PDV.salesChannel = 'WhatsApp';
+      if (PDV.salesChannel === 'E-commerce')      PDV.salesChannel = 'Site';
 
       const sel = PDV.salesChannel;
       const selOpt = opcoes.find(o => o.v === sel) || opcoes[0];
 
+      // Filtro: Site so para admin/autorizado
+      const opcoesFiltradas = opcoes.filter(op => op.v !== 'Site' || podeEcommerce);
+
       return `<div class="fg"><label class="fl">Canal de Venda <span style="color:var(--red)">*</span></label>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <select class="fi" id="pdv-sales-channel" style="flex:1;min-width:180px;display:flex;align-items:center;">
-            ${opcoes.map(op => `<option value="${op.v}" ${op.v===sel?'selected':''}>${op.l}${op.v==='E-commerce'?' 🛒 (admin)':''}</option>`).join('')}
+          <select class="fi" id="pdv-sales-channel" style="flex:1;min-width:180px;">
+            ${opcoesFiltradas.map(op => `<option value="${op.v}" ${op.v===sel?'selected':''}>${op.l}</option>`).join('')}
           </select>
-          <img src="${selOpt.icon}" alt="${selOpt.l}" style="width:32px;height:32px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:3px;background:#fff;"/>
+          <img src="${selOpt.icon}" alt="${selOpt.l}" style="width:32px;height:32px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:3px;background:#fff;" onerror="this.style.display='none';"/>
         </div>
-        ${!podeEcommerce ? '<div style="font-size:10px;color:var(--muted);margin-top:3px;">💡 E-commerce: disponível apenas para Administrador (ou usuário autorizado).</div>' : ''}
+        ${!podeEcommerce ? '<div style="font-size:10px;color:var(--muted);margin-top:3px;">💡 Site (e-commerce): disponível apenas para Administrador (ou usuário autorizado).</div>' : ''}
       </div>`;
     })()}
 

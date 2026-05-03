@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-23';
+const APP_VERSION = '20260503-24';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -1995,6 +1995,15 @@ function bindPageActions(){
       PDV.vendedorId = v[0] || '';
       PDV.vendedorNome = v[1] || '';
       PDV.vendedorEmail = v[2] || '';
+      render();
+    });
+    // Atalho 'Sou eu' — define vendedor como o user logado em 1 clique
+    document.getElementById('pdv-vendedor-eu')?.addEventListener('click', () => {
+      if (!S.user) return;
+      PDV.vendedorId    = String(S.user._id || S.user.colabId || '');
+      PDV.vendedorNome  = S.user.name || S.user.nome || '';
+      PDV.vendedorEmail = S.user.email || '';
+      render();
     });
     document.getElementById('pdv-sales-channel')?.addEventListener('change',e=>{PDV.salesChannel=e.target.value;render();});
     document.getElementById('pdv-notify')?.addEventListener('change',e=>{PDV.notifyClient=e.target.checked});
