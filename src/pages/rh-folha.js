@@ -33,12 +33,16 @@ export function getFolhas()    { try { return JSON.parse(localStorage.getItem(LS
 export function setFolhas(arr) { localStorage.setItem(LS_FOLHAS, JSON.stringify(arr || [])); }
 
 // ── CALCULO INSS 2026 (faixa progressiva oficial) ────────────
-// Fonte: tabela MPS — pode ser ajustada anualmente em uma constante.
+// Tabela atualizada conforme regulamentacao 2026:
+//   Ate R$ 1.621,00           → 7,5%
+//   R$ 1.621,01 a R$ 2.902,84 → 9,0%
+//   R$ 2.902,85 a R$ 4.354,27 → 12,0%
+//   R$ 4.354,28 a R$ 8.475,55 → 14,0% (teto)
 const INSS_FAIXAS_2026 = [
-  { ate: 1412.00, aliq: 0.075 },
-  { ate: 2666.68, aliq: 0.090 },
-  { ate: 4000.03, aliq: 0.120 },
-  { ate: 7786.02, aliq: 0.140 },
+  { ate: 1621.00, aliq: 0.075 },
+  { ate: 2902.84, aliq: 0.090 },
+  { ate: 4354.27, aliq: 0.120 },
+  { ate: 8475.55, aliq: 0.140 },
 ];
 export function calcINSS(salarioContrib) {
   let restante = Number(salarioContrib) || 0;
