@@ -6,6 +6,7 @@
 import { S } from '../state.js';
 import { $c } from '../utils/formatters.js';
 import { GET } from '../services/api.js';
+import { renderMetasParaAtendente } from './metas.js';
 
 // Cache em memoria dos pontos do user (evita refetch a cada render)
 let _pontosCache = null;
@@ -185,6 +186,8 @@ export function renderMeuPainel() {
   const pontosRaw = _pontosCache || [];
   const pontos = agruparPontosPorDia(pontosRaw);
   const comissoes = calcularComissoes(u, _ordersHistCache);
+  // Bloco de Metas (vendas/montagem/expedicao + Meta Extra) — usa historico
+  const metasHTML = renderMetasParaAtendente(u, _ordersHistCache);
   const totalAcumulado = comissoes.reduce((s,c) => s + c.total, 0);
   const totalVendaCom  = comissoes.reduce((s,c) => s + c.vendaComissao, 0);
   const totalMontCom   = comissoes.reduce((s,c) => s + c.montagemComissao, 0);
@@ -298,5 +301,7 @@ export function renderMeuPainel() {
     </div>
   </div>
 </div>
+
+${metasHTML}
 `;
 }
