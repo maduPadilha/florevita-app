@@ -133,9 +133,16 @@ export function renderFinanceiro(){
   const BLOQUEADOS = ['Cancelado','Negado','Extornado'];
   const receitas = filteredOrders.filter(o=>PAGOS.includes(o.paymentStatus)).reduce((s,o)=>s+(o.total||0),0);
   const pendente = filteredOrders.filter(o=>!PAGOS.includes(o.paymentStatus)&&o.status!=='Cancelado'&&!BLOQUEADOS.includes(o.paymentStatus)).reduce((s,o)=>s+(o.total||0),0);
-  const contas = S.financialEntries||[];
-  const contasPagar = contas.filter(c=>c.type==='Despesa');
-  const contasReceber = contas.filter(c=>c.type==='Receita');
+  // FILTRO 'Conta Pessoal': esconde entradas marcadas como pessoal
+  // de qualquer usuario que NAO seja admin (gerente/financeiro/contador
+  // tambem nao veem). Backend tolera campo extra 'pessoal'.
+  const _ehAdmin = S.user?.role === 'Administrador' || S.user?.cargo === 'admin' || String(S.user?.cargo||'').toLowerCase() === 'administrador';
+  const contas = (S.financialEntries||[]).filter(c => _ehAdmin || c.pessoal !== true);
+  // Aceita 'Despesa'/'despesa' (compat backend que normaliza para lowercase)
+  const _isDespesa = c => String(c.type||'').toLowerCase() === 'despesa';
+  const _isReceita = c => String(c.type||'').toLowerCase() === 'receita';
+  const contasPagar = contas.filter(_isDespesa);
+  const contasReceber = contas.filter(_isReceita);
   const vencidas = contasPagar.filter(c=>c.status==='Pendente'&&c.dueDate&&new Date(c.dueDate)<new Date());
 
   return `
@@ -186,9 +193,10 @@ ${vencidas.length>0?`<div class="alert al-err">⚠️ <strong>${vencidas.length}
       ${contasPagar.length===0?`<div class="empty"><div class="empty-icon">📋</div><p>Nenhuma conta cadastrada</p><button class="btn btn-primary btn-sm" id="btn-new-despesa2" style="margin-top:8px">+ Adicionar conta</button></div>`:`
       ${contasPagar.slice(0,8).map(c=>{
         const vencida = c.status==='Pendente'&&c.dueDate&&new Date(c.dueDate)<new Date();
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+        const badgePessoal = c.pessoal ? `<span style="background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:4px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:6px;">🔒 PESSOAL</span>` : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);${c.pessoal?'background:#FEF2F2;border-left:3px solid #DC2626;padding-left:8px;':''}">
           <div>
-            <div style="font-size:12px;font-weight:500">${c.description}</div>
+            <div style="font-size:12px;font-weight:500">${c.description}${badgePessoal}</div>
             <div style="font-size:10px;color:var(--muted)">${c.category||'—'} · Vence: ${c.dueDate?$d(c.dueDate):'—'}</div>
           </div>
           <div style="text-align:right;">
@@ -774,6 +782,13 @@ export async function showFinModal(type){
   </div>
   ${type==='Despesa'?`<div class="fg"><label class="fl">Fornecedor / Beneficiário</label><input class="fi" id="fm-supplier" placeholder="Nome do fornecedor"/></div>`:''}
   <div class="fg"><label class="fl">Observações</label><textarea class="fi" id="fm-notes" rows="2"></textarea></div>
+  <div class="fg">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#FEE2E2;border:2px solid #FCA5A5;border-radius:8px;padding:10px 12px;">
+      <input type="checkbox" id="fm-pessoal" style="width:18px;height:18px;cursor:pointer;accent-color:#DC2626;"/>
+      <span style="font-size:13px;font-weight:700;color:#991B1B;">🔒 Conta Pessoal</span>
+      <span style="font-size:11px;color:#991B1B;opacity:.85;margin-left:auto;">Visível apenas para o ADM</span>
+    </label>
+  </div>
   <div class="mo-foot">
     <button class="btn ${type==='Receita'?'btn-green':'btn-red'}" id="btn-sv-fin">Salvar ${type}</button>
     <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
@@ -808,6 +823,8 @@ export async function showFinModal(type){
       status: 'Pendente',
       createdBy: S.user?.name || 'Sistema',
       user: S.user?.name || 'Sistema',
+      // Conta Pessoal: marcacao para esconder de nao-admin
+      pessoal: !!document.getElementById('fm-pessoal')?.checked,
     };
 
     // UX: feedback imediato + bloqueia clique duplo
