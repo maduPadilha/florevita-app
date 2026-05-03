@@ -62,7 +62,17 @@ function calcularComissoes(user) {
     const itensQty = (o.items||[]).reduce((s,i) => s + (Number(i.qty)||1), 0) || 1;
 
     // VENDA — pedido aprovado e este user e o vendedor escolhido no PDV
-    if (APROVADOS.has(String(o.paymentStatus||'')) && sou(o, 'vendedorId', 'vendedorEmail')) {
+    // Fallback para pedidos ANTIGOS (antes do campo vendedor): usa
+    // createdByEmail/createdByColabId/criadoPor.
+    const ehMinhaVenda = APROVADOS.has(String(o.paymentStatus||'')) && (
+      sou(o, 'vendedorId', 'vendedorEmail') ||
+      // Pedidos antigos: usa quem criou o pedido (atendente logada na epoca)
+      (!o.vendedorId && (
+        sou(o, 'createdByColabId', 'createdByEmail') ||
+        String(o.criadoPor||'') === myId
+      ))
+    );
+    if (ehMinhaVenda) {
       const total = Number(o.total) || 0;
       const g = ensure(key);
       g.vendaCount++;

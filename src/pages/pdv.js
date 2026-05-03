@@ -210,22 +210,37 @@ export function renderPDV(){
 
     <!-- VENDEDOR (quem fez a venda \u2014 pode ser diferente do logado) -->
     ${(() => {
-      // Todos os colaboradores ativos podem ser vendedores (atendentes
-      // tambem fazem montagem/expedicao, e qualquer um pode vender no
-      // PDV em campanhas, datas comemorativas, etc).
-      const colabs = (S.colaboradores || []).filter(c => c.active !== false && c.cargo !== 'Entregador');
+      // Todos os colaboradores ativos podem ser vendedores
+      // (Atendente faz tudo: vende, monta e expede)
+      let colabs = [];
+      try { colabs = JSON.parse(localStorage.getItem('fv_colabs')||'[]'); } catch(_){}
+      colabs = colabs.filter(c => c.active !== false && c.cargo !== 'Entregador' && c.cargo !== 'entregador');
       // Default: o proprio user logado se nao definido
+      const myId = String(S.user?._id || S.user?.colabId || '');
+      const myEmail = String(S.user?.email||'').toLowerCase();
       if (!PDV.vendedorId && S.user) {
-        PDV.vendedorId = S.user._id || S.user.colabId || '';
-        PDV.vendedorNome = S.user.name || S.user.nome || '';
+        PDV.vendedorId    = myId;
+        PDV.vendedorNome  = S.user.name || S.user.nome || '';
         PDV.vendedorEmail = S.user.email || '';
       }
-      const optsHtml = (S.user ? [{_id: S.user._id || S.user.colabId, name: (S.user.name||S.user.nome) + ' (voc\u00EA)', email: S.user.email}] : [])
-        .concat(colabs.filter(c => String(c._id) !== String(S.user?._id) && String(c._id) !== String(S.user?.colabId)))
-        .map(c => `<option value="${c._id||''}|${(c.name||'').replace(/"/g,'')}|${(c.email||'').replace(/"/g,'')}" ${PDV.vendedorId===c._id?'selected':''}>${c.name||c.nome||'?'}</option>`).join('');
+      // Lista: o user logado primeiro com (voc\u00EA), depois todos os outros colabs
+      const eu = S.user ? [{ _id: myId, apiId: myId, name: (S.user.name || S.user.nome || '?') + ' (voc\u00EA)', email: S.user.email }] : [];
+      const outros = colabs.filter(c => {
+        const cid = String(c.apiId || c._id || '');
+        const cem = String(c.email||'').toLowerCase();
+        return cid !== myId && cem !== myEmail;
+      });
+      const todos = eu.concat(outros);
+      const optsHtml = todos.map(c => {
+        const cid = String(c.apiId || c._id || '');
+        const cn = (c.name||'?').replace(/"/g,'');
+        const ce = (c.email||'').replace(/"/g,'');
+        const sel = String(PDV.vendedorId) === cid ? 'selected' : '';
+        return `<option value="${cid}|${cn}|${ce}" ${sel}>${c.name||'?'}</option>`;
+      }).join('');
       return `<div class="fg"><label class="fl">\uD83D\uDC64 Vendedor (quem fez a venda) *</label>
         <select class="fi" id="pdv-vendedor">${optsHtml}</select>
-        <div style="font-size:10px;color:var(--muted);margin-top:3px;">Comiss\u00E3o de venda vai para esse colaborador</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px;">${todos.length} colaborador${todos.length===1?'':'es'} dispon\u00EDveis \u00B7 Comiss\u00E3o de venda vai para o selecionado</div>
       </div>`;
     })()}
 
