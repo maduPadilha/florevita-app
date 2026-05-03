@@ -4,7 +4,27 @@ import { GET, PUT } from '../services/api.js';
 import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab, getColabs } from '../services/auth.js';
 import { ZONAS_MANAUS, resolveZona, getTurnoPedido, TURNOS } from '../utils/zonasManaus.js';
-import { getEquipePorSetor, getEntregadores } from './metas.js';
+
+// ── Helpers locais (substituem os antigos do modulo metas removido) ──
+// Filtra colaboradores ativos por setor segundo o cargo cadastrado.
+// Atendimento aparece em todos os 3 setores operacionais (faz rodizio
+// semanal entre vendas, montagem e expedicao).
+function getEquipePorSetor(setor){
+  const colabs = getColabs().filter(c => c.active !== false);
+  const norm = (s) => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const car = c => norm(c.cargo);
+  const isAtend  = c => car(c).includes('atend');
+  const isProd   = c => car(c).includes('producao') || car(c).includes('montad');
+  const isExp    = c => car(c).includes('expedicao');
+  const isEntreg = c => car(c).includes('entregador');
+  if (setor === 'vendas')    return colabs.filter(c => isAtend(c) && !isEntreg(c));
+  if (setor === 'montagem')  return colabs.filter(c => (isAtend(c) || isProd(c)) && !isEntreg(c));
+  if (setor === 'expedicao') return colabs.filter(c => (isAtend(c) || isExp(c))  && !isEntreg(c));
+  return colabs;
+}
+function getEntregadores(){
+  return getColabs().filter(c => c.active !== false && String(c.cargo||'').toLowerCase().includes('entregador'));
+}
 
 // ── Helpers locais (atividades / metas) ──────────────────────
 function getActivities(){ return JSON.parse(localStorage.getItem('fv_activities')||'[]'); }
@@ -678,7 +698,6 @@ export function renderRelatorios(){
   ${tabBtn('caixa','💵 Caixa Completo')}
   ${tabBtn('montagens','🌿 Montagens')}
   ${tabBtn('clientes','👥 Clientes')}
-  ${tabBtn('metas','🎯 Metas')}
   ${(S.user?.cargo==='admin'||S.user?.role==='Administrador'||(S.user?.modulos&&S.user.modulos.reportsOperacao===true))?tabBtn('operacao','⏰ Operação'):''}
   ${tabBtn('altademanda','💐 Alta Demanda')}
   ${tabBtn('porColaborador','👤 Por Colaborador')}
@@ -1401,17 +1420,6 @@ ${tab==='montagens'?(()=>{
 `;
 })():''}
 
-<!-- TAB: METAS — redirecionado para o modulo dedicado -->
-${tab==='metas'?`
-<div class="card" style="text-align:center;padding:40px 20px;background:linear-gradient(135deg,#FAE8E6,#FFF7F5);border:1px solid #FECDD3;">
-  <div style="font-size:48px;margin-bottom:14px;">🎯</div>
-  <div style="font-family:'Playfair Display',serif;font-size:22px;color:#9F1239;margin-bottom:10px;">Metas e Bônus</div>
-  <p style="color:var(--muted);font-size:14px;margin-bottom:18px;max-width:500px;margin-left:auto;margin-right:auto;">
-    O módulo de Metas foi movido para um espaço dedicado, com auto-distribuição por setor (Vendas / Montagem / Expedição), Meta Extra e ranking.
-  </p>
-  <button class="btn btn-primary" onclick="setPage('metas')" style="font-size:14px;">🎯 Ir para Metas e Bônus</button>
-</div>
-`:''}
 
 ${tab==='operacao'?renderTabOperacao(period, periodLabel):''}
 
