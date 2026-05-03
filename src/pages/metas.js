@@ -68,11 +68,14 @@ export function calcularPeriodo(tipo, dataBase = new Date()) {
 
 // ── EQUIPE POR SETOR ─────────────────────────────────────────
 // Cargos do sistema: Gerente / Atendimento / Producao / Expedicao /
-// Financeiro / Entregador. Regras:
+// Financeiro / Entregador.
 //
-//   VENDAS    = APENAS Atendimento (faz vendas)
-//   MONTAGEM  = Atendimento + Producao (atendente tambem monta)
-//   EXPEDICAO = Atendimento + Expedicao (atendente tambem expede)
+// REGRA DE NEGOCIO: ATENDIMENTO faz RODIZIO SEMANAL entre os 3 setores
+// (atendimento + producao/montagem + expedicao). Por isso, TODA pessoa
+// com cargo Atendimento aparece nos 3 setores: vendas, montagem e
+// expedicao.
+//
+// Cargos especializados (Producao, Expedicao) so aparecem no SEU setor.
 //
 // Quem NUNCA aparece nestas listas:
 //   - Entregador (so entrega — nao vende, nao monta, nao expede)
@@ -86,7 +89,8 @@ export function getEquipePorSetor(setor) {
   const isExp    = c => car(c).includes('expedicao');
   const isEntreg = c => car(c).includes('entregador');
 
-  if (setor === 'vendas')    return colabs.filter(c => isAtend(c));
+  // Atendimento aparece em TODOS os 3 setores (rodizio semanal).
+  if (setor === 'vendas')    return colabs.filter(c => isAtend(c) && !isEntreg(c));
   if (setor === 'montagem')  return colabs.filter(c => (isAtend(c) || isProd(c)) && !isEntreg(c));
   if (setor === 'expedicao') return colabs.filter(c => (isAtend(c) || isExp(c))  && !isEntreg(c));
   return colabs;

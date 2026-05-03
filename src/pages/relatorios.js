@@ -1427,26 +1427,37 @@ ${tab==='custom'?renderCustomReports():''}
 }
 
 // ── RELATORIO POR COLABORADOR ────────────────────────────────
+// Helper: chave estavel para identificar 1 colab (usa o primeiro ID
+// disponivel em ordem fixa). Garante que value do <option> bate com
+// o lookup posterior.
+function _colabKey(c) {
+  return String(c?._id || c?.id || c?.backendId || c?.email || c?.name || '');
+}
+
 function renderPorColaborador(orders, period, periodLabel) {
   const colabId  = S._relColabId  || '';
   const setor    = S._relSetor    || 'todos';
   const ordenar  = S._relOrdenar  || 'data';
 
-  // v3: lista combina Atendimento + Producao + Expedicao + Entregador
-  // (cada cargo aparece no setor correto). Gerente/Financeiro/Admin
-  // ficam de fora pois nao sao operacionais.
-  const setVendas    = getEquipePorSetor('vendas');
-  const setMontagem  = getEquipePorSetor('montagem');
-  const setExpedicao = getEquipePorSetor('expedicao');
-  const setEntregadores = getEntregadores();
-  // Uniao sem duplicatas (chave _id)
-  const colabSet = new Map();
-  [...setVendas, ...setMontagem, ...setExpedicao, ...setEntregadores].forEach(c => {
-    const k = String(c._id || c.id || c.email);
-    if (!colabSet.has(k)) colabSet.set(k, c);
+  // v4: lista TODOS os colabs operacionais (Atendimento, Producao,
+  // Expedicao, Entregador). Atendentes fazem rodizio semanal entre
+  // os 3 setores — entao TODOS aparecem no select (o admin filtra
+  // setor depois). Gerente/Financeiro/Admin ficam de fora.
+  const colabsRaw = getColabs().filter(c => c.active !== false);
+  const norm = (s) => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const operacionais = colabsRaw.filter(c => {
+    const car = norm(c.cargo);
+    return car.includes('atend')   ||
+           car.includes('producao')||
+           car.includes('montad')  ||
+           car.includes('expedicao')||
+           car.includes('entregador');
   });
-  const colabs = [...colabSet.values()];
-  const colab  = colabs.find(c => String(c._id || c.id) === String(colabId));
+  // Dedup por chave estavel
+  const colabMap = new Map();
+  operacionais.forEach(c => { const k = _colabKey(c); if (k && !colabMap.has(k)) colabMap.set(k, c); });
+  const colabs = [...colabMap.values()];
+  const colab  = colabId ? colabMap.get(String(colabId)) : null;
 
   // Filtra pedidos atribuidos ao colab por setor — aceita _id, id, backendId,
   // email e nome (tolerante a pedidos antigos com formatos diferentes).
@@ -1482,7 +1493,7 @@ function renderPorColaborador(orders, period, periodLabel) {
     <div class="fg"><label class="fl">Colaborador</label>
       <select class="fi" id="rel-colab-id">
         <option value="">— Selecione —</option>
-        ${colabs.sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(c => { const cid = c._id || c.id || c.backendId; return `<option value="${cid}" ${String(colabId)===String(cid)?'selected':''}>${c.name} (${c.cargo||'—'})</option>`; }).join('')}
+        ${colabs.sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(c => { const cid = _colabKey(c); return `<option value="${cid}" ${String(colabId)===cid?'selected':''}>${c.name} (${c.cargo||'—'})</option>`; }).join('')}
       </select>
     </div>
     <div class="fg"><label class="fl">Setor</label>
