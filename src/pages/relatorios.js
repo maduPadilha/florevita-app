@@ -4,6 +4,7 @@ import { GET, PUT } from '../services/api.js';
 import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab, getColabs } from '../services/auth.js';
 import { ZONAS_MANAUS, resolveZona, getTurnoPedido, TURNOS } from '../utils/zonasManaus.js';
+import { getEquipePorSetor, getEntregadores } from './metas.js';
 
 // ── Helpers locais (atividades / metas) ──────────────────────
 function getActivities(){ return JSON.parse(localStorage.getItem('fv_activities')||'[]'); }
@@ -1331,8 +1332,8 @@ ${tab==='montagens'?(()=>{
     const st = String(o.status||'').toLowerCase();
     return ['pronto','saiu p/ entrega','entregue'].some(x => st.includes(x));
   });
-  // Agrupa por montador
-  const colabs = getColabs().filter(c => c.active !== false && c.cargo !== 'Entregador');
+  // Agrupa por montador (apenas quem efetivamente monta: Atendimento + Producao)
+  const colabs = getEquipePorSetor('montagem');
   const byMont = {};
   colabs.forEach(c => {
     const k = (c.name||'').trim();
@@ -1431,8 +1432,20 @@ function renderPorColaborador(orders, period, periodLabel) {
   const setor    = S._relSetor    || 'todos';
   const ordenar  = S._relOrdenar  || 'data';
 
-  // Fix v2: usa getColabs() em vez de S.colaboradores (que nao existe)
-  const colabs = getColabs().filter(c => c.active !== false && c.cargo !== 'Entregador');
+  // v3: lista combina Atendimento + Producao + Expedicao + Entregador
+  // (cada cargo aparece no setor correto). Gerente/Financeiro/Admin
+  // ficam de fora pois nao sao operacionais.
+  const setVendas    = getEquipePorSetor('vendas');
+  const setMontagem  = getEquipePorSetor('montagem');
+  const setExpedicao = getEquipePorSetor('expedicao');
+  const setEntregadores = getEntregadores();
+  // Uniao sem duplicatas (chave _id)
+  const colabSet = new Map();
+  [...setVendas, ...setMontagem, ...setExpedicao, ...setEntregadores].forEach(c => {
+    const k = String(c._id || c.id || c.email);
+    if (!colabSet.has(k)) colabSet.set(k, c);
+  });
+  const colabs = [...colabSet.values()];
   const colab  = colabs.find(c => String(c._id || c.id) === String(colabId));
 
   // Filtra pedidos atribuidos ao colab por setor — aceita _id, id, backendId,

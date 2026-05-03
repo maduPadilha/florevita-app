@@ -67,20 +67,34 @@ export function calcularPeriodo(tipo, dataBase = new Date()) {
 }
 
 // ── EQUIPE POR SETOR ─────────────────────────────────────────
-// Floricultura enxuta: atendente vende E monta E expede.
-// Entregador SEMPRE fica fora de vendas/montagem.
+// Cargos do sistema: Gerente / Atendimento / Producao / Expedicao /
+// Financeiro / Entregador. Regras:
+//
+//   VENDAS    = APENAS Atendimento (faz vendas)
+//   MONTAGEM  = Atendimento + Producao (atendente tambem monta)
+//   EXPEDICAO = Atendimento + Expedicao (atendente tambem expede)
+//
+// Quem NUNCA aparece nestas listas:
+//   - Entregador (so entrega — nao vende, nao monta, nao expede)
+//   - Gerente / Financeiro / Admin (nao operacional)
 export function getEquipePorSetor(setor) {
   const colabs = getColabs().filter(c => c.active !== false);
-  const naoEntregador = c => !String(c.cargo||'').toLowerCase().includes('entregador');
-  if (setor === 'vendas') {
-    return colabs.filter(c => {
-      const car = String(c.cargo||'').toLowerCase();
-      return naoEntregador(c) && (car.includes('atend') || car.includes('vend') || car === 'admin' || car === '');
-    });
-  }
-  if (setor === 'montagem')  return colabs.filter(naoEntregador);
-  if (setor === 'expedicao') return colabs; // entregadores incluidos aqui
+  const norm = (s) => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const car = c => norm(c.cargo);
+  const isAtend  = c => car(c).includes('atend');
+  const isProd   = c => car(c).includes('producao') || car(c).includes('montad');
+  const isExp    = c => car(c).includes('expedicao');
+  const isEntreg = c => car(c).includes('entregador');
+
+  if (setor === 'vendas')    return colabs.filter(c => isAtend(c));
+  if (setor === 'montagem')  return colabs.filter(c => (isAtend(c) || isProd(c)) && !isEntreg(c));
+  if (setor === 'expedicao') return colabs.filter(c => (isAtend(c) || isExp(c))  && !isEntreg(c));
   return colabs;
+}
+
+// Equipe de entrega (apenas Entregadores) — usado em Relatorios
+export function getEntregadores() {
+  return getColabs().filter(c => c.active !== false && String(c.cargo||'').toLowerCase().includes('entregador'));
 }
 
 // ── CALCULO PROJECAO (auto-calcs a partir do meta + ticket) ──
