@@ -169,6 +169,8 @@ ${vencidas.length>0?`<div class="alert al-err">⚠️ <strong>${vencidas.length}
   <div class="mc purple"><div class="mc-label">Ticket Médio</div><div class="mc-val">${$c(filteredOrders.length?(receitas+pendente)/filteredOrders.length:0)}</div></div>
 </div>
 
+${renderCentralFinanceira(contas)}
+
 <div class="g2">
   <div class="card">
     <div class="card-title">💳 Pedidos — Status Financeiro</div>
@@ -228,6 +230,218 @@ ${renderFolhaAPagar()}
 ${renderVales()}
 
 ${renderComissoesMetas()}`;
+}
+
+// ── CENTRAL FINANCEIRA — listagem com tabs + filtros + grafico ──
+function renderCentralFinanceira(contas) {
+  const tab     = S._finTab     || 'todas'; // todas | a_receber | recebidas | a_pagar | pagas
+  const periodo = S._finPeriodo || 'mes';   // dia | semana | mes | ano | custom | todos
+  const cat     = S._finCategoria || '';
+  const d1      = S._finCD1 || '';
+  const d2      = S._finCD2 || '';
+
+  // Range do periodo
+  const hoje = new Date();
+  let ini = null, fim = null;
+  if (periodo === 'dia')    { ini = new Date(hoje); ini.setHours(0,0,0,0); fim = new Date(hoje); fim.setHours(23,59,59,999); }
+  else if (periodo === 'semana') { ini = new Date(hoje); ini.setDate(hoje.getDate()-hoje.getDay()); ini.setHours(0,0,0,0); fim = new Date(ini); fim.setDate(ini.getDate()+6); fim.setHours(23,59,59,999); }
+  else if (periodo === 'mes')    { ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1); fim = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0, 23,59,59,999); }
+  else if (periodo === 'ano')    { ini = new Date(hoje.getFullYear(), 0, 1); fim = new Date(hoje.getFullYear(), 11, 31, 23,59,59,999); }
+  else if (periodo === 'custom') {
+    if (d1) ini = new Date(d1+'T00:00:00');
+    if (d2) fim = new Date(d2+'T23:59:59');
+  }
+  // todos: sem filtro
+
+  // Filtra
+  const _isDespesa = c => String(c.type||'').toLowerCase() === 'despesa';
+  const _isReceita = c => String(c.type||'').toLowerCase() === 'receita';
+  const _isPago    = c => String(c.status||'').toLowerCase() === 'pago' || String(c.status||'').toLowerCase() === 'recebido';
+  const _dataRef   = c => c.dueDate || c.date || c.createdAt;
+  const _noPeriodo = c => {
+    if (!ini && !fim) return true;
+    const dr = _dataRef(c); if (!dr) return false;
+    const d = new Date(dr);
+    if (ini && d < ini) return false;
+    if (fim && d > fim) return false;
+    return true;
+  };
+
+  let lista = contas.filter(_noPeriodo);
+  if (cat) lista = lista.filter(c => String(c.category||c.categoria||'') === cat);
+  if (tab === 'a_receber') lista = lista.filter(c => _isReceita(c) && !_isPago(c));
+  else if (tab === 'recebidas') lista = lista.filter(c => _isReceita(c) && _isPago(c));
+  else if (tab === 'a_pagar') lista = lista.filter(c => _isDespesa(c) && !_isPago(c));
+  else if (tab === 'pagas') lista = lista.filter(c => _isDespesa(c) && _isPago(c));
+
+  // Categorias unicas para filtro
+  const categorias = [...new Set(contas.map(c => c.category||c.categoria||'').filter(Boolean))].sort();
+
+  // KPIs do periodo
+  const filtPer = contas.filter(_noPeriodo);
+  const totReceber = filtPer.filter(c => _isReceita(c) && !_isPago(c)).reduce((s,c)=>s+(Number(c.value||c.valor)||0),0);
+  const totRecebido = filtPer.filter(c => _isReceita(c) && _isPago(c)).reduce((s,c)=>s+(Number(c.value||c.valor)||0),0);
+  const totPagar = filtPer.filter(c => _isDespesa(c) && !_isPago(c)).reduce((s,c)=>s+(Number(c.value||c.valor)||0),0);
+  const totPago = filtPer.filter(c => _isDespesa(c) && _isPago(c)).reduce((s,c)=>s+(Number(c.value||c.valor)||0),0);
+  const saldoProj = (totRecebido + totReceber) - (totPago + totPagar);
+
+  // Grafico de projecao: por mes (12 meses contando do mes corrente -6 a +5)
+  const meses = [];
+  for (let i = -5; i <= 6; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth()+i, 1);
+    meses.push({ y: d.getFullYear(), m: d.getMonth(), label: ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][d.getMonth()] + '/' + String(d.getFullYear()).slice(2) });
+  }
+  const dadosMes = meses.map(({y,m,label}) => {
+    const ini2 = new Date(y, m, 1);
+    const fim2 = new Date(y, m+1, 0, 23,59,59,999);
+    const noMes = c => { const dr = _dataRef(c); if (!dr) return false; const d = new Date(dr); return d>=ini2 && d<=fim2; };
+    return {
+      label,
+      receitas: contas.filter(c => _isReceita(c) && noMes(c)).reduce((s,c)=>s+(Number(c.value||c.valor)||0),0),
+      despesas: contas.filter(c => _isDespesa(c) && noMes(c)).reduce((s,c)=>s+(Number(c.value||c.valor)||0),0),
+      atual: y === hoje.getFullYear() && m === hoje.getMonth(),
+    };
+  });
+  const maxValMes = Math.max(1, ...dadosMes.map(d => Math.max(d.receitas, d.despesas)));
+
+  const tabBtn = (k, label) => `<button type="button" class="btn btn-sm ${tab===k?'btn-primary':'btn-ghost'}" data-fin-tab="${k}">${label}</button>`;
+  const perBtn = (k, label) => `<button type="button" class="btn btn-sm ${periodo===k?'btn-primary':'btn-ghost'}" data-fin-periodo="${k}">${label}</button>`;
+  const fmtData = (iso) => { if (!iso) return '—'; const d = new Date(iso); if (isNaN(d)) return iso; return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; };
+
+  return `
+<!-- FILTROS DE PERIODO + CATEGORIA -->
+<div class="card" style="margin-bottom:14px;padding:12px;background:linear-gradient(135deg,#FAE8E6,#FFF7F5);border:1px solid #FECDD3;">
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+    <span style="font-size:11px;font-weight:800;color:#9F1239;text-transform:uppercase;">📅 Período:</span>
+    ${perBtn('dia',    'Hoje')}
+    ${perBtn('semana', 'Semana')}
+    ${perBtn('mes',    'Mês')}
+    ${perBtn('ano',    'Ano')}
+    ${perBtn('todos',  'Todos')}
+    ${perBtn('custom', '📅 Custom')}
+  </div>
+  ${periodo === 'custom' ? `
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+    <span style="font-size:11px;color:#9F1239;font-weight:700;">📅</span>
+    <input type="date" class="fi" id="fin-cd1" value="${d1}" style="width:auto;font-size:12px;"/>
+    <span style="font-size:11px;color:var(--muted);">a</span>
+    <input type="date" class="fi" id="fin-cd2" value="${d2}" style="width:auto;font-size:12px;"/>
+  </div>
+  ` : ''}
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span style="font-size:11px;font-weight:800;color:#9F1239;text-transform:uppercase;">🏷️ Categoria:</span>
+    <select class="fi" id="fin-categoria" style="width:auto;font-size:12px;">
+      <option value="">Todas</option>
+      ${categorias.map(c => `<option value="${esc(c)}" ${cat===c?'selected':''}>${esc(c)}</option>`).join('')}
+    </select>
+    <span style="margin-left:auto;font-size:11px;color:var(--muted);">${lista.length} registro(s) no filtro</span>
+  </div>
+</div>
+
+<!-- KPIs do PERIODO + projecao -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:14px;">
+  <div style="background:#DCFCE7;border:1px solid #86EFAC;border-radius:8px;padding:10px;">
+    <div style="font-size:10px;color:#15803D;text-transform:uppercase;font-weight:700;">✅ Recebido no período</div>
+    <div style="font-size:18px;font-weight:900;color:#15803D;">${$c(totRecebido)}</div>
+  </div>
+  <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px;">
+    <div style="font-size:10px;color:#92400E;text-transform:uppercase;font-weight:700;">⏳ A Receber</div>
+    <div style="font-size:18px;font-weight:900;color:#92400E;">${$c(totReceber)}</div>
+  </div>
+  <div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:8px;padding:10px;">
+    <div style="font-size:10px;color:#991B1B;text-transform:uppercase;font-weight:700;">💸 A Pagar</div>
+    <div style="font-size:18px;font-weight:900;color:#991B1B;">${$c(totPagar)}</div>
+  </div>
+  <div style="background:#F3F4F6;border:1px solid #D1D5DB;border-radius:8px;padding:10px;">
+    <div style="font-size:10px;color:#4B5563;text-transform:uppercase;font-weight:700;">🧾 Pago</div>
+    <div style="font-size:18px;font-weight:900;color:#4B5563;">${$c(totPago)}</div>
+  </div>
+  <div style="background:${saldoProj>=0?'#DBEAFE':'#FEE2E2'};border:2px solid ${saldoProj>=0?'#1E40AF':'#DC2626'};border-radius:8px;padding:10px;">
+    <div style="font-size:10px;color:${saldoProj>=0?'#1E40AF':'#991B1B'};text-transform:uppercase;font-weight:700;">📊 Saldo projetado</div>
+    <div style="font-size:18px;font-weight:900;color:${saldoProj>=0?'#1E40AF':'#991B1B'};">${$c(saldoProj)}</div>
+  </div>
+</div>
+
+<!-- GRAFICO 12 MESES -->
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title" style="margin-bottom:10px;">📊 Projeção Mensal — Receitas vs Despesas (12 meses)</div>
+  <div style="display:flex;align-items:flex-end;gap:6px;height:160px;padding:0 8px;border-bottom:2px solid var(--border);">
+    ${dadosMes.map(d => {
+      const altR = (d.receitas / maxValMes) * 140;
+      const altD = (d.despesas / maxValMes) * 140;
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;${d.atual?'background:#FAE8E6;border-radius:4px 4px 0 0;padding:0 2px;':''}">
+        <div style="display:flex;gap:2px;align-items:flex-end;height:140px;width:100%;">
+          <div title="Receitas: ${$c(d.receitas)}" style="flex:1;background:linear-gradient(180deg,#15803D,#86EFAC);height:${altR}px;border-radius:3px 3px 0 0;min-height:${d.receitas>0?'2px':'0'};"></div>
+          <div title="Despesas: ${$c(d.despesas)}" style="flex:1;background:linear-gradient(180deg,#DC2626,#FCA5A5);height:${altD}px;border-radius:3px 3px 0 0;min-height:${d.despesas>0?'2px':'0'};"></div>
+        </div>
+        <div style="font-size:9px;color:${d.atual?'#9F1239':'var(--muted)'};font-weight:${d.atual?'800':'500'};white-space:nowrap;">${d.label}</div>
+      </div>`;
+    }).join('')}
+  </div>
+  <div style="display:flex;justify-content:center;gap:14px;margin-top:8px;font-size:11px;">
+    <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:#15803D;border-radius:2px;"></span>Receitas</span>
+    <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:#DC2626;border-radius:2px;"></span>Despesas</span>
+    <span style="color:var(--muted);">· Mês corrente destacado em rosa</span>
+  </div>
+</div>
+
+<!-- TABS DE LISTAGEM -->
+<div class="card" style="margin-bottom:14px;">
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:10px;">
+    ${tabBtn('todas',     'Todas')}
+    ${tabBtn('a_receber', '⏳ A Receber')}
+    ${tabBtn('recebidas', '✅ Recebidas')}
+    ${tabBtn('a_pagar',   '💸 A Pagar')}
+    ${tabBtn('pagas',     '🧾 Pagas')}
+  </div>
+  ${lista.length === 0 ? `<div class="empty" style="padding:30px;"><p>Nenhum registro encontrado neste filtro.</p></div>` : `
+  <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="background:#FAFAFA;">
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Data</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Tipo</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Descrição</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Categoria</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Unidade</th>
+        <th style="padding:8px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Valor</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Status</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Quem</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Ação</th>
+      </tr></thead>
+      <tbody>
+        ${lista.sort((a,b) => new Date(_dataRef(b)) - new Date(_dataRef(a))).slice(0,200).map(c => {
+          const valor = Number(c.value||c.valor)||0;
+          const eRec  = _isReceita(c);
+          const pago  = _isPago(c);
+          const venc  = !pago && _isDespesa(c) && c.dueDate && new Date(c.dueDate) < hoje;
+          const badgePessoal = c.pessoal ? `<span style="background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;margin-left:4px;">🔒</span>` : '';
+          return `<tr style="border-bottom:1px solid #F1F5F9;${c.pessoal?'background:#FEF2F2;':''}${venc?'background:#FFE4E6;':''}">
+            <td style="padding:6px 8px;font-size:11px;color:var(--muted);">${fmtData(_dataRef(c))}</td>
+            <td style="padding:6px 8px;">
+              <span style="background:${eRec?'#DCFCE7':'#FEE2E2'};color:${eRec?'#15803D':'#991B1B'};border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;">${eRec?'💰 Receita':'💸 Despesa'}</span>
+            </td>
+            <td style="padding:6px 8px;font-weight:600;">${esc(c.description||c.descricao||'—')}${badgePessoal}${c.supplier?`<div style="font-size:10px;color:var(--muted);">${esc(c.supplier)}</div>`:''}</td>
+            <td style="padding:6px 8px;font-size:11px;">${esc(c.category||c.categoria||'—')}</td>
+            <td style="padding:6px 8px;font-size:11px;color:var(--muted);">${esc(c.unit||'Todas')}</td>
+            <td style="padding:6px 8px;text-align:right;font-weight:800;color:${eRec?'#15803D':'#991B1B'};">${$c(valor)}</td>
+            <td style="padding:6px 8px;text-align:center;">
+              <span style="background:${pago?'#DCFCE7':venc?'#FEE2E2':'#FEF3C7'};color:${pago?'#15803D':venc?'#991B1B':'#92400E'};border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;">${pago?'✅ '+(c.status||'Pago'):venc?'⚠️ Vencida':'⏳ '+(c.status||'Pendente')}</span>
+            </td>
+            <td style="padding:6px 8px;text-align:center;font-size:10px;color:var(--muted);">${esc(c.createdBy||c.user||'—')}</td>
+            <td style="padding:6px 8px;text-align:center;white-space:nowrap;">
+              ${!pago && _isDespesa(c) ? `<button class="btn btn-green btn-xs" data-pay-bill="${c._id||c.id}">Pagar</button>` : ''}
+              ${!pago && eRec ? `<button class="btn btn-green btn-xs" data-receive-bill="${c._id||c.id}">Receber</button>` : ''}
+              <button class="btn btn-ghost btn-xs" data-fin-del="${c._id||c.id}" style="color:var(--red);">🗑️</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    ${lista.length > 200 ? `<div style="text-align:center;padding:8px;color:var(--muted);font-size:11px;">Mostrando 200 de ${lista.length} registros — refine os filtros.</div>` : ''}
+  </div>
+  `}
+</div>
+`;
 }
 
 // ── FOLHA A PAGAR (automatico) ───────────────────────────────
@@ -782,13 +996,20 @@ export async function showFinModal(type){
   </div>
   ${type==='Despesa'?`<div class="fg"><label class="fl">Fornecedor / Beneficiário</label><input class="fi" id="fm-supplier" placeholder="Nome do fornecedor"/></div>`:''}
   <div class="fg"><label class="fl">Observações</label><textarea class="fi" id="fm-notes" rows="2"></textarea></div>
-  <div class="fg">
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#FEE2E2;border:2px solid #FCA5A5;border-radius:8px;padding:10px 12px;">
-      <input type="checkbox" id="fm-pessoal" style="width:18px;height:18px;cursor:pointer;accent-color:#DC2626;"/>
-      <span style="font-size:13px;font-weight:700;color:#991B1B;">🔒 Conta Pessoal</span>
-      <span style="font-size:11px;color:#991B1B;opacity:.85;margin-left:auto;">Visível apenas para o ADM</span>
-    </label>
-  </div>
+  ${(() => {
+    // Conta Pessoal: APENAS o ADM pode marcar/cadastrar.
+    // Gerente/Financeiro/Contador NAO veem o checkbox — toda conta
+    // que cadastrarem fica visivel para a empresa toda.
+    const ehAdm = S.user?.role==='Administrador' || S.user?.cargo==='admin' || String(S.user?.cargo||'').toLowerCase()==='administrador';
+    if (!ehAdm) return '';
+    return `<div class="fg">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#FEE2E2;border:2px solid #FCA5A5;border-radius:8px;padding:10px 12px;">
+        <input type="checkbox" id="fm-pessoal" style="width:18px;height:18px;cursor:pointer;accent-color:#DC2626;"/>
+        <span style="font-size:13px;font-weight:700;color:#991B1B;">🔒 Conta Pessoal</span>
+        <span style="font-size:11px;color:#991B1B;opacity:.85;margin-left:auto;">Visível apenas para o ADM</span>
+      </label>
+    </div>`;
+  })()}
   <div class="mo-foot">
     <button class="btn ${type==='Receita'?'btn-green':'btn-red'}" id="btn-sv-fin">Salvar ${type}</button>
     <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
@@ -831,20 +1052,38 @@ export async function showFinModal(type){
     const btn = document.getElementById('btn-sv-fin');
     if (btn) { btn.disabled = true; btn.textContent = '💾 Salvando...'; }
 
+    // Garante ID local ANTES do POST (caso backend caia, o registro
+    // ainda existe localmente e identificavel)
+    if (!entry._id && !entry.id) {
+      entry.id = 'fin_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    }
+
+    let savedOk = false;
     try {
       const saved = await POST('/financial/entries', entry);
       if (saved && saved._id) entry._id = saved._id;
-      if (!S.financialEntries) S.financialEntries = [];
-      S.financialEntries.unshift(entry);
-      S._modal = ''; render();
-      toast(`✅ ${type} cadastrada com sucesso!`);
+      savedOk = true;
     } catch(e){
-      console.error('Erro ao salvar entrada financeira:', e);
-      // Tenta extrair mensagem util do erro
-      const msg = e?.message || e?.error || 'Tente novamente.';
-      toast('🚨 Erro ao salvar: ' + msg, true);
-      if (btn) { btn.disabled = false; btn.textContent = `Salvar ${type}`; }
+      console.error('Erro POST /financial/entries — salvando em localStorage:', e);
+      // NAO bloqueia: persiste localmente. POST falhou mas usuario ja
+      // digitou — perder o dado e pior que continuar offline.
     }
+
+    if (!S.financialEntries) S.financialEntries = [];
+    S.financialEntries.unshift(entry);
+
+    // CRITICO: persiste em localStorage para SOBREVIVER ao polling.
+    // O polling (services/polling.js) le 'fv_financial' a cada ~30s e
+    // sobrescreve S.financialEntries — se nao salvarmos aqui, as
+    // entradas que vieram so via POST somem da memoria.
+    try {
+      const arr = JSON.parse(localStorage.getItem('fv_financial')||'[]');
+      arr.unshift(entry);
+      localStorage.setItem('fv_financial', JSON.stringify(arr));
+    } catch(_){}
+
+    S._modal = ''; render();
+    toast(savedOk ? `✅ ${type} cadastrada com sucesso!` : `⚠️ ${type} salva localmente (servidor offline — vai sincronizar depois)`);
   });
 }
 
