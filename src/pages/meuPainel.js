@@ -9,14 +9,19 @@ import { GET } from '../services/api.js';
 import { renderMetasParaAtendente } from './metas.js';
 
 // Cache em memoria dos pontos do user (evita refetch a cada render)
+// TTL curto (15s) para o ponto do dia atual aparecer rapido apos bater.
 let _pontosCache = null;
 let _pontosCacheAt = 0;
 
 async function loadPontos(userId) {
-  if (_pontosCache && (Date.now() - _pontosCacheAt) < 60_000) return _pontosCache;
+  if (_pontosCache && (Date.now() - _pontosCacheAt) < 15_000) return _pontosCache;
   try {
-    const r = await GET('/ponto?userId=' + userId + '&limit=60').catch(() => null);
-    _pontosCache = Array.isArray(r) ? r : (r?.records || r?.data || []);
+    // Backend /ponto retorna TODOS os registros (ignora query). Filtramos
+    // local por userId para nao misturar pontos de outras colaboradoras.
+    const r = await GET('/ponto').catch(() => null);
+    const all = Array.isArray(r) ? r : (r?.records || r?.data || []);
+    const uid = String(userId);
+    _pontosCache = all.filter(rec => String(rec.userId||'') === uid);
     _pontosCacheAt = Date.now();
     return _pontosCache;
   } catch { return []; }
@@ -203,10 +208,6 @@ export function renderMeuPainel() {
     <div style="flex:1;">
       <div style="font-family:'Playfair Display',serif;font-size:20px;color:#9F1239;">Olá, ${nome.split(' ')[0]} 🌹</div>
       <div style="font-size:12px;color:var(--muted);">${cargo}</div>
-    </div>
-    <div style="text-align:right;">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Comissão acumulada</div>
-      <div style="font-size:22px;font-weight:900;color:#15803D;">${$c(totalAcumulado)}</div>
     </div>
   </div>
 </div>
