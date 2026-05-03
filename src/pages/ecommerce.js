@@ -228,6 +228,33 @@ ${tab==='site'?`
   <div class="fg"><label class="fl">Mensagem padrão WhatsApp ao pedir</label>
     <input class="fi" id="ec2-wpp-order-msg" placeholder="Olá! Fiquei interessado(a) no(s) produto(s) abaixo..."/></div>
 
+  <!-- Turnos por dia da semana -->
+  <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px;margin-bottom:10px;">
+    <div style="font-weight:700;font-size:12px;margin-bottom:8px;">🕐 Turnos de entrega por dia da semana</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">Marque quais turnos estão disponíveis em cada dia. Site mostra apenas os marcados.</div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;font-size:11px;border-collapse:collapse;">
+        <thead><tr style="background:#FAF7F5;">
+          <th style="padding:6px;text-align:left;">Dia</th>
+          <th style="padding:6px;text-align:center;">🌅 Manhã<br><span style="font-size:9px;color:var(--muted);font-weight:400;">08:00–12:30</span></th>
+          <th style="padding:6px;text-align:center;">☀️ Tarde<br><span style="font-size:9px;color:var(--muted);font-weight:400;">12:30–18:00</span></th>
+          <th style="padding:6px;text-align:center;">🌙 Noite<br><span style="font-size:9px;color:var(--muted);font-weight:400;">18:00–19:00</span></th>
+        </tr></thead>
+        <tbody>
+          ${[
+            {d:0, l:'Domingo'},{d:1, l:'Segunda'},{d:2, l:'Terça'},{d:3, l:'Quarta'},
+            {d:4, l:'Quinta'},{d:5, l:'Sexta'},{d:6, l:'Sábado'},
+          ].map(w => `<tr style="border-bottom:1px solid #F1F5F9;">
+            <td style="padding:6px;font-weight:600;">${w.l}</td>
+            <td style="text-align:center;"><input type="checkbox" data-turno-day="${w.d}" data-turno="manha" style="width:18px;height:18px;accent-color:#15803D;cursor:pointer;"/></td>
+            <td style="text-align:center;"><input type="checkbox" data-turno-day="${w.d}" data-turno="tarde" style="width:18px;height:18px;accent-color:#15803D;cursor:pointer;"/></td>
+            <td style="text-align:center;"><input type="checkbox" data-turno-day="${w.d}" data-turno="noite" style="width:18px;height:18px;accent-color:#15803D;cursor:pointer;"/></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Datas bloqueadas -->
   <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px;margin-bottom:10px;">
     <div style="font-weight:700;font-size:12px;margin-bottom:6px;">📅 Datas bloqueadas para entrega</div>

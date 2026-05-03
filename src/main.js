@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260502-9';
+const APP_VERSION = '20260502-10';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2944,12 +2944,26 @@ function bindPageActions(){
           set('ec2-wpp-order-msg',  cfg.whatsappOrderMsg);
           window._ecBlockedDates2 = Array.isArray(cfg.blockedDates) ? [...cfg.blockedDates] : [];
           _renderBlocked();
+          // Turnos por dia da semana
+          const turnoSched = cfg.turnoSchedule && typeof cfg.turnoSchedule === 'object' ? cfg.turnoSchedule : {};
+          document.querySelectorAll('[data-turno-day]').forEach(cb => {
+            const d = cb.dataset.turnoDay;
+            const t = cb.dataset.turno;
+            const turnos = Array.isArray(turnoSched[d]) ? turnoSched[d] : ['manha','tarde','noite'];
+            cb.checked = turnos.includes(t);
+          });
         } catch(_){}
       })();
     }
     {const _el = document.getElementById('btn-save-ecommerce2'); if (_el) _el.onclick = async () => {
       const get = (id) => document.getElementById(id)?.value?.trim() || '';
       const modeR = document.querySelector('input[name="ec2-mode"]:checked');
+      // Turnos por dia da semana (0=Dom..6=Sab)
+      const turnoSchedule = { '0':[], '1':[], '2':[], '3':[], '4':[], '5':[], '6':[] };
+      document.querySelectorAll('[data-turno-day]:checked').forEach(cb => {
+        turnoSchedule[cb.dataset.turnoDay].push(cb.dataset.turno);
+      });
+
       const value = {
         mode: modeR?.value === 'loja' ? 'loja' : 'catalogo',
         acceptingOrders: document.getElementById('ec2-accepting')?.checked !== false,
@@ -2960,6 +2974,7 @@ function bindPageActions(){
         closedMessage: get('ec2-closed-msg') || 'No momento estamos fechados.',
         whatsappOrderMsg: get('ec2-wpp-order-msg') || 'Olá! Tenho interesse no produto.',
         blockedDates: [...(window._ecBlockedDates2||[])],
+        turnoSchedule,
       };
       const status = document.getElementById('ecommerce2-status');
       if (status) status.textContent = 'Salvando...';
