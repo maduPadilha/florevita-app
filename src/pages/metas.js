@@ -1,12 +1,13 @@
-// ── MODULO METAS (v3) ────────────────────────────────────────
-// Metas individuais — uma meta por colab por periodo.
+// ── MODULO METAS (v3.1) ──────────────────────────────────────
+// Metas individuais OU por unidade.
 //
 // ADM define:
-//   - Colaborador alvo (1 colab)
+//   - Escopo: 👤 Colaboradora individual | 🏪 Unidade (loja inteira)
+//   - Alvo: colab (se escopo colab) ou unidade (se escopo unidade)
 //   - Periodo: Mensal ou Semanal + datas inicio/fim
-//   - Tipo: Vendas (R$) | Produção (qtd produtos montados) | Expedição (qtd entregas)
-//   - Valor da meta (numero — R$ para vendas, qtd para outros)
-//   - Modo do bonus: Individual (valor pago a essa colab) ou Equipe (valor dividido entre todas que bateram)
+//   - Tipo: Vendas (R$) | Produção (qtd produtos) | Expedição (qtd entregas)
+//   - Valor da meta
+//   - Modo do bonus: Individual ou Equipe
 //   - Valor do bonus (R$)
 //
 // Sistema:
@@ -21,6 +22,15 @@ import { S } from '../state.js';
 import { $c } from '../utils/formatters.js';
 import { toast } from '../utils/helpers.js';
 import { getColabs } from '../services/auth.js';
+import { normalizeUnidade, labelUnidade } from '../utils/unidadeRules.js';
+
+// Lista canonica de unidades disponiveis para meta
+export const UNIDADES_META = [
+  { slug: 'cdle',          label: 'CDLE' },
+  { slug: 'novo_aleixo',   label: 'Loja Novo Aleixo' },
+  { slug: 'allegro',       label: 'Loja Allegro Mall' },
+  { slug: 'ecommerce',     label: 'E-commerce' },
+];
 
 const LS_METAS = 'fv_metas_v3';
 
@@ -85,8 +95,29 @@ export function calcularRealizado(meta, ordersList = S.orders) {
     ? { inicio: new Date(meta.dataInicio+'T00:00:00'), fim: new Date(meta.dataFim+'T23:59:59') }
     : calcularPeriodo(meta.periodoTipo || 'mensal');
 
-  const colab = getColabs().find(c => _colabKey(c) === String(meta.colabId));
-  if (!colab) return { realizado:0, pct:0, atingida:false, ultrapassou:false, inicio, fim };
+  const escopo = meta.escopo || 'colab';
+  let colab = null;
+  let unidadeSlug = null;
+
+  if (escopo === 'colab') {
+    colab = getColabs().find(c => _colabKey(c) === String(meta.colabId));
+    if (!colab) return { realizado:0, pct:0, atingida:false, ultrapassou:false, inicio, fim };
+  } else if (escopo === 'unidade') {
+    unidadeSlug = normalizeUnidade(meta.unidade);
+    if (!unidadeSlug) return { realizado:0, pct:0, atingida:false, ultrapassou:false, inicio, fim };
+  }
+
+  // Helper: pedido pertence a unidade?
+  const pedidoNaUnidade = (o) => {
+    if (!unidadeSlug) return false;
+    if (unidadeSlug === 'ecommerce') {
+      const src = String(o.source||'').toLowerCase();
+      return src.includes('ecomm') || src === 'site' || src === 'e-commerce';
+    }
+    const u  = normalizeUnidade(o.unit || o.unidade);
+    const su = normalizeUnidade(o.saleUnit);
+    return u === unidadeSlug || su === unidadeSlug;
+  };
 
   let realizado = 0;
   for (const o of orders) {
@@ -95,14 +126,18 @@ export function calcularRealizado(meta, ordersList = S.orders) {
 
     if (meta.tipo === 'vendas') {
       if (!_PG_APROV.has(String(o.paymentStatus||''))) continue;
-      const ehMinha = _isMine(colab, o.vendedorId, o.vendedorEmail) ||
+      let bate;
+      if (escopo === 'unidade') bate = pedidoNaUnidade(o);
+      else bate = _isMine(colab, o.vendedorId, o.vendedorEmail) ||
         (!o.vendedorId && _isMine(colab, o.createdByColabId, o.createdByEmail, o.criadoPor, o.createdBy, o.createdByName));
-      if (ehMinha) realizado += Number(o.total) || 0;
+      if (bate) realizado += Number(o.total) || 0;
     }
     else if (meta.tipo === 'producao') {
       const st = String(o.status||'').toLowerCase();
       if (!['pronto','saiu p/ entrega','entregue'].some(x => st.includes(x))) continue;
-      if (_isMine(colab, o.montadorId, o.montadorEmail, o.montadorNome)) {
+      const bate = escopo === 'unidade' ? pedidoNaUnidade(o)
+        : _isMine(colab, o.montadorId, o.montadorEmail, o.montadorNome);
+      if (bate) {
         const qty = (o.items||[]).reduce((s,i)=>s+(Number(i.qty)||1), 0) || 1;
         realizado += qty;
       }
@@ -110,7 +145,9 @@ export function calcularRealizado(meta, ordersList = S.orders) {
     else if (meta.tipo === 'expedicao') {
       const st = String(o.status||'').toLowerCase();
       if (!st.includes('entregue')) continue;
-      if (_isMine(colab, o.expedidorId, o.expedidorEmail, o.driverColabId, o.driverName)) realizado += 1;
+      const bate = escopo === 'unidade' ? pedidoNaUnidade(o)
+        : _isMine(colab, o.expedidorId, o.expedidorEmail, o.driverColabId, o.driverName);
+      if (bate) realizado += 1;
     }
   }
   const valorMeta = Number(meta.valorMeta) || 0;
@@ -170,14 +207,84 @@ function renderMetasList() {
     </div>`;
   }
 
-  // Agrupa por colab para exibir em cards organizados
+  // Agrupa: primeiro Unidades, depois Colaboradoras
+  const metasUnidade = metas.filter(m => (m.escopo||'colab') === 'unidade');
+  const metasColab   = metas.filter(m => (m.escopo||'colab') === 'colab');
+
+  // Sub-agrupamento por unidade ou por colab
+  const byUnidade = {};
+  metasUnidade.forEach(m => {
+    const k = String(m.unidade||'—');
+    if (!byUnidade[k]) byUnidade[k] = [];
+    byUnidade[k].push(m);
+  });
   const byColab = {};
-  metas.forEach(m => {
+  metasColab.forEach(m => {
     if (!byColab[m.colabId]) byColab[m.colabId] = [];
     byColab[m.colabId].push(m);
   });
 
+  // Render comum: 1 card de meta
+  const renderCardMeta = (m) => {
+    const r = calcularRealizado(m);
+    const cor    = pctCor(r.pct);
+    const corBg  = pctBg(r.pct);
+    const status = pctStatus(r.pct);
+    const tipoLabel = labelTipo(m.tipo);
+    const unit = m.tipo === 'vendas' ? 'R$' : 'un';
+    const fmtVal = v => unit==='R$' ? $c(v) : `${Math.round(v)} ${m.tipo==='producao'?'produtos':'entregas'}`;
+    const bonusLbl = m.bonusModo === 'individual'
+      ? `Bônus individual: <strong>${$c(m.bonusValor)}</strong>`
+      : `Bônus de equipe: <strong>${$c(m.bonusValor)}</strong> dividido com quem bater`;
+    return `<div style="background:${corBg};border-left:5px solid ${cor};border-radius:8px;padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#1E293B;">${tipoLabel} ${status.emoji} ${escHtml(m.nome||'')}</div>
+          <div style="font-size:11px;color:var(--muted);">${labelPeriodo(m.periodoTipo)} · ${fmtData(m.dataInicio)} a ${fmtData(m.dataFim)} · ${bonusLbl}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${m.visivel
+            ? `<button class="btn btn-ghost btn-sm" data-metas-toggle="${m.id}" title="Visível p/ a colab — clique para OCULTAR" style="background:#DCFCE7;color:#15803D;border:1px solid #86EFAC;">👁️ Visível</button>`
+            : `<button class="btn btn-ghost btn-sm" data-metas-toggle="${m.id}" title="Privada (só ADM vê) — clique para PUBLICAR no Meu Painel" style="background:#F1F5F9;color:#64748B;border:1px solid #CBD5E1;">🔒 Privada</button>`}
+          <button class="btn btn-ghost btn-sm" data-metas-edit="${m.id}">✏️</button>
+          <button class="btn btn-ghost btn-sm" data-metas-del="${m.id}" style="color:#DC2626;">🗑️</button>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;">
+        <span>Meta: <strong>${fmtVal(m.valorMeta)}</strong></span>
+        <span>Realizado: <strong style="color:${cor};">${fmtVal(r.realizado)}</strong></span>
+        <span style="color:${cor};font-weight:800;">${r.pct.toFixed(0)}% · ${status.label}</span>
+      </div>
+      <div style="height:10px;background:rgba(255,255,255,.6);border-radius:5px;overflow:hidden;">
+        <div style="height:100%;width:${Math.min(100,r.pct)}%;background:${cor};transition:width .4s;"></div>
+      </div>
+      ${r.atingida ? `<div style="margin-top:8px;padding:8px 10px;background:#fff;border:1px solid ${cor};border-radius:6px;font-size:12px;color:${cor};font-weight:700;text-align:center;">
+        ${r.ultrapassou ? '🏆 META ULTRAPASSADA' : '🎉 META ATINGIDA'} — Bônus: <span style="font-size:14px;">${$c(m.bonusValor)}</span>
+      </div>` : ''}
+    </div>`;
+  };
+
   return `<div style="display:grid;gap:14px;">
+
+    ${Object.keys(byUnidade).length ? `
+    <div style="font-size:12px;font-weight:800;color:#1E293B;text-transform:uppercase;letter-spacing:1px;background:linear-gradient(90deg,#FAE8E6,transparent);padding:6px 12px;border-radius:6px;">🏪 Metas por Unidade</div>
+    ${Object.entries(byUnidade).map(([slug, lista]) => {
+      const lbl = labelUnidade(slug) || slug;
+      return `<div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+          <div style="width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,#9F1239,#E11D48);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;">🏪</div>
+          <div style="flex:1;">
+            <div style="font-size:16px;font-weight:800;color:#1E293B;">${escHtml(lbl)}</div>
+            <div style="font-size:11px;color:var(--muted);">Unidade · ${lista.length} meta(s)</div>
+          </div>
+        </div>
+        <div style="display:grid;gap:10px;">${lista.sort((a,b) => (b.createdAt||0) - (a.createdAt||0)).map(renderCardMeta).join('')}</div>
+      </div>`;
+    }).join('')}
+    ` : ''}
+
+    ${Object.keys(byColab).length ? `
+    <div style="font-size:12px;font-weight:800;color:#1E293B;text-transform:uppercase;letter-spacing:1px;background:linear-gradient(90deg,#DBEAFE,transparent);padding:6px 12px;border-radius:6px;">👤 Metas Individuais</div>
     ${Object.entries(byColab).map(([colabId, lista]) => {
       const colab = getColabs().find(c => _colabKey(c) === String(colabId));
       const nome = colab?.name || '— colab removido —';
@@ -192,48 +299,10 @@ function renderMetasList() {
             <div style="font-size:11px;color:var(--muted);">${escHtml(cargo)} · ${lista.length} meta(s) ativa(s)</div>
           </div>
         </div>
-        <div style="display:grid;gap:10px;">
-          ${lista.sort((a,b) => (b.createdAt||0) - (a.createdAt||0)).map(m => {
-            const r = calcularRealizado(m);
-            const cor    = pctCor(r.pct);
-            const corBg  = pctBg(r.pct);
-            const status = pctStatus(r.pct);
-            const tipoLabel = labelTipo(m.tipo);
-            const unit = m.tipo === 'vendas' ? 'R$' : 'un';
-            const fmtVal = v => unit==='R$' ? $c(v) : `${Math.round(v)} ${m.tipo==='producao'?'produtos':'entregas'}`;
-            const bonusLbl = m.bonusModo === 'individual'
-              ? `Bônus individual: <strong>${$c(m.bonusValor)}</strong>`
-              : `Bônus de equipe: <strong>${$c(m.bonusValor)}</strong> dividido com quem bater`;
-            return `<div style="background:${corBg};border-left:5px solid ${cor};border-radius:8px;padding:12px;">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
-                <div>
-                  <div style="font-size:14px;font-weight:800;color:#1E293B;">${tipoLabel} ${status.emoji} ${escHtml(m.nome||'')}</div>
-                  <div style="font-size:11px;color:var(--muted);">${labelPeriodo(m.periodoTipo)} · ${fmtData(m.dataInicio)} a ${fmtData(m.dataFim)} · ${bonusLbl}</div>
-                </div>
-                <div style="display:flex;gap:6px;align-items:center;">
-                  ${m.visivel
-                    ? `<button class="btn btn-ghost btn-sm" data-metas-toggle="${m.id}" title="Visível p/ a colab — clique para OCULTAR" style="background:#DCFCE7;color:#15803D;border:1px solid #86EFAC;">👁️ Visível</button>`
-                    : `<button class="btn btn-ghost btn-sm" data-metas-toggle="${m.id}" title="Privada (só ADM vê) — clique para PUBLICAR no Meu Painel" style="background:#F1F5F9;color:#64748B;border:1px solid #CBD5E1;">🔒 Privada</button>`}
-                  <button class="btn btn-ghost btn-sm" data-metas-edit="${m.id}">✏️</button>
-                  <button class="btn btn-ghost btn-sm" data-metas-del="${m.id}" style="color:#DC2626;">🗑️</button>
-                </div>
-              </div>
-              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;">
-                <span>Meta: <strong>${fmtVal(m.valorMeta)}</strong></span>
-                <span>Realizado: <strong style="color:${cor};">${fmtVal(r.realizado)}</strong></span>
-                <span style="color:${cor};font-weight:800;">${r.pct.toFixed(0)}% · ${status.label}</span>
-              </div>
-              <div style="height:10px;background:rgba(255,255,255,.6);border-radius:5px;overflow:hidden;">
-                <div style="height:100%;width:${Math.min(100,r.pct)}%;background:${cor};transition:width .4s;"></div>
-              </div>
-              ${r.atingida ? `<div style="margin-top:8px;padding:8px 10px;background:#fff;border:1px solid ${cor};border-radius:6px;font-size:12px;color:${cor};font-weight:700;text-align:center;">
-                ${r.ultrapassou ? '🏆 META ULTRAPASSADA' : '🎉 META ATINGIDA'} — Bônus a receber: <span style="font-size:14px;">${$c(m.bonusValor)}</span>
-              </div>` : ''}
-            </div>`;
-          }).join('')}
-        </div>
+        <div style="display:grid;gap:10px;">${lista.sort((a,b) => (b.createdAt||0) - (a.createdAt||0)).map(renderCardMeta).join('')}</div>
       </div>`;
     }).join('')}
+    ` : ''}
   </div>`;
 }
 
@@ -243,16 +312,28 @@ function renderMetasNova() {
   const meta = editId ? getMetas().find(m => m.id === editId) || {} : {};
   const isEdit = !!meta.id;
   const tipo = meta.tipo || S._metaTipoDraft || 'vendas';
+  const escopo = meta.escopo || S._metaEscopoDraft || 'colab';
   const colabsDoTipo = colabsPorTipoMeta(tipo);
+
+  const escopoBtn = (k, label, icon) => `<button type="button" class="btn btn-sm ${escopo===k?'btn-primary':'btn-ghost'}" data-meta-escopo="${k}" style="flex:1;">${icon} ${label}</button>`;
 
   return `<div class="card">
     <div class="card-title">${isEdit ? '✏️ Editar Meta' : '➕ Nova Meta'}</div>
+
+    <!-- Seletor de escopo -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Para quem é a meta?</div>
+      <div style="display:flex;gap:6px;">
+        ${escopoBtn('colab',   'Colaboradora individual', '👤')}
+        ${escopoBtn('unidade', 'Unidade (loja inteira)',  '🏪')}
+      </div>
+    </div>
 
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
 
       <div class="fg" style="grid-column:span 2;">
         <label class="fl">Nome da meta</label>
-        <input type="text" class="fi" id="meta-nome" value="${escHtml(meta.nome||'')}" placeholder="Ex: Meta Vendas Mai/2026"/>
+        <input type="text" class="fi" id="meta-nome" value="${escHtml(meta.nome||'')}" placeholder="${escopo==='unidade'?'Ex: Meta CDLE Mai/2026':'Ex: Meta Vendas Jessica Mai/2026'}"/>
       </div>
 
       <div class="fg">
@@ -264,6 +345,7 @@ function renderMetasNova() {
         </select>
       </div>
 
+      ${escopo === 'colab' ? `
       <div class="fg">
         <label class="fl">👤 Colaboradora</label>
         <select class="fi" id="meta-colab">
@@ -274,6 +356,15 @@ function renderMetasNova() {
           }).join('')}
         </select>
       </div>
+      ` : `
+      <div class="fg">
+        <label class="fl">🏪 Unidade</label>
+        <select class="fi" id="meta-unidade">
+          <option value="">— Selecione —</option>
+          ${UNIDADES_META.map(u => `<option value="${u.slug}" ${String(meta.unidade)===u.slug?'selected':''}>${u.label}</option>`).join('')}
+        </select>
+      </div>
+      `}
 
       <div class="fg">
         <label class="fl">📅 Período</label>
@@ -345,12 +436,15 @@ function renderMetasRank() {
     </div>`;
   }
 
-  // Calcula realizado de todas
-  const items = metas.map(m => {
+  // Calcula realizado de todas (separa metas de colab das de unidade)
+  const allItems = metas.map(m => {
     const r = calcularRealizado(m);
-    const colab = getColabs().find(c => _colabKey(c) === String(m.colabId));
-    return { meta: m, r, colab };
-  }).filter(it => it.colab);
+    const escopo = m.escopo || 'colab';
+    const colab = escopo === 'colab' ? getColabs().find(c => _colabKey(c) === String(m.colabId)) : null;
+    return { meta: m, r, colab, escopo };
+  });
+  const itemsUnidade = allItems.filter(it => it.escopo === 'unidade');
+  const items = allItems.filter(it => it.escopo === 'colab' && it.colab);
 
   // Bonus a pagar — calcula por modo
   // Individual: cada uma que bateu recebe meta.bonusValor
@@ -429,6 +523,39 @@ function renderMetasRank() {
   `}
 </div>
 
+${itemsUnidade.length > 0 ? `
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">🏪 Metas por Unidade</div>
+  <div style="display:grid;gap:8px;">
+    ${itemsUnidade.sort((a,b) => b.r.pct - a.r.pct).map(it => {
+      const cor = pctCor(it.r.pct);
+      const status = pctStatus(it.r.pct);
+      const lbl = labelUnidade(it.meta.unidade) || it.meta.unidade;
+      const unit = it.meta.tipo === 'vendas' ? 'R$' : 'un';
+      const fmtVal = v => unit==='R$' ? $c(v) : `${Math.round(v)} ${it.meta.tipo==='producao'?'produtos':'entregas'}`;
+      return `<div style="background:#FAFAFA;border-left:4px solid ${cor};border-radius:8px;padding:10px 14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:22px;">🏪</span>
+            <div>
+              <div style="font-weight:800;font-size:14px;">${escHtml(lbl)} <span style="color:var(--muted);font-weight:400;font-size:11px;">· ${labelTipo(it.meta.tipo)} · ${escHtml(it.meta.nome||'')}</span></div>
+              <div style="font-size:11px;color:var(--muted);">Meta: <strong>${fmtVal(it.meta.valorMeta)}</strong> · Realizado: <strong style="color:${cor};">${fmtVal(it.r.realizado)}</strong></div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:20px;font-weight:900;color:${cor};">${it.r.pct.toFixed(0)}% ${status.emoji}</div>
+            ${it.r.atingida ? `<div style="font-size:11px;color:${cor};font-weight:700;">Bônus: ${$c(it.meta.bonusValor)}</div>` : ''}
+          </div>
+        </div>
+        <div style="height:6px;background:#E2E8F0;border-radius:3px;overflow:hidden;margin-top:8px;">
+          <div style="height:100%;width:${Math.min(100,it.r.pct)}%;background:${cor};"></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+</div>
+` : ''}
+
 ${naoBateram.length > 0 ? `
 <div class="card">
   <div class="card-title">⏳ Metas em Andamento</div>
@@ -499,10 +626,20 @@ export function bindMetasEvents() {
     render();
   });
 
+  // Trocar escopo (colab/unidade) re-renderiza o form
+  document.querySelectorAll('[data-meta-escopo]').forEach(b => {
+    b.addEventListener('click', () => {
+      S._metaEscopoDraft = b.dataset.metaEscopo;
+      render();
+    });
+  });
+
   document.getElementById('btn-meta-save')?.addEventListener('click', () => {
+    const escopo      = S._metaEscopoDraft || 'colab';
     const nome        = document.getElementById('meta-nome')?.value.trim();
     const tipo        = document.getElementById('meta-tipo')?.value;
-    const colabId     = document.getElementById('meta-colab')?.value;
+    const colabId     = escopo === 'colab'   ? document.getElementById('meta-colab')?.value    : '';
+    const unidade     = escopo === 'unidade' ? document.getElementById('meta-unidade')?.value  : '';
     const periodoTipo = document.getElementById('meta-periodo-tipo')?.value;
     const dataInicio  = document.getElementById('meta-data-inicio')?.value;
     const dataFim     = document.getElementById('meta-data-fim')?.value;
@@ -512,7 +649,8 @@ export function bindMetasEvents() {
     const visivel     = !!document.getElementById('meta-visivel')?.checked;
 
     if (!nome)       { toast('Informe o nome da meta', true); return; }
-    if (!colabId)    { toast('Selecione uma colaboradora', true); return; }
+    if (escopo === 'colab'   && !colabId)  { toast('Selecione uma colaboradora', true); return; }
+    if (escopo === 'unidade' && !unidade)  { toast('Selecione uma unidade', true); return; }
     if (!dataInicio || !dataFim) { toast('Defina período (datas início e fim)', true); return; }
     if (dataInicio > dataFim) { toast('Data inicial maior que final', true); return; }
     if (!valorMeta || valorMeta <= 0) { toast('Valor da meta deve ser > 0', true); return; }
@@ -520,7 +658,7 @@ export function bindMetasEvents() {
 
     const metas = getMetas();
     const editId = S._metasEditId;
-    const payload = { nome, tipo, colabId, periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor, visivel };
+    const payload = { nome, escopo, tipo, colabId, unidade, periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor, visivel };
     if (editId) {
       const idx = metas.findIndex(m => m.id === editId);
       if (idx >= 0) {
@@ -533,12 +671,12 @@ export function bindMetasEvents() {
       setMetas(metas);
       toast('✅ Meta criada');
     }
-    S._metasEditId = null; S._metasSub = 'list'; S._metaTipoDraft = null;
+    S._metasEditId = null; S._metasSub = 'list'; S._metaTipoDraft = null; S._metaEscopoDraft = null;
     render();
   });
 
   document.getElementById('btn-meta-cancel')?.addEventListener('click', () => {
-    S._metasEditId = null; S._metasSub = 'list'; S._metaTipoDraft = null;
+    S._metasEditId = null; S._metasSub = 'list'; S._metaTipoDraft = null; S._metaEscopoDraft = null;
     render();
   });
 
