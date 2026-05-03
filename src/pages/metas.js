@@ -433,6 +433,15 @@ function _capturarFormDraft() {
   // Produto vem encodado como "id|code|nome"
   const prodRaw = get('meta-produto')?.value || '';
   const [pId, pCode, pNome] = prodRaw.split('|');
+  // Bonus individual por colab — captura todos os inputs [data-bonus-ind]
+  const bonusInd = { ...(S._metaBonusIndDraft||{}) };
+  document.querySelectorAll('[data-bonus-ind]').forEach(inp => {
+    const k = inp.dataset.bonusInd;
+    const v = Number(inp.value);
+    if (v > 0) bonusInd[k] = v;
+    else delete bonusInd[k];
+  });
+  S._metaBonusIndDraft = bonusInd;
   S._metaDraft = {
     nome:        get('meta-nome')?.value || '',
     tipo:        get('meta-tipo')?.value || '',
@@ -447,6 +456,7 @@ function _capturarFormDraft() {
     valorMeta:   Number(get('meta-valor')?.value) || 0,
     bonusModo:   get('meta-bonus-modo')?.value || '',
     bonusValor:  Number(get('meta-bonus-valor')?.value) || 0,
+    bonusIndividuais: bonusInd,
     visivel:     !!get('meta-visivel')?.checked,
   };
 }
@@ -587,17 +597,66 @@ function renderMetasNova() {
       <div class="fg">
         <label class="fl">💎 Modo do bônus</label>
         <select class="fi" id="meta-bonus-modo">
-          <option value="individual" ${(meta.bonusModo||'individual')==='individual'?'selected':''}>👤 Individual (paga R$ X só a essa colab)</option>
-          <option value="equipe"     ${meta.bonusModo==='equipe'?'selected':''}>👥 Equipe (R$ X dividido com todas que baterem)</option>
+          <option value="individual" ${(meta.bonusModo||'individual')==='individual'?'selected':''}>👤 Individual (R$ por colab quando bate)</option>
+          <option value="equipe"     ${meta.bonusModo==='equipe'?'selected':''}>👥 Equipe (R$ dividido entre quem bater)</option>
         </select>
       </div>
 
-      ${!modoPacote ? `
-      <div class="fg">
-        <label class="fl">💰 Valor do bônus (R$)</label>
-        <input type="number" class="fi" id="meta-bonus-valor" min="0" step="0.01" value="${meta.bonusValor||''}" placeholder="Ex: 500"/>
-      </div>
-      ` : ''}
+      ${(() => {
+        // Para meta de UNIDADE com bonus INDIVIDUAL, mostra UMA LINHA POR
+        // colab da unidade, cada uma com seu proprio valor de bonus.
+        // Pode ser uniformizado pelo campo 'Valor do bonus (padrao)'.
+        const bonusModoAtual = meta.bonusModo || (S._metaDraft?.bonusModo) || 'individual';
+        const ehUnidIndividual = !modoPacote && escopo === 'unidade' && bonusModoAtual === 'individual';
+        if (!ehUnidIndividual) return !modoPacote ? `
+          <div class="fg">
+            <label class="fl">💰 Valor do bônus (R$)</label>
+            <input type="number" class="fi" id="meta-bonus-valor" min="0" step="0.01" value="${meta.bonusValor||''}" placeholder="Ex: 500"/>
+          </div>
+        ` : '';
+
+        // Lista de colabs candidatas: filtradas pela unidade da meta
+        const slug = String((meta.unidade||S._metaDraft?.unidade||document.getElementById('meta-unidade')?.value||'')).toLowerCase();
+        const tipoAtual = meta.tipo || S._metaTipoDraft || 'vendas';
+        let candidatas = colabsPorTipoMeta(tipoAtual);
+        if (slug && slug !== 'todas') {
+          candidatas = candidatas.filter(c => normalizeUnidade(c.unidade||c.unit) === slug);
+        }
+        const bonusInd = meta.bonusIndividuais || S._metaBonusIndDraft || {};
+
+        return `
+        <div class="fg" style="grid-column:span 2;">
+          <label class="fl">💰 Valor do bônus padrão (R$) <span style="color:var(--muted);font-size:11px;">aplicado a todas que ainda não tiverem valor próprio</span></label>
+          <input type="number" class="fi" id="meta-bonus-valor" min="0" step="0.01" value="${meta.bonusValor||''}" placeholder="Ex: 300"/>
+        </div>
+
+        <div style="grid-column:span 2;background:#FFF7F5;border:1px solid #FECDD3;border-radius:10px;padding:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+            <div style="font-size:12px;font-weight:800;color:#9F1239;text-transform:uppercase;">👥 Bônus por Colaboradora</div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-bonus-aplicar-padrao" title="Copia o valor padrão para todas">📋 Aplicar padrão a todas</button>
+          </div>
+          <div style="font-size:11px;color:#9F1239;opacity:.85;margin-bottom:10px;">${slug==='todas'?'🌐 Todas as Unidades':slug?('🏪 ' + (labelUnidade(slug)||slug)):'Selecione uma unidade primeiro'} — defina o valor que CADA UMA receberá ao bater a meta.</div>
+          ${candidatas.length === 0 ? `<div style="color:var(--muted);font-size:12px;text-align:center;padding:14px;">${slug?'Nenhuma colab nessa unidade.':'Selecione a unidade para listar as colaboradoras.'}</div>` : `
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;">
+            ${candidatas.sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c => {
+              const k = _colabKey(c);
+              const valor = bonusInd[k] != null ? bonusInd[k] : '';
+              return `<div style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:8px 10px;display:flex;align-items:center;gap:8px;">
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:700;font-size:12px;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">👤 ${escHtml(c.name||'')}</div>
+                  <div style="font-size:10px;color:var(--muted);">${escHtml(c.cargo||'')}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span style="font-size:11px;color:var(--muted);">R$</span>
+                  <input type="number" class="fi" data-bonus-ind="${k}" value="${valor}" min="0" step="0.01" placeholder="0,00" style="width:90px;text-align:right;font-weight:700;color:#15803D;"/>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>`}
+          <div style="font-size:10px;color:var(--muted);margin-top:8px;font-style:italic;">⚠️ Quem ficar com 0 ou vazio vai receber o <strong>valor padrão</strong> acima quando bater a meta.</div>
+        </div>
+        `;
+      })()}
 
       ${modoPacote ? `
       <!-- PACOTE: 3 sub-metas (Vendas + Producao + Expedicao) -->
@@ -851,6 +910,7 @@ export function bindMetasEvents() {
         S._metaEscopoDraft = null;
         S._metaPacoteDraft = null;
         S._metaModoPacote = false;
+        S._metaBonusIndDraft = null;
       }
       render();
     });
@@ -900,17 +960,47 @@ export function bindMetasEvents() {
     if (el) el.addEventListener('change', _capturarFormDraft);
   });
 
+  // Re-render quando muda unidade ou bonusModo (afeta secao 'Bonus por Colab')
+  document.getElementById('meta-unidade')?.addEventListener('change', () => {
+    _capturarFormDraft(); render();
+  });
+  document.getElementById('meta-bonus-modo')?.addEventListener('change', () => {
+    _capturarFormDraft(); render();
+  });
+
+  // Captura inputs de bonus individual em mudancas
+  document.querySelectorAll('[data-bonus-ind]').forEach(inp => {
+    inp.addEventListener('change', _capturarFormDraft);
+  });
+
+  // Botao 'Aplicar padrao a todas' — copia o valor do bonus padrao
+  document.getElementById('btn-bonus-aplicar-padrao')?.addEventListener('click', () => {
+    const padrao = Number(document.getElementById('meta-bonus-valor')?.value) || 0;
+    if (padrao <= 0) { toast('Defina o valor padrão primeiro', true); return; }
+    document.querySelectorAll('[data-bonus-ind]').forEach(inp => { inp.value = padrao; });
+    _capturarFormDraft();
+    toast(`✅ ${$c(padrao)} aplicado a todas`);
+  });
+
   document.getElementById('btn-meta-save')?.addEventListener('click', () => {
-    const escopo      = S._metaEscopoDraft || 'colab';
-    const editId      = S._metasEditId;
+    // CAPTURA primeiro — garante que estado dos inputs esta no draft
+    _capturarFormDraft();
+
+    // Quando editando: usa o escopo da meta original, NAO o draft
+    // (impede que mudancas de toggle escopo afetem a edicao).
+    const editId = S._metasEditId;
+    const metaOrig = editId ? getMetas().find(m => m.id === editId) : null;
+    const escopo = (metaOrig?.escopo) || S._metaEscopoDraft || 'colab';
     const isPacote    = !editId && escopo === 'colab' && S._metaModoPacote === true;
     const nome        = document.getElementById('meta-nome')?.value.trim();
-    const colabId     = escopo === 'colab'   ? document.getElementById('meta-colab')?.value    : '';
-    const unidade     = escopo === 'unidade' ? document.getElementById('meta-unidade')?.value  : '';
-    const periodoTipo = document.getElementById('meta-periodo-tipo')?.value;
-    const dataInicio  = document.getElementById('meta-data-inicio')?.value;
-    const dataFim     = document.getElementById('meta-data-fim')?.value;
-    const bonusModo   = document.getElementById('meta-bonus-modo')?.value;
+    // Le do form OU do draft (se input foi escondido pelo modo)
+    const getOrDraft = (id, key) => document.getElementById(id)?.value || S._metaDraft?.[key] || '';
+    const colabId     = escopo === 'colab'   ? getOrDraft('meta-colab', 'colabId')    : '';
+    const unidade     = escopo === 'unidade' ? getOrDraft('meta-unidade', 'unidade')  : '';
+    const periodoTipo = getOrDraft('meta-periodo-tipo', 'periodoTipo');
+    const dataInicio  = getOrDraft('meta-data-inicio', 'dataInicio');
+    const dataFim     = getOrDraft('meta-data-fim', 'dataFim');
+    const bonusModo   = getOrDraft('meta-bonus-modo', 'bonusModo') || 'individual';
     const visivel     = !!document.getElementById('meta-visivel')?.checked;
 
     // Validacoes comuns
@@ -954,19 +1044,34 @@ export function bindMetasEvents() {
       toast(`✅ ${criadas} meta(s) criada(s) em pacote`);
     } else {
       // ── MODO META UNICA (ou edicao) ───────────────────────────
-      const tipo       = document.getElementById('meta-tipo')?.value;
-      const valorMeta  = Number(document.getElementById('meta-valor')?.value) || 0;
-      const bonusValor = Number(document.getElementById('meta-bonus-valor')?.value) || 0;
+      const tipo       = getOrDraft('meta-tipo', 'tipo') || 'vendas';
+      const valorMeta  = Number(getOrDraft('meta-valor', 'valorMeta')) || 0;
+      const bonusValor = Number(getOrDraft('meta-bonus-valor', 'bonusValor')) || 0;
+      // Produto: pode vir do form OU do draft (preservado entre re-renders)
       const prodRaw = document.getElementById('meta-produto')?.value || '';
-      const [produtoId, produtoCode, produtoNome] = prodRaw.split('|');
+      const [pId, pCode, pNome] = prodRaw.split('|');
+      const produtoId   = pId   || S._metaDraft?.produtoId   || (metaOrig?.produtoId)   || '';
+      const produtoCode = pCode || S._metaDraft?.produtoCode || (metaOrig?.produtoCode) || '';
+      const produtoNome = pNome || S._metaDraft?.produtoNome || (metaOrig?.produtoNome) || '';
+      // Bonus individual por colab (vem do draft ja capturado)
+      const bonusIndividuais = S._metaBonusIndDraft || (metaOrig?.bonusIndividuais) || {};
 
       if (tipo === 'produto' && !produtoId && !produtoCode && !produtoNome) { toast('Selecione um produto-alvo', true); return; }
       if (!valorMeta || valorMeta <= 0) { toast('Valor da meta deve ser > 0', true); return; }
       if (bonusValor < 0) { toast('Valor do bônus inválido', true); return; }
+      // Validacao especial: meta unidade + bonus individual exige
+      // pelo menos 1 bonus configurado OU um valor padrao > 0
+      if (escopo === 'unidade' && bonusModo === 'individual') {
+        const algumIndiv = Object.values(bonusIndividuais).some(v => Number(v) > 0);
+        if (!algumIndiv && bonusValor <= 0) {
+          toast('Defina o valor padrão OU pelo menos 1 bônus por colab', true); return;
+        }
+      }
 
       const payload = { nome, escopo, tipo, colabId, unidade,
-        produtoId: produtoId||'', produtoCode: produtoCode||'', produtoNome: produtoNome||'',
-        periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor, visivel };
+        produtoId, produtoCode, produtoNome,
+        periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor,
+        bonusIndividuais, visivel };
 
       if (editId) {
         const idx = metas.findIndex(m => m.id === editId);
@@ -985,6 +1090,7 @@ export function bindMetasEvents() {
     S._metasEditId = null; S._metasSub = 'list';
     S._metaTipoDraft = null; S._metaEscopoDraft = null;
     S._metaDraft = null; S._metaPacoteDraft = null; S._metaModoPacote = false;
+    S._metaBonusIndDraft = null;
     render();
   });
 
@@ -992,12 +1098,21 @@ export function bindMetasEvents() {
     S._metasEditId = null; S._metasSub = 'list';
     S._metaTipoDraft = null; S._metaEscopoDraft = null;
     S._metaDraft = null; S._metaPacoteDraft = null; S._metaModoPacote = false;
+    S._metaBonusIndDraft = null;
     render();
   });
 
   document.querySelectorAll('[data-metas-edit]').forEach(b => {
     b.addEventListener('click', () => {
       S._metasEditId = b.dataset.metasEdit; S._metasSub = 'nova';
+      // Pre-popula drafts a partir da meta sendo editada para que toggles
+      // (escopo/tipo) preservem os campos corretos ao re-renderizar.
+      const m = getMetas().find(x => x.id === b.dataset.metasEdit);
+      if (m) {
+        S._metaEscopoDraft = m.escopo || 'colab';
+        S._metaTipoDraft   = m.tipo || 'vendas';
+        S._metaBonusIndDraft = m.bonusIndividuais || {};
+      }
       render();
     });
   });
@@ -1057,14 +1172,22 @@ export function renderMetasParaAtendente(user, ordersList = S.orders) {
   if (!metas.length) return '';
 
   // Helper: calcula a parte do bonus que ESTA colab vai receber
-  // - bonus individual: valor cheio
-  // - bonus equipe (colab): bonusValor / qtd_no_grupo (mesmo nome+tipo+periodo)
-  // - bonus equipe (unidade): bonusValor / qtd_atendentes_da_unidade
+  // - bonus INDIVIDUAL com bonusIndividuais[meu]: usa o valor especifico dela
+  // - bonus INDIVIDUAL sem mapa: usa bonusValor cheio
+  // - bonus EQUIPE (colab): bonusValor / qtd_no_grupo
+  // - bonus EQUIPE (unidade): bonusValor / qtd_atendentes_da_unidade
   const calcularMinhaParte = (m) => {
     const total = Number(m.bonusValor) || 0;
-    if ((m.bonusModo||'individual') === 'individual') return { share: total, divisor: 1 };
+    const modo = m.bonusModo || 'individual';
+    if (modo === 'individual') {
+      // Se ha mapa por colab, usa o dela; senao o valor padrao
+      const mapa = m.bonusIndividuais || {};
+      const meu = Number(mapa[myKey]);
+      const share = (meu > 0) ? meu : total;
+      return { share, divisor: 1 };
+    }
+    // EQUIPE — divide
     if ((m.escopo||'colab') === 'unidade') {
-      // Atendentes da unidade — para 'todas' usa todas
       const slug = String(m.unidade||'').toLowerCase();
       let qtd;
       if (slug === 'todas') qtd = colabsPorTipoMeta('vendas').length || 1;
@@ -1073,7 +1196,6 @@ export function renderMetasParaAtendente(user, ordersList = S.orders) {
       }
       return { share: total / qtd, divisor: qtd };
     }
-    // bonus equipe entre colabs: agrupa metas-irmas (mesmo nome+tipo+periodo)
     const grupo = allVisiveis.filter(x =>
       (x.escopo||'colab') === 'colab' &&
       x.bonusModo === 'equipe' &&
