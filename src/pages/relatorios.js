@@ -1548,13 +1548,16 @@ function renderChaoDatas(orders) {
 // ─── A) PRODUTOS A MONTAR ───────────────────────────────────
 function renderChaoProdutos(pedidos) {
   const ordem = S._chaoProdOrdem || 'alfa'; // alfa | qtd
-  // Agrega produtos
+  // Agrega produtos + lista de pedidos onde aparecem
   const map = {};
   for (const o of pedidos) {
+    const num = (o.orderNumber||o.numero||'').toString().replace(/^PED-?/i,'');
     for (const it of (o.items || [])) {
       const key = String(it.code || it.product || it.name || '?');
-      if (!map[key]) map[key] = { code: it.code || it.product || '—', name: it.name || '?', qty: 0 };
-      map[key].qty += Number(it.qty) || 0;
+      if (!map[key]) map[key] = { code: it.code || it.product || '—', name: it.name || '?', qty: 0, pedidos: [] };
+      const q = Number(it.qty) || 0;
+      map[key].qty += q;
+      if (num) map[key].pedidos.push({ num, qty: q });
     }
   }
   let produtos = Object.values(map);
@@ -1597,19 +1600,33 @@ ${produtos.length === 0 ? `
   <table style="width:100%;border-collapse:collapse;font-size:13px;">
     <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
       <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;width:50px;">#</th>
-      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;width:110px;">Código</th>
+      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;width:110px;">Cód. Produto</th>
       <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Produto</th>
       <th style="padding:12px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;width:130px;">Qtd a Montar</th>
+      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Cód. Pedido(s)</th>
     </tr></thead>
     <tbody>
-      ${produtos.map((p, i) => `
+      ${produtos.map((p, i) => {
+        // Agrupa pedidos repetidos somando quantidades
+        const pedAgg = {};
+        (p.pedidos||[]).forEach(pp => {
+          if (!pedAgg[pp.num]) pedAgg[pp.num] = 0;
+          pedAgg[pp.num] += pp.qty;
+        });
+        const pedHTML = Object.entries(pedAgg)
+          .sort((a,b) => a[0].localeCompare(b[0]))
+          .map(([num, q]) => `<span style="display:inline-block;background:#FAE8E6;color:#9F1239;border:1px solid #FECDD3;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;font-family:Monaco,monospace;margin:1px 2px;">#${num}${q>1?`<span style="color:#15803D;margin-left:4px;">×${q}</span>`:''}</span>`)
+          .join('');
+        return `
         <tr style="border-bottom:1px solid #F1F5F9;">
-          <td style="padding:10px 12px;color:var(--muted);font-size:11px;">${i+1}</td>
-          <td style="padding:10px 12px;font-family:Monaco,monospace;color:#7C3AED;font-weight:700;">${p.code}</td>
-          <td style="padding:10px 12px;font-weight:600;">${p.name}</td>
-          <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;background:#15803D;color:#fff;padding:6px 18px;border-radius:999px;font-weight:900;font-size:15px;min-width:60px;">${p.qty}</span></td>
+          <td style="padding:10px 12px;color:var(--muted);font-size:11px;vertical-align:top;">${i+1}</td>
+          <td style="padding:10px 12px;font-family:Monaco,monospace;color:#7C3AED;font-weight:700;vertical-align:top;">${p.code}</td>
+          <td style="padding:10px 12px;font-weight:600;vertical-align:top;">${p.name}</td>
+          <td style="padding:10px 12px;text-align:center;vertical-align:top;"><span style="display:inline-block;background:#15803D;color:#fff;padding:6px 18px;border-radius:999px;font-weight:900;font-size:15px;min-width:60px;">${p.qty}</span></td>
+          <td style="padding:10px 12px;vertical-align:top;">${pedHTML || '<span style="color:var(--muted);">—</span>'}</td>
         </tr>
-      `).join('')}
+      `;
+      }).join('')}
     </tbody>
   </table>
 </div>
@@ -1701,12 +1718,17 @@ function renderChaoZonas(pedidos) {
 
       for (const bn of bairrosOrd) {
         const lista = bairros[bn].sort((a,b) => String(a.scheduledTime||'99').localeCompare(String(b.scheduledTime||'99')));
+        const totalBairro = lista.length;
         lista.forEach((o, idx) => {
           const num = (o.orderNumber||o.numero||'').toString().replace(/^PED-?/i,'');
           const prods = (o.items||[]).map(i => `${i.qty}× ${i.name||'?'}`).join(' · ');
           const hora = (o.scheduledTime && o.scheduledTime!=='00:00') ? o.scheduledTime : (o.scheduledPeriod || '—');
+          // Badge de contagem aparece SOMENTE na primeira linha do bairro
+          const bairroCell = idx === 0
+            ? `<span style="font-weight:700;color:#1E293B;">${bn}</span> <span style="display:inline-block;background:${zMeta.color};color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:800;margin-left:4px;">${totalBairro}</span>`
+            : '';
           html += `<tr style="border-bottom:1px solid #F1F5F9;background:${idx%2?'rgba(255,255,255,.5)':'transparent'};">
-            <td style="padding:6px 8px;font-weight:600;color:#1E293B;">${idx===0?bn:''}</td>
+            <td style="padding:6px 8px;">${bairroCell}</td>
             <td style="padding:6px 8px;color:#7C3AED;font-weight:700;font-family:Monaco,monospace;">#${num||'—'}</td>
             <td style="padding:6px 8px;color:#475569;">${prods||'—'}</td>
             <td style="padding:6px 8px;text-align:center;font-weight:700;color:${meta.color};">${hora}</td>
@@ -1790,7 +1812,7 @@ ${ordenados.length === 0 ? `
     <div style="margin-bottom:14px;">
       <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#FAFAFA;border-radius:8px;margin-bottom:6px;border-left:4px solid var(--rose);">
         <span style="font-weight:800;color:var(--ink);font-size:13px;">${gk}</span>
-        <span style="background:var(--rose);color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">${lista.length} comanda(s)</span>
+        <span style="background:var(--rose);color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">${lista.length} entrega(s)</span>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead><tr style="background:#fff;border-bottom:1px solid var(--border);">
