@@ -53,7 +53,9 @@ const PAGE_TO_MOD = {
   whatsapp:'whatsapp', usuarios:'users',
   colaboradores:'users', impressao:'impressao', backup:'backup',
   config:'config', ecommerce:'ecommerce', orcamento:'orcamentos',
-  entregador:'delivery', notasFiscais:'financial',
+  entregador:'delivery', notasFiscais:'notasFiscais',
+  rh:'rh', metas:'reports', meuPainel:'orders',
+  alertas:'alertas', auditLogs:'auditLogs', agenteTI:'agenteTI',
 };
 
 export function setPage(p, pushHistory=true){

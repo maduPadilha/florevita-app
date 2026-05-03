@@ -207,10 +207,12 @@ ${renderRHFiltros()}
 
 <div class="tabs" style="margin-bottom:14px;gap:5px;">
   ${subBtn('pontos',    '🕐 Pontos Eletrônicos')}
+  ${subBtn('horas',     '⏱️ Relatório de Horas')}
   ${subBtn('comissoes', '💰 Comissões')}
 </div>
 
 ${sub === 'pontos'    ? renderRHPontos()    : ''}
+${sub === 'horas'     ? renderRHHoras()     : ''}
 ${sub === 'comissoes' ? renderRHComissoes() : ''}
 `;
 }
@@ -344,6 +346,174 @@ function renderRHPontos() {
       `}
     </div>`).join('')}
   </div>`;
+}
+
+// ─── RELATORIO DE HORAS (mensal/dia/colab) ──────────────────
+function renderRHHoras() {
+  const periodo = S._rhPeriodo || 'mes';
+  const colabId = S._rhColabId || '';
+  let inicio, fim;
+  if (periodo === 'custom' && (S._rhDate1 || S._rhDate2)) {
+    inicio = S._rhDate1 ? new Date(S._rhDate1+'T00:00:00') : new Date(2020,0,1);
+    fim    = S._rhDate2 ? new Date(S._rhDate2+'T23:59:59') : new Date(2099,11,31);
+  } else {
+    const r = getRange(periodo); inicio = r.inicio; fim = r.fim;
+  }
+
+  const pontos = _pontosCache || [];
+  if (!pontos.length) {
+    return `<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+      <div style="font-size:36px;">⏱️</div><p>Carregando registros...</p>
+    </div>`;
+  }
+
+  const colabs = getColabs().filter(c => c.active !== false);
+  const alvo = colabId ? colabs.filter(c => _colabKey(c) === colabId) : colabs;
+
+  // Para cada colab, calcula totais + lista de dias
+  const dadosCol = alvo.map(c => {
+    const dias = pontosColabPeriodo(c, pontos, inicio, fim);
+    const minPorDia = dias.map(g => {
+      if (!g.entrada || !g.saida) return { data: g.data, min: 0, completo: false };
+      const total = toMin(g.saida) - toMin(g.entrada);
+      const almoco = (g.saidaAlmoco && g.voltaAlmoco) ? (toMin(g.voltaAlmoco) - toMin(g.saidaAlmoco)) : 0;
+      const liquido = Math.max(0, total - almoco);
+      return { data: g.data, min: liquido, completo: true,
+        entrada: g.entrada, saidaAlmoco: g.saidaAlmoco, voltaAlmoco: g.voltaAlmoco, saida: g.saida };
+    });
+    const totalMin = minPorDia.reduce((s,d) => s+d.min, 0);
+    const diasCompletos = minPorDia.filter(d => d.completo).length;
+    const diasIncompletos = minPorDia.length - diasCompletos;
+    return { colab: c, minPorDia, totalMin, diasCompletos, diasIncompletos, totalDias: minPorDia.length };
+  }).filter(d => d.totalDias > 0 || colabId)
+    .sort((a,b) => b.totalMin - a.totalMin);
+
+  if (!dadosCol.length) {
+    return `<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+      <div style="font-size:36px;">📭</div><p>Nenhum ponto registrado no período selecionado.</p>
+    </div>`;
+  }
+
+  const totalGeralMin = dadosCol.reduce((s,d) => s+d.totalMin, 0);
+  const totalGeralDias = dadosCol.reduce((s,d) => s+d.diasCompletos, 0);
+  const fmtH = (mins) => `${Math.floor(mins/60)}h${String(mins%60).padStart(2,'0')}`;
+
+  return `
+<!-- KPI consolidado do periodo -->
+<div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#DBEAFE,#EFF6FF);border:2px solid #93C5FD;">
+  <div style="display:flex;justify-content:space-around;align-items:center;flex-wrap:wrap;gap:14px;">
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:#1E40AF;text-transform:uppercase;font-weight:700;">Colaboradores</div>
+      <div style="font-size:28px;font-weight:900;color:#1E40AF;">${dadosCol.length}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:#1E40AF;text-transform:uppercase;font-weight:700;">Dias Trabalhados (total)</div>
+      <div style="font-size:28px;font-weight:900;color:#1E40AF;">${totalGeralDias}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:#15803D;text-transform:uppercase;font-weight:700;">Horas Trabalhadas (total)</div>
+      <div style="font-size:28px;font-weight:900;color:#15803D;">${fmtH(totalGeralMin)}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:#1E40AF;text-transform:uppercase;font-weight:700;">Período</div>
+      <div style="font-size:14px;font-weight:700;color:#1E40AF;">${fmtData(inicio.toISOString())}<br/>→ ${fmtData(fim.toISOString())}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabela RESUMO por colab -->
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">📊 Resumo por Colaboradora — ${dadosCol.length} pessoa(s)</div>
+  <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="background:#FAFAFA;border-bottom:2px solid var(--border);">
+        <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Colaborador</th>
+        <th style="padding:10px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Cargo</th>
+        <th style="padding:10px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Dias Completos</th>
+        <th style="padding:10px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Dias Incompletos</th>
+        <th style="padding:10px;text-align:right;font-size:10px;color:#15803D;text-transform:uppercase;">Total Horas</th>
+        <th style="padding:10px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Média/dia</th>
+      </tr></thead>
+      <tbody>
+        ${dadosCol.map(d => {
+          const media = d.diasCompletos > 0 ? Math.round(d.totalMin / d.diasCompletos) : 0;
+          return `<tr style="border-bottom:1px solid #F1F5F9;">
+            <td style="padding:10px;font-weight:700;">${escHtml(d.colab.name||'')}</td>
+            <td style="padding:10px;text-align:right;font-size:11px;color:var(--muted);">${escHtml(d.colab.cargo||'')}</td>
+            <td style="padding:10px;text-align:right;color:#15803D;font-weight:700;">${d.diasCompletos}</td>
+            <td style="padding:10px;text-align:right;color:${d.diasIncompletos>0?'#DC2626':'var(--muted)'};font-weight:600;">${d.diasIncompletos}</td>
+            <td style="padding:10px;text-align:right;color:#15803D;font-weight:900;font-size:14px;">${fmtH(d.totalMin)}</td>
+            <td style="padding:10px;text-align:right;color:#475569;font-weight:600;">${fmtH(media)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+      <tfoot><tr style="background:#FAFAFA;font-weight:800;">
+        <td style="padding:10px;">TOTAL</td>
+        <td></td>
+        <td style="padding:10px;text-align:right;">${dadosCol.reduce((s,d)=>s+d.diasCompletos,0)}</td>
+        <td style="padding:10px;text-align:right;">${dadosCol.reduce((s,d)=>s+d.diasIncompletos,0)}</td>
+        <td style="padding:10px;text-align:right;color:#15803D;font-size:15px;">${fmtH(totalGeralMin)}</td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+  </div>
+</div>
+
+<!-- DETALHE: dia a dia de cada colab (expandivel) -->
+<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;letter-spacing:.5px;">📅 Detalhe Dia a Dia (clique para expandir)</div>
+<div style="display:grid;gap:8px;">
+  ${dadosCol.map(d => `
+  <details class="card" style="padding:0;">
+    <summary style="padding:12px 14px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">${(d.colab.name||'?').charAt(0).toUpperCase()}</div>
+        <div>
+          <div style="font-weight:700;font-size:13px;">${escHtml(d.colab.name||'')}</div>
+          <div style="font-size:10px;color:var(--muted);">${escHtml(d.colab.cargo||'')} · ${d.totalDias} dia(s) registrado(s)</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center;">
+        <div style="text-align:right;">
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;">Total Mês</div>
+          <div style="font-size:18px;font-weight:900;color:#15803D;">${fmtH(d.totalMin)}</div>
+        </div>
+        <span style="font-size:18px;color:var(--muted);">▼</span>
+      </div>
+    </summary>
+    <div style="padding:0 14px 14px;border-top:1px solid var(--border);">
+      <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:10px;">
+        <thead><tr style="background:#FAFAFA;">
+          <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Data</th>
+          <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Entrada</th>
+          <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Almoço</th>
+          <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Retorno</th>
+          <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Saída</th>
+          <th style="padding:8px;text-align:right;font-size:10px;color:#15803D;text-transform:uppercase;">Horas</th>
+        </tr></thead>
+        <tbody>
+          ${d.minPorDia.slice().reverse().map(g => `<tr style="border-bottom:1px solid #F1F5F9;${g.completo?'':'background:#FEF3C7;'}">
+            <td style="padding:6px 8px;font-weight:600;">${fmtData(g.data)}</td>
+            <td style="padding:6px 8px;text-align:center;font-family:Monaco,monospace;color:#15803D;">${g.entrada||'—'}</td>
+            <td style="padding:6px 8px;text-align:center;font-family:Monaco,monospace;color:#D97706;">${g.saidaAlmoco||'—'}</td>
+            <td style="padding:6px 8px;text-align:center;font-family:Monaco,monospace;color:#D97706;">${g.voltaAlmoco||'—'}</td>
+            <td style="padding:6px 8px;text-align:center;font-family:Monaco,monospace;color:#DC2626;">${g.saida||'—'}</td>
+            <td style="padding:6px 8px;text-align:right;font-weight:800;color:${g.completo?'#15803D':'#DC2626'};">${g.completo?fmtH(g.min):'⚠️ incompl.'}</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot><tr style="background:#DCFCE7;font-weight:800;">
+          <td colspan="5" style="padding:8px;text-align:right;color:#15803D;">Total ${escHtml(d.colab.name||'')}:</td>
+          <td style="padding:8px;text-align:right;color:#15803D;font-size:14px;">${fmtH(d.totalMin)}</td>
+        </tr></tfoot>
+      </table>
+    </div>
+  </details>
+  `).join('')}
+</div>
+
+<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px;margin-top:14px;font-size:11px;color:#1E40AF;">
+  💡 <strong>Cálculo:</strong> Horas trabalhadas = (Saída − Entrada) − (Volta Almoço − Saída Almoço). Dias com pontos faltando aparecem em amarelo como <strong>incompletos</strong>.
+</div>
+`;
 }
 
 // ─── COMISSOES ───────────────────────────────────────────────
