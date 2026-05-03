@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-2';
+const APP_VERSION = '20260503-3';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2957,6 +2957,19 @@ function bindPageActions(){
         } catch(_){}
       })();
     }
+    // Mostra estado atual do modo no backend (debug)
+    (async () => {
+      try {
+        const r = await fetch('https://florevita-backend-2-0.onrender.com/api/settings/public/ecommerce', { cache:'no-store' });
+        const d = await r.json();
+        const status = document.getElementById('ecommerce2-status');
+        if (status) {
+          const modoSrv = d.mode === 'loja' ? '🛒 LOJA COMPLETA' : '📚 CATÁLOGO';
+          status.innerHTML = `<span style="color:var(--muted);">No site agora: <strong>${modoSrv}</strong></span>`;
+        }
+      } catch(_){}
+    })();
+
     {const _el = document.getElementById('btn-save-ecommerce2'); if (_el) _el.onclick = async () => {
       const get = (id) => document.getElementById(id)?.value?.trim() || '';
       const modeR = document.querySelector('input[name="ec2-mode"]:checked');
@@ -2982,8 +2995,24 @@ function bindPageActions(){
       if (status) status.textContent = 'Salvando...';
       try {
         await PUT('/settings/ecommerce', { value });
-        if (status) { status.textContent = '✅ Salvo! Site reflete em até 60s.'; status.style.color = '#15803D'; }
-        toast('✅ E-commerce salvo');
+        if (status) {
+          const modoLbl = value.mode === 'loja' ? '🛒 LOJA COMPLETA' : '📚 CATÁLOGO';
+          status.innerHTML = `<span style="color:#15803D;">✅ Salvo como <strong>${modoLbl}</strong>! Site reflete em até 15s.</span>`;
+        }
+        toast(`✅ Salvo: ${value.mode === 'loja' ? 'Loja Completa' : 'Catálogo'}`);
+        // Re-checa servidor apos 12s para confirmar propagacao
+        setTimeout(async () => {
+          try {
+            const r2 = await fetch('https://florevita-backend-2-0.onrender.com/api/settings/public/ecommerce', { cache:'no-store' });
+            const d2 = await r2.json();
+            if (status) {
+              const ok = d2.mode === value.mode;
+              status.innerHTML = ok
+                ? `<span style="color:#15803D;">✅ Confirmado no servidor: <strong>${d2.mode==='loja'?'🛒 LOJA':'📚 CATÁLOGO'}</strong></span>`
+                : `<span style="color:#DC2626;">⚠️ Servidor ainda mostra ${d2.mode}. Aguarde mais 30s ou recarregue.</span>`;
+            }
+          } catch(_){}
+        }, 12000);
       } catch(e) {
         if (status) { status.textContent = '❌ '+(e.message||'erro'); status.style.color = '#DC2626'; }
       }
