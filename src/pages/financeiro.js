@@ -215,9 +215,215 @@ ${vencidas.length>0?`<div class="alert al-err">⚠️ <strong>${vencidas.length}
   </div>
 </div>
 
+${renderFolhaAPagar()}
+
 ${renderVales()}
 
 ${renderComissoesMetas()}`;
+}
+
+// ── FOLHA A PAGAR (automatico) ───────────────────────────────
+// Gera dinamicamente os compromissos de RH:
+//   - ADIANTAMENTO: vence dia 20 de CADA MES (50% do salario base)
+//   - SALARIO:      vence 5o dia util do MES SEGUINTE (liquido estimado)
+// Status:
+//   - 'Pago' se ja existe folha (fv_rh_folhas) do tipo correspondente
+//     no mesAno marcador
+//   - 'Pendente' caso contrario
+// Mostra os meses: anterior + corrente + proximo (3 meses de visao)
+function renderFolhaAPagar() {
+  // So Admin / Gerente / Financeiro / Contador veem
+  const role = String(S.user?.role||'').toLowerCase();
+  const cargo = String(S.user?.cargo||'').toLowerCase();
+  const ehAdm = role === 'administrador' || cargo === 'admin';
+  const ehGer = role === 'gerente' || cargo === 'gerente';
+  const ehFin = cargo === 'financeiro';
+  const ehCnt = cargo === 'contador';
+  if (!ehAdm && !ehGer && !ehFin && !ehCnt) return '';
+
+  // Carrega dados RH e folhas existentes
+  let dadosAll = {};
+  let folhas = [];
+  try { dadosAll = JSON.parse(localStorage.getItem('fv_rh_dados')||'{}'); } catch(_){}
+  try { folhas = JSON.parse(localStorage.getItem('fv_rh_folhas')||'[]'); } catch(_){}
+
+  // Vales em aberto por colab (vao desconta no salario)
+  let vales = [];
+  try { vales = JSON.parse(localStorage.getItem('fv_vales')||'[]'); } catch(_){}
+  const valesAbertosPorColab = {};
+  vales.filter(v => v.status === 'Aberto').forEach(v => {
+    const k = String(v.colabKey||'');
+    valesAbertosPorColab[k] = (valesAbertosPorColab[k]||0) + (Number(v.valor)||0);
+  });
+
+  // INSS calc inline (mesma tabela 2026)
+  const _inss = (sal) => {
+    const F = [{ate:1621,a:0.075},{ate:2902.84,a:0.09},{ate:4354.27,a:0.12},{ate:8475.55,a:0.14}];
+    let restante = Number(sal)||0;
+    if (restante <= 0) return 0;
+    const teto = F[F.length-1].ate;
+    const base = Math.min(restante, teto);
+    let valor = 0, anterior = 0;
+    for (const f of F) {
+      if (base <= anterior) break;
+      const trib = Math.min(base, f.ate) - anterior;
+      if (trib > 0) valor += trib * f.a;
+      anterior = f.ate;
+      if (base <= f.ate) break;
+    }
+    return Math.round(valor*100)/100;
+  };
+
+  // Lista de colabs ativos com salario cadastrado
+  let colabs = [];
+  try { colabs = JSON.parse(localStorage.getItem('fv_colabs')||'[]').filter(c => c.active !== false); } catch(_){}
+  const _colabKey = (c) => String(c?._id || c?.id || c?.backendId || c?.email || c?.name || '');
+  const colabsComSalario = colabs.filter(c => {
+    const d = dadosAll[_colabKey(c)] || {};
+    return Number(d.salarioBase) > 0;
+  });
+
+  if (!colabsComSalario.length) return '';
+
+  // Gera meses: anterior, corrente, proximo
+  const hoje = new Date();
+  const meses = [
+    new Date(hoje.getFullYear(), hoje.getMonth()-1, 1),
+    new Date(hoje.getFullYear(), hoje.getMonth(), 1),
+    new Date(hoje.getFullYear(), hoje.getMonth()+1, 1),
+  ];
+  const mesNomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  // Linhas (uma por compromisso)
+  const linhas = [];
+  for (const c of colabsComSalario) {
+    const k = _colabKey(c);
+    const d = dadosAll[k] || {};
+    const sal = Number(d.salarioBase)||0;
+    const vt = Number(d.valeTransporte)||0;
+    const inssV = _inss(sal);
+    const valeAbertoTotal = valesAbertosPorColab[k] || 0;
+    const valeMes = sal * 0.5; // 50% do salario base = adiantamento padrao
+    // Liquido estimado = salario - INSS - VT(desconto = mesmo do adic) - vale do mes - vales abertos compras
+    const liquido = sal - inssV - vt - valeMes - valeAbertoTotal;
+
+    for (const mInicio of meses) {
+      const y = mInicio.getFullYear();
+      const m = mInicio.getMonth(); // 0-11
+      const mesAnoStr = `${y}-${String(m+1).padStart(2,'0')}`;
+      const mesLbl = `${mesNomes[m]}/${y}`;
+
+      // ADIANTAMENTO — dia 20 do MES (m)
+      const dataVencAd = new Date(y, m, 20);
+      const folhaAd = folhas.find(f => f.colabKey === k && f.tipo === 'adiantamento' && f.mesAno === mesAnoStr);
+      linhas.push({
+        colab: c, colabKey: k,
+        tipo: 'adiantamento',
+        mesAno: mesAnoStr, mesLbl,
+        valor: folhaAd?.valorAdiantamento || valeMes,
+        dataVenc: dataVencAd,
+        pago: !!folhaAd,
+        folhaId: folhaAd?.id || null,
+      });
+
+      // SALARIO — dia 5 do MES SEGUINTE (m+1)
+      const dataVencSal = new Date(y, m+1, 5);
+      const folhaSal = folhas.find(f => f.colabKey === k && f.tipo === 'contracheque' && f.mesAno === mesAnoStr);
+      linhas.push({
+        colab: c, colabKey: k,
+        tipo: 'salario',
+        mesAno: mesAnoStr, mesLbl,
+        valor: folhaSal?.valorLiquido || liquido,
+        dataVenc: dataVencSal,
+        pago: !!folhaSal,
+        folhaId: folhaSal?.id || null,
+      });
+    }
+  }
+
+  // Ordena por data de vencimento crescente (proximas primeiro)
+  linhas.sort((a,b) => a.dataVenc - b.dataVenc);
+
+  // KPIs do bloco
+  const totalPendente = linhas.filter(l => !l.pago).reduce((s,l) => s+(l.valor||0), 0);
+  const totalAtrasado = linhas.filter(l => !l.pago && l.dataVenc < hoje).reduce((s,l) => s+(l.valor||0), 0);
+  const qtdAtrasados = linhas.filter(l => !l.pago && l.dataVenc < hoje).length;
+
+  return `
+<div class="card" style="margin-top:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <div>
+      <div class="card-title" style="margin:0;">🗓️ Folha a Pagar (Automático)</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+        💵 Adiantamento: dia <strong>20</strong> · 💼 Salário: <strong>5º dia útil</strong> do mês seguinte · ${colabsComSalario.length} colaborador(es) com salário cadastrado
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px;">
+    <div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:10px;color:#991B1B;text-transform:uppercase;font-weight:700;">A pagar (3 meses)</div>
+      <div style="font-size:18px;font-weight:900;color:#991B1B;">${$c(totalPendente)}</div>
+    </div>
+    <div style="background:${qtdAtrasados>0?'#FEE2E2':'#DCFCE7'};border:1px solid ${qtdAtrasados>0?'#FCA5A5':'#86EFAC'};border-radius:8px;padding:10px 12px;">
+      <div style="font-size:10px;color:${qtdAtrasados>0?'#991B1B':'#15803D'};text-transform:uppercase;font-weight:700;">Atrasados</div>
+      <div style="font-size:18px;font-weight:900;color:${qtdAtrasados>0?'#991B1B':'#15803D'};">${qtdAtrasados} ${qtdAtrasados>0?'⚠️':'✅'}</div>
+      ${qtdAtrasados>0?`<div style="font-size:10px;color:#991B1B;">${$c(totalAtrasado)} a regularizar</div>`:''}
+    </div>
+    <div style="background:#DBEAFE;border:1px solid #93C5FD;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:10px;color:#1E40AF;text-transform:uppercase;font-weight:700;">Compromissos</div>
+      <div style="font-size:18px;font-weight:900;color:#1E40AF;">${linhas.length}</div>
+      <div style="font-size:10px;color:#1E40AF;">${linhas.filter(l=>l.pago).length} pagos · ${linhas.filter(l=>!l.pago).length} pendentes</div>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Vencimento</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Colab</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Tipo</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Mês Ref.</th>
+        <th style="padding:8px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Valor</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Status</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Ação</th>
+      </tr></thead>
+      <tbody>
+        ${linhas.map(l => {
+          const atrasado = !l.pago && l.dataVenc < hoje;
+          const dataStr = `${String(l.dataVenc.getDate()).padStart(2,'0')}/${String(l.dataVenc.getMonth()+1).padStart(2,'0')}/${l.dataVenc.getFullYear()}`;
+          const tipoBadge = l.tipo === 'adiantamento'
+            ? `<span style="background:#FEF3C7;color:#92400E;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">💵 Adiantamento</span>`
+            : `<span style="background:#DBEAFE;color:#1E40AF;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">💼 Salário</span>`;
+          const statusBadge = l.pago
+            ? `<span style="background:#DCFCE7;color:#15803D;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">✅ Pago</span>`
+            : atrasado
+              ? `<span style="background:#FEE2E2;color:#991B1B;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">⚠️ Atrasado</span>`
+              : `<span style="background:#FEF3C7;color:#92400E;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">⏳ A pagar</span>`;
+          return `<tr style="border-bottom:1px solid #F1F5F9;${l.pago?'opacity:.6;':''}${atrasado?'background:#FEF2F2;':''}">
+            <td style="padding:8px;font-weight:700;color:${atrasado?'#991B1B':'#1E293B'};">${dataStr}</td>
+            <td style="padding:8px;font-weight:600;">${esc(l.colab.name||'')}</td>
+            <td style="padding:8px;">${tipoBadge}</td>
+            <td style="padding:8px;font-size:11px;color:var(--muted);">${esc(l.mesLbl)}</td>
+            <td style="padding:8px;text-align:right;font-weight:800;color:${atrasado?'#991B1B':'#1E293B'};">${$c(l.valor)}</td>
+            <td style="padding:8px;text-align:center;">${statusBadge}</td>
+            <td style="padding:8px;text-align:center;">
+              ${l.pago
+                ? `<button class="btn btn-ghost btn-xs" data-folha-print="${l.folhaId}" title="Imprimir recibo">🖨️</button>`
+                : `<button class="btn btn-primary btn-xs" data-folha-gerar="${l.colabKey}|${l.tipo}|${l.mesAno}" title="Gerar e pagar agora">💸 Pagar</button>`}
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;color:#1E40AF;">
+    💡 Os compromissos aparecem automaticamente para todo colaborador com <strong>salário cadastrado em RH</strong>. O botão <strong>💸 Pagar</strong> leva direto à geração do contracheque/recibo no módulo RH.
+  </div>
+</div>
+`;
 }
 
 // ── MODULO VALES ─────────────────────────────────────────────

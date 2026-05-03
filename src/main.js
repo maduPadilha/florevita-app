@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-36';
+const APP_VERSION = '20260503-37';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3140,6 +3140,22 @@ function bindPageActions(){
       const list = JSON.parse(localStorage.getItem('fv_vales')||'[]').filter(x => x.id !== id);
       localStorage.setItem('fv_vales', JSON.stringify(list));
       toast('🗑️ Excluído'); render();
+    }));
+
+    // ── FOLHA A PAGAR (acoes) ────────────────────────────────────
+    document.querySelectorAll('[data-folha-print]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.folhaPrint;
+      import('./pages/rh-folha.js').then(m => m.imprimirFolha && m.imprimirFolha(id));
+    }));
+    document.querySelectorAll('[data-folha-gerar]').forEach(b => b.addEventListener('click', () => {
+      const [colabKey, tipo, mesAno] = b.dataset.folhaGerar.split('|');
+      // Vai direto para RH > Folha > Gerar com tudo pre-preenchido
+      S._rhSub = 'folha';
+      S._rhFolhaSub = 'gerar';
+      S._rhFolhaColab = colabKey;
+      S._rhFolhaMes   = mesAno;
+      S._rhFolhaTipo  = tipo === 'salario' ? 'contracheque' : 'adiantamento';
+      setPage('rh');
     }));
   }
 
