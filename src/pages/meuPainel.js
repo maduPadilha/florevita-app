@@ -22,6 +22,10 @@ async function loadPontos(userId) {
 }
 
 // Comissão calculada localmente (S.orders ja foi carregado)
+// Considera 3 tipos:
+//  - Venda: % sobre vendas em que ele e o vendedorId selecionado no PDV
+//  - Montagem: R$ fixo por produto montado (status 'Pronto'/'Em preparo' concluido)
+//  - Expedicao: R$ fixo por produto expedido (status 'Saiu p/ entrega' ou 'Entregue')
 function calcularComissoes(user) {
   const orders = Array.isArray(S.orders) ? S.orders : [];
   const myEmail = String(user?.email||'').toLowerCase();
@@ -29,34 +33,67 @@ function calcularComissoes(user) {
   const myColabId = String(user?.colabId||'');
 
   const APROVADOS = new Set(['Aprovado','Pago','aprovado','pago']);
-  // Filtra pedidos vendidos por este colaborador E aprovados
-  const meus = orders.filter(o => {
-    const okPay = APROVADOS.has(String(o.paymentStatus||''));
-    if (!okPay) return false;
-    const e = String(o.createdByEmail||'').toLowerCase();
-    return e === myEmail
-        || String(o.criadoPor||'') === myId
-        || String(o.createdByColabId||'') === myColabId;
-  });
+  const sou = (o, fieldId, fieldEmail) => {
+    const e = String(o[fieldEmail]||'').toLowerCase();
+    const id = String(o[fieldId]||'');
+    return (e && e === myEmail) || id === myId || id === myColabId;
+  };
+
+  // Configs do user (vem de metas)
+  const m = user?.metas || {};
+  const PCT_VENDA   = Number(m.comissaoVenda || m.comissaoPct) || 0;
+  const POR_MONTAGEM   = Number(m.comissaoMontagem) || 0;
+  const POR_EXPEDICAO  = Number(m.comissaoExpedicao) || 0;
+
   // Agrupa por mes
   const porMes = {};
-  for (const o of meus) {
+  const ensure = (key) => {
+    if (!porMes[key]) porMes[key] = {
+      vendaCount:0, vendaTotal:0, vendaComissao:0,
+      montagemCount:0, montagemComissao:0,
+      expedicaoCount:0, expedicaoComissao:0,
+    };
+    return porMes[key];
+  };
+
+  for (const o of orders) {
     const d = new Date(o.createdAt || o.scheduledDate || Date.now());
-    const key = d.toISOString().slice(0,7); // YYYY-MM
-    if (!porMes[key]) porMes[key] = { count:0, total:0 };
-    porMes[key].count++;
-    porMes[key].total += Number(o.total) || 0;
+    const key = d.toISOString().slice(0,7);
+    const itensQty = (o.items||[]).reduce((s,i) => s + (Number(i.qty)||1), 0) || 1;
+
+    // VENDA — pedido aprovado e este user e o vendedor escolhido no PDV
+    if (APROVADOS.has(String(o.paymentStatus||'')) && sou(o, 'vendedorId', 'vendedorEmail')) {
+      const total = Number(o.total) || 0;
+      const g = ensure(key);
+      g.vendaCount++;
+      g.vendaTotal += total;
+      g.vendaComissao += total * (PCT_VENDA / 100);
+    }
+
+    // MONTAGEM — status >= Pronto e este user e o montador
+    const st = String(o.status||'').toLowerCase();
+    const montou = ['pronto','saiu p/ entrega','entregue'].some(x => st.includes(x));
+    if (montou && POR_MONTAGEM > 0 && sou(o, 'montadorId', 'montadorEmail')) {
+      const g = ensure(key);
+      g.montagemCount += itensQty;
+      g.montagemComissao += POR_MONTAGEM * itensQty;
+    }
+
+    // EXPEDICAO — status >= Saiu p/ entrega e este user e o expedidor
+    const expediu = ['saiu p/ entrega','entregue'].some(x => st.includes(x));
+    if (expediu && POR_EXPEDICAO > 0 && sou(o, 'expedidorId', 'expedidorEmail')) {
+      const g = ensure(key);
+      g.expedicaoCount += itensQty;
+      g.expedicaoComissao += POR_EXPEDICAO * itensQty;
+    }
   }
-  // Percentual padrao (admin pode configurar futuramente em settings)
-  const PCT = Number(user?.metas?.comissaoPct) || 2; // 2% default
+
   return Object.entries(porMes)
     .sort((a,b) => b[0].localeCompare(a[0]))
     .map(([mes, v]) => ({
       mes,
-      count: v.count,
-      total: v.total,
-      comissao: v.total * (PCT/100),
-      pct: PCT,
+      ...v,
+      total: v.vendaComissao + v.montagemComissao + v.expedicaoComissao,
     }));
 }
 
@@ -112,9 +149,11 @@ export function renderMeuPainel() {
   const pontosRaw = _pontosCache || [];
   const pontos = agruparPontosPorDia(pontosRaw);
   const comissoes = calcularComissoes(u);
-  const totalAcumulado = comissoes.reduce((s,c) => s + c.comissao, 0);
-  const totalVendas    = comissoes.reduce((s,c) => s + c.total, 0);
-  const qtdPedidos     = comissoes.reduce((s,c) => s + c.count, 0);
+  const totalAcumulado = comissoes.reduce((s,c) => s + c.total, 0);
+  const totalVendaCom  = comissoes.reduce((s,c) => s + c.vendaComissao, 0);
+  const totalMontCom   = comissoes.reduce((s,c) => s + c.montagemComissao, 0);
+  const totalExpCom    = comissoes.reduce((s,c) => s + c.expedicaoComissao, 0);
+  const qtdPedidos     = comissoes.reduce((s,c) => s + c.vendaCount, 0);
 
   return `
 <div class="card" style="background:linear-gradient(135deg,#FAE8E6,#FAF7F5);border:1px solid #FECDD3;margin-bottom:14px;">
@@ -137,38 +176,45 @@ export function renderMeuPainel() {
   <!-- COMISSOES -->
   <div class="card">
     <div class="card-title">💰 Minhas Vendas e Comissões</div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;">
-      <div style="flex:1;background:var(--cream);border-radius:8px;padding:10px;text-align:center;">
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">Pedidos aprovados</div>
-        <div style="font-size:20px;font-weight:900;color:var(--ink);">${qtdPedidos}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px;">
+      <div style="background:#DCFCE7;border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:9px;color:#15803D;font-weight:700;text-transform:uppercase;">💰 Vendas (%)</div>
+        <div style="font-size:14px;font-weight:900;color:#15803D;">${$c(totalVendaCom)}</div>
+        <div style="font-size:9px;color:#15803D;opacity:.7;">${qtdPedidos} pedidos</div>
       </div>
-      <div style="flex:1;background:var(--cream);border-radius:8px;padding:10px;text-align:center;">
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">Total em vendas</div>
-        <div style="font-size:18px;font-weight:900;color:var(--ink);">${$c(totalVendas)}</div>
+      <div style="background:#FEF3C7;border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:9px;color:#92400E;font-weight:700;text-transform:uppercase;">🌸 Montagem (R$)</div>
+        <div style="font-size:14px;font-weight:900;color:#92400E;">${$c(totalMontCom)}</div>
+        <div style="font-size:9px;color:#92400E;opacity:.7;">por produto</div>
+      </div>
+      <div style="background:#DBEAFE;border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:9px;color:#1E40AF;font-weight:700;text-transform:uppercase;">📦 Expedição (R$)</div>
+        <div style="font-size:14px;font-weight:900;color:#1E40AF;">${$c(totalExpCom)}</div>
+        <div style="font-size:9px;color:#1E40AF;opacity:.7;">por produto</div>
       </div>
     </div>
     ${comissoes.length === 0 ? `
       <div style="text-align:center;padding:24px;color:var(--muted);font-size:12px;">
-        Nenhuma venda aprovada ainda neste período.
+        Nenhuma comissão registrada ainda neste período.
       </div>
     ` : `
     <div style="overflow-x:auto;">
       <table style="width:100%;font-size:12px;border-collapse:collapse;">
         <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
           <th style="padding:10px 6px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Mês</th>
-          <th style="padding:10px 6px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Pedidos</th>
-          <th style="padding:10px 6px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Vendas</th>
-          <th style="padding:10px 6px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">%</th>
-          <th style="padding:10px 6px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Comissão</th>
+          <th style="padding:10px 6px;text-align:right;font-size:10px;color:#15803D;text-transform:uppercase;letter-spacing:.5px;" title="Vendas como vendedor selecionado no PDV">💰 Venda</th>
+          <th style="padding:10px 6px;text-align:right;font-size:10px;color:#92400E;text-transform:uppercase;letter-spacing:.5px;">🌸 Montagem</th>
+          <th style="padding:10px 6px;text-align:right;font-size:10px;color:#1E40AF;text-transform:uppercase;letter-spacing:.5px;">📦 Expedição</th>
+          <th style="padding:10px 6px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Total</th>
         </tr></thead>
         <tbody>
           ${comissoes.map(c => `
             <tr style="border-bottom:1px solid #F1F5F9;">
               <td style="padding:10px 6px;font-weight:600;">${fmtMes(c.mes)}</td>
-              <td style="text-align:center;padding:10px 6px;">${c.count}</td>
-              <td style="text-align:right;padding:10px 6px;color:var(--muted);">${$c(c.total)}</td>
-              <td style="text-align:center;padding:10px 6px;"><span style="background:#DBEAFE;color:#1E40AF;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;">${c.pct}%</span></td>
-              <td style="text-align:right;padding:10px 6px;font-weight:900;color:#15803D;">${$c(c.comissao)}</td>
+              <td style="text-align:right;padding:10px 6px;color:#15803D;">${$c(c.vendaComissao)}<br/><span style="font-size:9px;color:var(--muted);">${c.vendaCount} vendas</span></td>
+              <td style="text-align:right;padding:10px 6px;color:#92400E;">${$c(c.montagemComissao)}<br/><span style="font-size:9px;color:var(--muted);">${c.montagemCount} produtos</span></td>
+              <td style="text-align:right;padding:10px 6px;color:#1E40AF;">${$c(c.expedicaoComissao)}<br/><span style="font-size:9px;color:var(--muted);">${c.expedicaoCount} produtos</span></td>
+              <td style="text-align:right;padding:10px 6px;font-weight:900;color:#15803D;">${$c(c.total)}</td>
             </tr>
           `).join('')}
         </tbody>

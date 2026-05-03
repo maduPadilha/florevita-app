@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-3';
+const APP_VERSION = '20260503-4';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -1988,6 +1988,12 @@ function bindPageActions(){
     {const _el=document.getElementById('pdv-troco-sem');if(_el)_el.onclick=()=>{PDV.trocoPara='0';render();};}
     document.querySelectorAll('[data-pay]').forEach(b=>{b.onclick=()=>{PDV.payment=b.dataset.pay;PDV.paymentOnDelivery='';render();};});
     document.getElementById('pdv-sale-unit')?.addEventListener('change',e=>{PDV.saleUnit=e.target.value});
+    document.getElementById('pdv-vendedor')?.addEventListener('change', e => {
+      const v = String(e.target.value||'').split('|');
+      PDV.vendedorId = v[0] || '';
+      PDV.vendedorNome = v[1] || '';
+      PDV.vendedorEmail = v[2] || '';
+    });
     document.getElementById('pdv-sales-channel')?.addEventListener('change',e=>{PDV.salesChannel=e.target.value;render();});
     document.getElementById('pdv-notify')?.addEventListener('change',e=>{PDV.notifyClient=e.target.checked});
     document.getElementById('pdv-identify')?.addEventListener('change',e=>{PDV.identifyClient=e.target.checked});

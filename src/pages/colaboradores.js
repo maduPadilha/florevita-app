@@ -400,27 +400,27 @@ export async function showColabModal(colabId=null, overrideCargo=null){
   <div class="fr2" style="gap:10px;margin-bottom:8px;">
 
     <div class="fg">
-      <label class="fl">💰 Comissao por Venda (%)</label>
+      <label class="fl">💰 Comissão por Venda (%)</label>
       <input class="fi" type="number" id="cl-comissao-venda"
         min="0" max="100" step="0.5" placeholder="Ex: 5"
         value="${colab?.metas?.comissaoVenda != null ? colab.metas.comissaoVenda : ''}"/>
-      <div style="font-size:10px;color:var(--muted);margin-top:3px;">Ex: 5 = 5% sobre o valor total de cada venda</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px;">% sobre o valor das vendas em que ele(a) for o <strong>vendedor</strong> selecionado no PDV (não do logado)</div>
     </div>
 
     <div class="fg">
-      <label class="fl">🌸 Comissao por Montagem (R$)</label>
+      <label class="fl">🌸 Comissão por Montagem (R$ por produto)</label>
       <input class="fi" type="number" id="cl-comissao-montagem"
         min="0" step="0.01" placeholder="Ex: 2.50"
         value="${colab?.metas?.comissaoMontagem != null ? colab.metas.comissaoMontagem : ''}"/>
-      <div style="font-size:10px;color:var(--muted);margin-top:3px;">Valor R$ recebido por cada pedido montado (status "Pronto")</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px;">Valor fixo R$ recebido <strong>por cada produto montado</strong> (não é % sobre o valor)</div>
     </div>
 
     <div class="fg">
-      <label class="fl">📦 Comissao por Expedicao (R$)</label>
+      <label class="fl">📦 Comissão por Expedição (R$ por produto)</label>
       <input class="fi" type="number" id="cl-comissao-expedicao"
         min="0" step="0.01" placeholder="Ex: 1.50"
         value="${colab?.metas?.comissaoExpedicao != null ? colab.metas.comissaoExpedicao : ''}"/>
-      <div style="font-size:10px;color:var(--muted);margin-top:3px;">Valor R$ recebido por cada pedido expedido</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px;">Valor fixo R$ recebido <strong>por cada produto expedido</strong> (não é % sobre o valor)</div>
     </div>
 
   </div>

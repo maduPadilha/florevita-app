@@ -208,6 +208,24 @@ export function renderPDV(){
       </div>`;
     })()}
 
+    <!-- VENDEDOR (quem fez a venda \u2014 pode ser diferente do logado) -->
+    ${(() => {
+      const colabs = (S.colaboradores || []).filter(c => c.active !== false && (c.cargo === 'Atendimento' || c.cargo === 'atendente' || c.cargo === 'Gerente' || c.cargo === 'gerente'));
+      // Default: o proprio user logado se nao definido
+      if (!PDV.vendedorId && S.user) {
+        PDV.vendedorId = S.user._id || S.user.colabId || '';
+        PDV.vendedorNome = S.user.name || S.user.nome || '';
+        PDV.vendedorEmail = S.user.email || '';
+      }
+      const optsHtml = (S.user ? [{_id: S.user._id || S.user.colabId, name: (S.user.name||S.user.nome) + ' (voc\u00EA)', email: S.user.email}] : [])
+        .concat(colabs.filter(c => String(c._id) !== String(S.user?._id) && String(c._id) !== String(S.user?.colabId)))
+        .map(c => `<option value="${c._id||''}|${(c.name||'').replace(/"/g,'')}|${(c.email||'').replace(/"/g,'')}" ${PDV.vendedorId===c._id?'selected':''}>${c.name||c.nome||'?'}</option>`).join('');
+      return `<div class="fg"><label class="fl">\uD83D\uDC64 Vendedor (quem fez a venda) *</label>
+        <select class="fi" id="pdv-vendedor">${optsHtml}</select>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px;">Comiss\u00E3o de venda vai para esse colaborador</div>
+      </div>`;
+    })()}
+
     ${(() => {
       // ── CANAL DE VENDA ─────────────────────────────────────
       // Auto-preenche conforme a unidade do colaborador:
@@ -790,10 +808,15 @@ export async function _finalizePDV(){
     unidade: destinoSlug,
     tipo: tipoSlug,
     destino: destinoSlug,
-    // Colaborador que lançou o pedido
+    // Colaborador que LANÇOU o pedido (logado no sistema)
     createdByName: S.user?.name || S.user?.nome || '',
     createdByEmail: S.user?.email || '',
     createdByColabId: S.user?.colabId || S.user?._id || '',
+    // Colaborador que VENDEU (escolhido no select PDV — pode ser diferente)
+    // Se nao escolheu, usa o logado.
+    vendedorId:    PDV.vendedorId    || S.user?._id || S.user?.colabId || '',
+    vendedorNome:  PDV.vendedorNome  || S.user?.name || S.user?.nome || '',
+    vendedorEmail: PDV.vendedorEmail || S.user?.email || '',
     paymentOnDelivery: PDV.payment==='Pagar na Entrega' ? PDV.paymentOnDelivery : undefined,
     trocoPara: (PDV.payment==='Pagar na Entrega' && PDV.paymentOnDelivery==='Dinheiro' && PDV.trocoPara)
       ? parseFloat(PDV.trocoPara) || 0 : undefined,
@@ -822,7 +845,7 @@ export async function _finalizePDV(){
     notifyWhatsApp(o);
     // Pergunta se quer imprimir comanda
     S._newOrderId = o._id;
-    PDV.cart=[];PDV.discount=0;PDV.payment='Pix';PDV.clientId='';PDV.clientName='';PDV.clientPhone='';PDV.clientEmail='';PDV.recipient='';PDV.recipientPhone='';PDV.cardMessage='';PDV.notes='';PDV.deliveryDate='';PDV.deliveryPeriod='Manh\u00E3';PDV.deliveryTime='';PDV.street='';PDV.neighborhood='';PDV.number='';PDV.city='';PDV.cep='';PDV.reference='';PDV.isCondominium=false;PDV.condName='';PDV.block='';PDV.apt='';PDV.type='Delivery';PDV.deliveryFee=0;PDV.zone='';PDV.clientSearch='';PDV.pickupUnit='';PDV.saleUnit='';PDV.notifyClient=true;PDV.identifyClient=true;PDV.paymentOnDelivery='';PDV.trocoPara='';PDV._showQuickReg=false;
+    PDV.cart=[];PDV.discount=0;PDV.payment='Pix';PDV.clientId='';PDV.clientName='';PDV.clientPhone='';PDV.clientEmail='';PDV.recipient='';PDV.recipientPhone='';PDV.cardMessage='';PDV.notes='';PDV.deliveryDate='';PDV.deliveryPeriod='Manh\u00E3';PDV.deliveryTime='';PDV.street='';PDV.neighborhood='';PDV.number='';PDV.city='';PDV.cep='';PDV.reference='';PDV.isCondominium=false;PDV.condName='';PDV.block='';PDV.apt='';PDV.type='Delivery';PDV.deliveryFee=0;PDV.zone='';PDV.clientSearch='';PDV.pickupUnit='';PDV.saleUnit='';PDV.notifyClient=true;PDV.identifyClient=true;PDV.paymentOnDelivery='';PDV.trocoPara='';PDV._showQuickReg=false;PDV.vendedorId='';PDV.vendedorNome='';PDV.vendedorEmail='';
     S.loading=false;
     // Resolve número do pedido (campos possíveis que o backend pode retornar)
     const orderNum = o?.orderNumber || o?.numero || (o?._id ? String(o._id).slice(-5).toUpperCase() : 'NOVO');
