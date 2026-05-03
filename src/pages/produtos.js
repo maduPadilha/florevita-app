@@ -198,13 +198,12 @@ export function renderProdutos(){
       const cats = Array.isArray(p.categories) ? p.categories : [p.category||p.categoria].filter(Boolean);
       if (!cats.includes(catFilter)) return false;
     }
-    if (statusFilter === 'active') {
-      // Ativo no site (visivel no e-commerce)
-      if (p.activeOnSite !== true) return false;
-    } else if (statusFilter === 'inactive') {
-      if (p.activeOnSite === true) return false;
-    } else if (statusFilter === 'destaque') {
+    if (statusFilter === 'destaque') {
       if (p.destaque !== true) return false;
+    } else if (statusFilter === 'lowstock') {
+      const total = Number(p.estoque||0) + Number(p.stock||0);
+      const min = Number(p.estoqueMinimo||p.minStock||5);
+      if (total > min) return false;
     } else if (statusFilter === 'archived') {
       if (p.archived !== true) return false;
     }
@@ -256,9 +255,8 @@ export function renderProdutos(){
     </select>
     <select id="prod-filter-status" class="fi" style="min-width:160px;flex:0 0 auto;">
       <option value="" ${!S._prodStatus?'selected':''}>Todos os status</option>
-      <option value="active" ${S._prodStatus==='active'?'selected':''}>🛒 Ativo no site</option>
-      <option value="inactive" ${S._prodStatus==='inactive'?'selected':''}>⏸ Inativo no site</option>
       <option value="destaque" ${S._prodStatus==='destaque'?'selected':''}>⭐ Em destaque</option>
+      <option value="lowstock" ${S._prodStatus==='lowstock'?'selected':''}>⚠️ Estoque baixo</option>
       <option value="archived" ${S._prodStatus==='archived'?'selected':''}>📁 Arquivados</option>
     </select>
     ${hasFilter?`<button class="btn btn-ghost btn-sm" id="btn-clear-filters">✖ Limpar filtros</button>`:''}
@@ -485,15 +483,16 @@ export async function showNewProductModal(prod=null){
 
   <!-- SECAO 6: CONFIGURACOES DE SITE -->
   <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">🌐 Configuracoes</div>
-  <!-- Toggle DESTACADO de Ativo no E-commerce — controle exclusivo
-       de visibilidade no site. Admin liga/desliga aqui. -->
-  <label style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#FAE8E6,#FAF7F5);border:2px solid #FECDD3;border-radius:12px;padding:12px 16px;margin-bottom:12px;cursor:pointer;">
-    <input type="checkbox" id="mp-site" ${(draft.site!==undefined?draft.site:prod?.activeOnSite)?'checked':''} style="width:20px;height:20px;accent-color:#C8736A;cursor:pointer;"/>
+  <!-- Mensagem informativa: produto aparece automatico no site se nao arquivado -->
+  <div style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#ECFDF5,#FAF7F5);border:2px solid #A7F3D0;border-radius:12px;padding:12px 16px;margin-bottom:12px;">
+    <span style="font-size:20px;">🌐</span>
     <div style="flex:1;">
-      <div style="font-weight:700;font-size:14px;color:#9F1239;">🛒 Aparecer no E-commerce (loja online)</div>
-      <div style="font-size:11px;color:#9F1239;opacity:.7;">Quando ativo, o produto fica VISIVEL para clientes no site floriculturalacoseternos.com.br. Estoque é único entre PDV e site.</div>
+      <div style="font-weight:700;font-size:13px;color:#065F46;">Aparece automaticamente no site</div>
+      <div style="font-size:11px;color:#065F46;opacity:.7;">Todo produto ativo (não-arquivado) aparece em <strong>floriculturalacoseternos.com.br</strong>. Estoque é único entre PDV e site.</div>
     </div>
-  </label>
+  </div>
+  <!-- Toggle escondido para compat (sempre true se quiser destacar use 'destaque') -->
+  <input type="checkbox" id="mp-site" checked style="display:none;"/>
   <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;">
     <label class="cb">
       <input type="checkbox" id="mp-composto" ${(draft.composto||prod?.composto)?'checked':''}/>
