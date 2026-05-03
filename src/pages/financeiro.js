@@ -120,7 +120,33 @@ function renderComissoesMetas(){
 }
 
 // -- FINANCEIRO --
+// Flag para evitar re-fetch a cada render
+let _financialEntriesFetched = false;
+async function _recuperarLancamentosBackend() {
+  try {
+    const beFe = await GET('/financial/entries').catch(() => null);
+    if (!Array.isArray(beFe)) return;
+    const localFe = JSON.parse(localStorage.getItem('fv_financial')||'[]');
+    const mapa = new Map();
+    localFe.forEach(e => { const k = e._id || e.id; if (k) mapa.set(String(k), e); });
+    beFe.forEach(e => { const k = e._id || e.id; if (k) mapa.set(String(k), e); });
+    const merged = [...mapa.values()];
+    localStorage.setItem('fv_financial', JSON.stringify(merged));
+    S.financialEntries = merged;
+    // Re-render para refletir
+    import('../main.js').then(m => m.render && m.render()).catch(()=>{});
+  } catch(_) {}
+}
+
 export function renderFinanceiro(){
+  // RECUPERA do backend ao abrir Financeiro (alem do polling)
+  // Evita situacoes onde lancamentos POSTaram com sucesso mas a memoria
+  // local foi sobrescrita por algum motivo (ex: outro dispositivo).
+  if (!_financialEntriesFetched) {
+    _financialEntriesFetched = true;
+    _recuperarLancamentosBackend();
+  }
+
   const unit = ( S.user?.role==='Administrador'||S.user?.cargo==='admin')?S._finUnit||'':S.user.unit;
   const filteredOrders = unit
     ? unit==='E-commerce'
@@ -160,6 +186,7 @@ ${vencidas.length>0?`<div class="alert al-err">⚠️ <strong>${vencidas.length}
   <button class="btn btn-green btn-sm" id="btn-new-receita">+ Receita</button>
   <button class="btn btn-red btn-sm" id="btn-new-despesa">+ Despesa / Conta a Pagar</button>
   <button class="btn btn-ghost btn-sm" id="btn-rel-fin">🔄 Atualizar</button>
+  <button class="btn btn-ghost btn-sm" id="btn-fin-recuperar" title="Busca todos os lançamentos do servidor (recuperação de emergência)">⬇️ Recuperar do servidor</button>
 </div>
 
 <div class="g4" style="margin-bottom:16px;">

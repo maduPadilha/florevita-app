@@ -119,8 +119,37 @@ export async function pollData(){
         }
       }
       if(stock && lightSig(stock) !== lightSig(S.stockMoves)){ S.stockMoves=stock; changed=true; }
-      const fe = JSON.parse(localStorage.getItem('fv_financial')||'[]');
-      if(lightSig(fe) !== lightSig(S.financialEntries)){ S.financialEntries=fe; changed=true; }
+      // FINANCIAL ENTRIES: busca do BACKEND e MESCLA com locais (nao
+      // pode dropar entradas que so existem em localStorage — ex: salvas
+      // offline ou sem _id do backend).
+      try {
+        const beFe = await GET('/financial/entries').catch(()=>null);
+        const localFe = JSON.parse(localStorage.getItem('fv_financial')||'[]');
+        if (Array.isArray(beFe)) {
+          // Mescla: chave = _id (backend) ou id (local)
+          const mapa = new Map();
+          // Primeiro local (preserva itens que nao chegaram ao backend)
+          localFe.forEach(e => { const k = e._id || e.id; if (k) mapa.set(String(k), e); });
+          // Depois backend (sobrepoe)
+          beFe.forEach(e => { const k = e._id || e.id; if (k) mapa.set(String(k), e); });
+          const merged = [...mapa.values()];
+          // Persiste merged em localStorage (fonte da verdade local)
+          localStorage.setItem('fv_financial', JSON.stringify(merged));
+          if (lightSig(merged) !== lightSig(S.financialEntries)) {
+            S.financialEntries = merged; changed = true;
+          }
+        } else {
+          // Backend offline — usa local
+          if (lightSig(localFe) !== lightSig(S.financialEntries)) {
+            S.financialEntries = localFe; changed = true;
+          }
+        }
+      } catch(_) {
+        const localFe = JSON.parse(localStorage.getItem('fv_financial')||'[]');
+        if (lightSig(localFe) !== lightSig(S.financialEntries)) {
+          S.financialEntries = localFe; changed = true;
+        }
+      }
     }
 
     // A cada 8 ciclos (~64s): atualiza clientes (e usuários se admin)

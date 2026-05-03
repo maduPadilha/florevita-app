@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-41';
+const APP_VERSION = '20260503-42';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3107,6 +3107,25 @@ function bindPageActions(){
     {const _el=document.getElementById('btn-fin-meta-semana');if(_el)_el.onclick=()=>{S._finMetaPer='semana';render();};}
     {const _el=document.getElementById('btn-fin-meta-mes');if(_el)_el.onclick=()=>{S._finMetaPer='mes';render();};}
     {const _el=document.getElementById('btn-rel-fin');if(_el)_el.onclick=async()=>{S.loading=true;render();S.orders=await GET('/orders');S.loading=false;render();};}
+    // Recuperacao manual: refaz fetch de /financial/entries e mescla
+    document.getElementById('btn-fin-recuperar')?.addEventListener('click', async () => {
+      toast('⏳ Buscando lançamentos do servidor...');
+      try {
+        const beFe = await GET('/financial/entries');
+        if (!Array.isArray(beFe)) throw new Error('Resposta inválida');
+        const localFe = JSON.parse(localStorage.getItem('fv_financial')||'[]');
+        const mapa = new Map();
+        localFe.forEach(e => { const k = e._id || e.id; if (k) mapa.set(String(k), e); });
+        beFe.forEach(e => { const k = e._id || e.id; if (k) mapa.set(String(k), e); });
+        const merged = [...mapa.values()];
+        localStorage.setItem('fv_financial', JSON.stringify(merged));
+        S.financialEntries = merged;
+        toast(`✅ ${beFe.length} lançamentos recuperados (${merged.length} no total)`);
+        render();
+      } catch (e) {
+        toast('❌ Erro ao buscar do servidor: ' + (e?.message||e), true);
+      }
+    });
     document.querySelectorAll('[data-mark-paid]').forEach(b=>{b.onclick=async()=>{try{await PUT('/orders/'+b.dataset.markPaid,{paymentStatus:'Pago'});S.orders=S.orders.map(o=>o._id===b.dataset.markPaid?{...o,paymentStatus:'Pago'}:o);render();toast('✅ Pagamento confirmado!');}catch(e){toast('Erro: '+(e.message||''),true);}}});
     document.querySelectorAll('[data-pay-bill]').forEach(b=>{b.onclick=()=>{
       // Abre modal de pagamento (metodo + caixa se Dinheiro)
