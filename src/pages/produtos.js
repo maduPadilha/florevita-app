@@ -293,47 +293,68 @@ export function renderProdutos(){
       </div>
     </div>`;
   })()}
-  <div class="tw"><table><thead><tr>
-    <th style="width:30px;text-align:center;"><input type="checkbox" id="prod-sel-all" style="cursor:pointer;accent-color:var(--primary);"/></th>
-    <th>Código</th><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Estoque</th><th>Site</th><th>Status</th><th>NCM</th><th></th>
-  </tr></thead>
-  <tbody>${displayed.map(p=>{
-    const mg=p.salePrice>0?((p.salePrice-(p.costPrice||0))/p.salePrice*100).toFixed(0):0;
-    const low=(p.stock||0)<=(p.minStock||5);
-    const codigoProd = p.code || p.sku || '';
-    const isSelected = (S._prodSelected instanceof Set) && S._prodSelected.has(p._id);
-    return`<tr ${isSelected?'style="background:#FEF7F5;"':''}>
-      <td style="text-align:center;"><input type="checkbox" data-prod-sel="${p._id}" ${isSelected?'checked':''} style="cursor:pointer;accent-color:var(--primary);"/></td>
-      <td style="font-family:monospace;font-size:12px;font-weight:700;color:#7C3AED;white-space:nowrap;">${codigoProd ? codigoProd : '<span style="color:var(--muted);font-weight:400;">—</span>'}</td>
-      <td><div style="display:flex;align-items:center;gap:8px;">
-        ${(()=>{const img=p.imagem||p.images?.[0]||p.image||'';return img?`<img src="${img}" loading="lazy" decoding="async" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer" title="${p.name}" onclick="showFullImg('${img}')">`:`<span class="prod-img-placeholder" data-pid="${p._id||p.id||''}" style="font-size:20px;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:6px;background:var(--cream);">${emoji(p.category)}</span>`;})()}
-        <div style="display:flex;flex-direction:column;gap:2px;">
-          <span style="font-weight:500">${p.name}</span>
-          ${(p.colors||[]).length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;">
-            <span style="font-size:9px;color:var(--muted);">🎨</span>
-            ${(p.colors||[]).slice(0,6).map(c => `<span title="${c.name}" style="width:14px;height:14px;border-radius:50%;background:${c.hex||'#999'};border:1px solid rgba(0,0,0,.15);display:inline-block;"></span>`).join('')}
-            ${p.colors.length > 6 ? `<span style="font-size:9px;color:var(--muted);">+${p.colors.length-6}</span>` : ''}
-          </div>` : ''}
-        </div>
-      </div></td>
-      <td>${(()=>{const cs=getProductCategories(p);return cs.length?cs.map(c=>`<span class="tag t-gray" style="margin:1px;display:inline-block;font-size:10px;">${c}</span>`).join(' '):'\u2014';})()}</td>
-      <td style="color:var(--muted)">${$c(p.costPrice)}</td>
-      <td style="font-weight:600">${$c(p.salePrice)}</td>
-      <td><span class="tag ${mg>=50?'t-green':mg>=30?'t-gold':'t-red'}">${mg}%</span></td>
-      <td style="font-weight:500;color:${low?'var(--red)':'var(--ink)'}">${p.stock||0}</td>
-      <td><span class="tag ${p.activeOnSite?'t-green':'t-gray'}">${p.activeOnSite?'✅ Ativo':'\u2014'}</span></td>
-      <td><span class="tag ${low?'t-red':'t-green'}">${low?'⚠️':'✅'}</span></td>
-      <td style="font-size:10px;color:var(--muted);">${p.taxation?.ncm||'\u2014'}</td>
-      <td style="white-space:nowrap;">
-        <button type="button" class="btn btn-ghost btn-xs" onclick="(()=>{const p=S.products.find(x=>x._id==='${p._id}');if(p)showNewProductModal(p);})()" title="Editar produto">✏️ Editar</button>
-        <button class="btn btn-ghost btn-xs" data-stock-prod="${p._id}" title="Ajustar estoque" style="color:var(--leaf)">📦</button>
-        <button type="button" onclick="deleteProduct('${p._id}')" style="background:var(--red-l);color:var(--red);border:1px solid rgba(220,38,38,.2);border-radius:6px;padding:3px 7px;cursor:pointer;font-size:12px;">🗑️ Excluir</button>
-      </td>
-    </tr>`;
-  }).join('')}</tbody></table></div>
+  <!-- TABS de status -->
+  <div style="display:flex;background:#FAF7F5;border-radius:10px;padding:4px;gap:2px;margin-bottom:14px;overflow-x:auto;">
+    ${[
+      {k:'',         l:'Todos'},
+      {k:'destaque', l:'⭐ Destaques'},
+      {k:'lowstock', l:'⚠️ Estoque baixo'},
+      {k:'archived', l:'📁 Arquivados'},
+    ].map(t => {
+      const active = (S._prodStatus||'') === t.k;
+      return `<button data-tab-status="${t.k}" style="flex:1;min-width:120px;padding:10px 14px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:${active?'700':'500'};color:${active?'var(--primary)':'#64748B'};background:${active?'#fff':'transparent'};box-shadow:${active?'0 1px 3px rgba(0,0,0,.06)':'none'};transition:all .2s;">${t.l}</button>`;
+    }).join('')}
+  </div>
+
+  <div class="tw" style="background:#fff;border-radius:12px;overflow:hidden;border:1px solid var(--border);">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead style="background:#FAFAFA;"><tr style="border-bottom:1px solid var(--border);">
+      <th style="width:36px;text-align:center;padding:14px 6px;"><input type="checkbox" id="prod-sel-all" style="cursor:pointer;accent-color:var(--primary);width:16px;height:16px;"/></th>
+      <th style="padding:14px 6px;text-align:left;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Capa</th>
+      <th style="padding:14px 6px;text-align:left;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Codigo</th>
+      <th style="padding:14px 6px;text-align:left;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Nome</th>
+      <th style="padding:14px 6px;text-align:center;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Destaque</th>
+      <th style="padding:14px 6px;text-align:right;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Custo</th>
+      <th style="padding:14px 6px;text-align:right;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Venda</th>
+      <th style="padding:14px 6px;text-align:center;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Margem</th>
+      <th style="padding:14px 6px;text-align:center;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Estoque</th>
+      <th style="padding:14px 6px;text-align:center;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Situacao</th>
+      <th style="padding:14px 12px;text-align:right;font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Acoes</th>
+    </tr></thead>
+    <tbody>${displayed.map(p=>{
+      const mg=p.salePrice>0?((p.salePrice-(p.costPrice||0))/p.salePrice*100).toFixed(0):0;
+      const low=(p.stock||0)<=(p.minStock||5);
+      const codigoProd = p.code || p.sku || '';
+      const isSelected = (S._prodSelected instanceof Set) && S._prodSelected.has(p._id);
+      const isArchived = p.archived === true;
+      const img = p.imagem||p.images?.[0]||p.image||'';
+      return `<tr style="border-bottom:1px solid #F1F5F9;${isSelected?'background:#FEF7F5;':''}">
+        <td style="text-align:center;padding:10px 6px;"><input type="checkbox" data-prod-sel="${p._id}" ${isSelected?'checked':''} style="cursor:pointer;accent-color:var(--primary);width:16px;height:16px;"/></td>
+        <td style="padding:8px 6px;">${img?`<img src="${img}" loading="lazy" decoding="async" style="width:48px;height:48px;border-radius:8px;object-fit:cover;cursor:pointer;border:1px solid #F1F5F9;" onclick="showFullImg('${img}')">`:`<div class="prod-img-placeholder" data-pid="${p._id||''}" style="width:48px;height:48px;border-radius:8px;background:var(--cream);display:flex;align-items:center;justify-content:center;font-size:22px;">${emoji(p.category)}</div>`}</td>
+        <td style="padding:10px 6px;font-family:Monaco,monospace;font-size:12px;font-weight:600;color:#7C3AED;">${codigoProd || '-'}</td>
+        <td style="padding:10px 6px;">
+          <div style="font-weight:500;font-size:13px;color:#1E293B;line-height:1.3;">${p.name}</div>
+          ${(p.colors||[]).length ? `<div style="display:flex;gap:3px;margin-top:3px;align-items:center;">${(p.colors||[]).slice(0,5).map(c => `<span title="${c.name}" style="width:11px;height:11px;border-radius:50%;background:${c.hex||'#999'};border:1px solid rgba(0,0,0,.1);display:inline-block;"></span>`).join('')}${p.colors.length > 5 ? `<span style="font-size:9px;color:#94A3B8;">+${p.colors.length-5}</span>` : ''}</div>` : ''}
+        </td>
+        <td style="text-align:center;padding:10px 6px;font-size:12px;color:${p.destaque?'#D97706':'#94A3B8'};font-weight:${p.destaque?'700':'400'};">${p.destaque?'⭐ Sim':'Não'}</td>
+        <td style="padding:10px 6px;text-align:right;color:#94A3B8;font-size:12px;">${$c(p.costPrice)}</td>
+        <td style="padding:10px 6px;text-align:right;font-weight:700;color:#1E293B;font-size:13px;">${$c(p.salePrice)}</td>
+        <td style="padding:10px 6px;text-align:center;"><span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:${mg>=50?'#DCFCE7':mg>=30?'#FEF3C7':'#FEE2E2'};color:${mg>=50?'#15803D':mg>=30?'#92400E':'#991B1B'};">${mg}%</span></td>
+        <td style="padding:10px 6px;text-align:center;font-weight:600;color:${low?'#DC2626':'#1E293B'};font-size:13px;">${p.stock||0}</td>
+        <td style="padding:10px 6px;text-align:center;">${isArchived?'<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700;background:#FEE2E2;color:#991B1B;">📁 Arquivado</span>':'<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700;background:#DCFCE7;color:#15803D;">● Ativo</span>'}</td>
+        <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
+          <button type="button" data-act="destaque" data-id="${p._id}" title="${p.destaque?'Tirar destaque':'Marcar destaque'}" style="background:${p.destaque?'#FEF3C7':'transparent'};color:${p.destaque?'#D97706':'#94A3B8'};border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">⭐</button>
+          <button type="button" data-act="edit" data-id="${p._id}" title="Editar" style="background:transparent;color:#3B82F6;border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">✏️</button>
+          <button type="button" data-act="stock" data-id="${p._id}" title="Estoque" style="background:transparent;color:#10B981;border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">📦</button>
+          <button type="button" data-act="${isArchived?'unarchive':'archive'}" data-id="${p._id}" title="${isArchived?'Reativar':'Arquivar'}" style="background:transparent;color:${isArchived?'#10B981':'#DC2626'};border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">${isArchived?'⚡':'⏻'}</button>
+          ${S.user?.role === 'Administrador' ? `<button type="button" data-act="delete" data-id="${p._id}" title="Excluir" style="background:transparent;color:#7F1D1D;border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">🗑️</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>
+  </div>
   ${(() => {
     if (total === 0) return '';
-    // Paginacao com seletor de tamanho + numeros
     const pages = [];
     const maxBtns = 7;
     let from = Math.max(1, page - 3), to = Math.min(totalPages, from + maxBtns - 1);

@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260502-5';
+const APP_VERSION = '20260502-6';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2412,6 +2412,49 @@ function bindPageActions(){
       S._prodPage = 1;
       render();
     };}
+    // ── TABS de status (Todos / Destaques / Estoque baixo / Arquivados)
+    document.querySelectorAll('[data-tab-status]').forEach(btn => {
+      btn.onclick = () => {
+        S._prodStatus = btn.dataset.tabStatus || '';
+        S._prodPage = 1;
+        render();
+      };
+    });
+
+    // ── ACOES POR LINHA (data-act)
+    document.querySelectorAll('[data-act]').forEach(btn => {
+      btn.onclick = async () => {
+        const act = btn.dataset.act;
+        const id = btn.dataset.id;
+        const prod = S.products.find(x => x._id === id);
+        if (!prod) return;
+
+        if (act === 'edit') return showNewProductModal(prod);
+        if (act === 'stock') return showProductStockModal(id);
+        if (act === 'delete') {
+          if (!confirm(`Excluir DEFINITIVAMENTE "${prod.name||prod.nome}"?`)) return;
+          try { await DELETE('/products/' + id); S.products = S.products.filter(x => x._id !== id); toast('✅ Excluído'); render(); }
+          catch(e){ toast('❌ '+(e.message||'erro'), true); }
+          return;
+        }
+
+        // Acoes que usam PUT
+        const updates = {
+          destaque: { destaque: !prod.destaque },
+          archive:  { archived: true },
+          unarchive:{ archived: false },
+        }[act];
+        if (!updates) return;
+        try {
+          await PUT('/products/' + id, updates);
+          Object.assign(prod, updates);
+          const labels = { destaque: prod.destaque?'⭐ Em destaque':'☆ Destaque removido', archive:'📁 Arquivado', unarchive:'✅ Reativado' };
+          toast(labels[act] || '✅ OK');
+          render();
+        } catch(e) { toast('❌ '+(e.message||'erro'), true); }
+      };
+    });
+
     // ── SELEÇÃO EM MASSA / AÇÕES BULK ─────────────────────────
     if (!(S._prodSelected instanceof Set)) S._prodSelected = new Set();
     // checkbox "selecionar todos" da pagina visivel
