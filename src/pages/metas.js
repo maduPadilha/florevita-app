@@ -233,14 +233,12 @@ function renderMetasList() {
     const tipoLabel = labelTipo(m.tipo);
     const unit = m.tipo === 'vendas' ? 'R$' : 'un';
     const fmtVal = v => unit==='R$' ? $c(v) : `${Math.round(v)} ${m.tipo==='producao'?'produtos':'entregas'}`;
-    const bonusLbl = m.bonusModo === 'individual'
-      ? `Bônus individual: <strong>${$c(m.bonusValor)}</strong>`
-      : `Bônus de equipe: <strong>${$c(m.bonusValor)}</strong> dividido com quem bater`;
+    const bonusLbl = m.bonusModo === 'individual' ? '👤 Bônus individual' : '👥 Bônus de equipe (dividido)';
     return `<div style="background:${corBg};border-left:5px solid ${cor};border-radius:8px;padding:12px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
         <div>
           <div style="font-size:14px;font-weight:800;color:#1E293B;">${tipoLabel} ${status.emoji} ${escHtml(m.nome||'')}</div>
-          <div style="font-size:11px;color:var(--muted);">${labelPeriodo(m.periodoTipo)} · ${fmtData(m.dataInicio)} a ${fmtData(m.dataFim)} · ${bonusLbl}</div>
+          <div style="font-size:11px;color:var(--muted);">${labelPeriodo(m.periodoTipo)} · ${fmtData(m.dataInicio)} a ${fmtData(m.dataFim)}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
           ${m.visivel
@@ -255,16 +253,78 @@ function renderMetasList() {
         <span>Realizado: <strong style="color:${cor};">${fmtVal(r.realizado)}</strong></span>
         <span style="color:${cor};font-weight:800;">${r.pct.toFixed(0)}% · ${status.label}</span>
       </div>
-      <div style="height:10px;background:rgba(255,255,255,.6);border-radius:5px;overflow:hidden;">
+      <div style="height:10px;background:rgba(255,255,255,.6);border-radius:5px;overflow:hidden;margin-bottom:8px;">
         <div style="height:100%;width:${Math.min(100,r.pct)}%;background:${cor};transition:width .4s;"></div>
       </div>
-      ${r.atingida ? `<div style="margin-top:8px;padding:8px 10px;background:#fff;border:1px solid ${cor};border-radius:6px;font-size:12px;color:${cor};font-weight:700;text-align:center;">
-        ${r.ultrapassou ? '🏆 META ULTRAPASSADA' : '🎉 META ATINGIDA'} — Bônus: <span style="font-size:14px;">${$c(m.bonusValor)}</span>
-      </div>` : ''}
+      <!-- BLOCO DE BONUS — sempre visivel, destacado quando atingida -->
+      <div style="background:#fff;border:2px solid ${r.atingida?cor:'#E2E8F0'};border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">${bonusLbl}</div>
+          <div style="font-size:11px;color:#475569;">${r.atingida ? `${r.ultrapassou?'🏆 ULTRAPASSADA — paga agora':'🎉 ATINGIDA — paga agora'}` : '⏳ Receberá ao bater 100%'}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:10px;color:var(--muted);">${r.atingida ? 'A pagar' : 'Valor do bônus'}</div>
+          <div style="font-size:20px;font-weight:900;color:${r.atingida ? '#15803D' : '#1E293B'};">${$c(m.bonusValor)}</div>
+        </div>
+      </div>
     </div>`;
   };
 
+  // ── RESUMO: quanto cada colab vai receber se TODAS as metas dela baterem
+  const resumoPorColab = {};
+  metas.forEach(m => {
+    if ((m.escopo||'colab') !== 'colab') return;
+    const k = String(m.colabId);
+    if (!resumoPorColab[k]) resumoPorColab[k] = { total:0, atingido:0, qtd:0, qtdAtingidas:0 };
+    const r = calcularRealizado(m);
+    resumoPorColab[k].total    += Number(m.bonusValor)||0;
+    if (r.atingida) {
+      resumoPorColab[k].atingido     += Number(m.bonusValor)||0;
+      resumoPorColab[k].qtdAtingidas += 1;
+    }
+    resumoPorColab[k].qtd += 1;
+  });
+  const resumoLista = Object.entries(resumoPorColab).map(([cid, v]) => {
+    const c = getColabs().find(x => _colabKey(x) === cid);
+    return { colab: c, ...v };
+  }).filter(it => it.colab).sort((a,b) => b.total - a.total);
+
+  const totalPotencial = resumoLista.reduce((s,r) => s+r.total, 0);
+  const totalAtingido  = resumoLista.reduce((s,r) => s+r.atingido, 0);
+
   return `<div style="display:grid;gap:14px;">
+
+    ${resumoLista.length ? `
+    <div class="card" style="background:linear-gradient(135deg,#DCFCE7,#F0FDF4);border:2px solid #86EFAC;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+        <div>
+          <div style="font-family:'Playfair Display',serif;font-size:18px;color:#15803D;">💚 Resumo de Bônus</div>
+          <div style="font-size:11px;color:#15803D;opacity:.8;">Quanto cada uma vai receber se atingir as metas</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:10px;color:#15803D;text-transform:uppercase;font-weight:700;">Já garantido</div>
+          <div style="font-size:22px;font-weight:900;color:#15803D;">${$c(totalAtingido)}</div>
+          <div style="font-size:10px;color:#15803D;opacity:.7;">de ${$c(totalPotencial)} potencial</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
+        ${resumoLista.map(it => {
+          const cor = it.qtdAtingidas === it.qtd ? '#15803D' : it.qtdAtingidas > 0 ? '#F59E0B' : '#94A3B8';
+          return `<div style="background:#fff;border:1px solid ${cor};border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:700;font-size:13px;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">👤 ${escHtml(it.colab.name||'')}</div>
+              <div style="font-size:10px;color:var(--muted);">${it.qtdAtingidas}/${it.qtd} meta(s) batida(s)</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:9px;color:var(--muted);">${it.atingido > 0 ? 'A receber' : 'Potencial'}</div>
+              <div style="font-size:15px;font-weight:900;color:${cor};">${$c(it.atingido > 0 ? it.atingido : it.total)}</div>
+              ${it.atingido > 0 && it.atingido < it.total ? `<div style="font-size:9px;color:var(--muted);">+${$c(it.total - it.atingido)} possível</div>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    ` : ''}
 
     ${Object.keys(byUnidade).length ? `
     <div style="font-size:12px;font-weight:800;color:#1E293B;text-transform:uppercase;letter-spacing:1px;background:linear-gradient(90deg,#FAE8E6,transparent);padding:6px 12px;border-radius:6px;">🏪 Metas por Unidade</div>
@@ -306,10 +366,34 @@ function renderMetasList() {
   </div>`;
 }
 
+// Captura todos os campos do form atual em S._metaDraft (preserva
+// dados ao re-renderizar por mudanca de tipo/escopo/etc).
+function _capturarFormDraft() {
+  const get = id => document.getElementById(id);
+  if (!get('meta-nome')) return; // form nao montado
+  S._metaDraft = {
+    nome:        get('meta-nome')?.value || '',
+    tipo:        get('meta-tipo')?.value || '',
+    colabId:     get('meta-colab')?.value || '',
+    unidade:     get('meta-unidade')?.value || '',
+    periodoTipo: get('meta-periodo-tipo')?.value || '',
+    dataInicio:  get('meta-data-inicio')?.value || '',
+    dataFim:     get('meta-data-fim')?.value || '',
+    valorMeta:   Number(get('meta-valor')?.value) || 0,
+    bonusModo:   get('meta-bonus-modo')?.value || '',
+    bonusValor:  Number(get('meta-bonus-valor')?.value) || 0,
+    visivel:     !!get('meta-visivel')?.checked,
+  };
+}
+
 // ─── NOVA META (form) ───────────────────────────────────────
 function renderMetasNova() {
   const editId = S._metasEditId || '';
-  const meta = editId ? getMetas().find(m => m.id === editId) || {} : {};
+  // Editando: usa a meta cadastrada. Criando: usa S._metaDraft (campos
+  // preservados entre re-renders quando ADM troca tipo/escopo).
+  const meta = editId
+    ? getMetas().find(m => m.id === editId) || {}
+    : (S._metaDraft || {});
   const isEdit = !!meta.id;
   const tipo = meta.tipo || S._metaTipoDraft || 'vendas';
   const escopo = meta.escopo || S._metaEscopoDraft || 'colab';
@@ -615,23 +699,40 @@ export function bindMetasEvents() {
   document.querySelectorAll('[data-metas-sub]').forEach(b => {
     b.addEventListener('click', () => {
       S._metasSub = b.dataset.metasSub;
-      if (S._metasSub !== 'nova') S._metasEditId = null;
+      if (S._metasSub !== 'nova') {
+        S._metasEditId = null;
+        S._metaDraft = null;
+        S._metaTipoDraft = null;
+        S._metaEscopoDraft = null;
+      }
       render();
     });
   });
 
-  // Trocar tipo no form atualiza a lista de colabs
+  // Trocar tipo no form atualiza a lista de colabs (preservando dados)
   document.getElementById('meta-tipo')?.addEventListener('change', e => {
+    _capturarFormDraft();
     S._metaTipoDraft = e.target.value;
+    if (S._metaDraft) S._metaDraft.tipo = e.target.value;
     render();
   });
 
-  // Trocar escopo (colab/unidade) re-renderiza o form
+  // Trocar escopo (colab/unidade) re-renderiza o form (preservando dados)
   document.querySelectorAll('[data-meta-escopo]').forEach(b => {
     b.addEventListener('click', () => {
+      _capturarFormDraft();
       S._metaEscopoDraft = b.dataset.metaEscopo;
+      if (S._metaDraft) S._metaDraft.escopo = b.dataset.metaEscopo;
       render();
     });
+  });
+
+  // Captura draft ao digitar/blur em qualquer campo do form (defensivo)
+  ['meta-nome','meta-colab','meta-unidade','meta-periodo-tipo','meta-data-inicio',
+   'meta-data-fim','meta-valor','meta-bonus-modo','meta-bonus-valor','meta-visivel'
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', _capturarFormDraft);
   });
 
   document.getElementById('btn-meta-save')?.addEventListener('click', () => {
@@ -671,12 +772,14 @@ export function bindMetasEvents() {
       setMetas(metas);
       toast('✅ Meta criada');
     }
-    S._metasEditId = null; S._metasSub = 'list'; S._metaTipoDraft = null; S._metaEscopoDraft = null;
+    S._metasEditId = null; S._metasSub = 'list';
+    S._metaTipoDraft = null; S._metaEscopoDraft = null; S._metaDraft = null;
     render();
   });
 
   document.getElementById('btn-meta-cancel')?.addEventListener('click', () => {
-    S._metasEditId = null; S._metasSub = 'list'; S._metaTipoDraft = null; S._metaEscopoDraft = null;
+    S._metasEditId = null; S._metasSub = 'list';
+    S._metaTipoDraft = null; S._metaEscopoDraft = null; S._metaDraft = null;
     render();
   });
 
