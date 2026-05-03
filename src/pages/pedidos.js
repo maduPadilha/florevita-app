@@ -516,7 +516,11 @@ export function renderPedidos(){
 </div>
 
 ${(() => {
-  // Cards de TOTAL DE VENDAS APROVADAS — usa filtros aplicados.
+  // Card de TOTAL DE VENDAS APROVADAS: SO admin e gerente
+  const r = String(S.user?.role||'').toLowerCase();
+  const c = String(S.user?.cargo||'').toLowerCase();
+  const podeVer = r === 'administrador' || r === 'gerente' || c === 'admin' || c === 'gerente';
+  if (!podeVer) return '';
   // Considera 'Aprovado' / 'Pago' como pagamento confirmado.
   const APROVADOS = new Set(['Aprovado', 'Pago', 'aprovado', 'pago']);
   const aprovados = filtered.filter(o => APROVADOS.has(String(o.paymentStatus||'')));

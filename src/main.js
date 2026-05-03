@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-1';
+const APP_VERSION = '20260503-2';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -76,6 +76,7 @@ import { renderConfig, bindConfigActions } from './pages/config.js';
 import { renderAuditLogs, bindAuditLogsEvents } from './pages/auditLogs.js';
 import { renderAgenteTI, bindAgenteTIEvents } from './pages/agenteTI.js';
 import { renderEcommerce } from './pages/ecommerce.js';
+import { renderMeuPainel } from './pages/meuPainel.js';
 import { renderCategorias } from './pages/categorias.js';
 import { renderOrcamento, getOrcamentos, saveOrcamentos, calcOrcamento, newOrcItem } from './pages/orcamento.js';
 import { renderAppEntregador, confirmDeliveryByQR, showFullImg, abrirRota, bindRotaButtons } from './pages/entregador.js';
@@ -1299,7 +1300,7 @@ function renderApp(){
     {k:'dashboard',l:'Dashboard',i:'📊',m:'dashboard',s:'Principal'},
     {k:'pdv',l:'PDV (Vendas)',i:'🛒',m:'pdv',s:'Principal'},
     {k:'caixa',l:'Caixa',i:'💵',m:'caixa',s:'Principal'},
-    {k:'pedidos',l:'Pedidos',i:'📋',m:'orders',s:'Principal'},
+    {k:'pedidos',l:'Pedidos',i:'📋',m:'orders',s:'Principal', hide:['Entregador']},
     {k:'clientes',l:'Clientes',i:'👥',m:'clients',s:'Gestão'},
     {k:'produtos',l:'Produtos',i:'🌹',m:'products',s:'Gestão'},
     {k:'categorias',l:'Categorias',i:'🏷️',m:'products',s:'Gestão'},
@@ -1320,6 +1321,7 @@ function renderApp(){
     {k:'auditLogs',l:'Auditoria & Segurança',i:'🔒',m:'auditLogs',s:'Config'},
     {k:'agenteTI',l:'Agente de TI',i:'🤖',m:'agenteTI',s:'Sistema'},
     {k:'ecommerce',l:'E-commerce',i:'🛒',m:'ecommerce',s:'Config', adminOnly:true},
+    {k:'meuPainel',l:'Meu Painel',i:'👤',m:'orders',s:'Principal', hide:['Administrador','Entregador']},
     {k:'orcamento',l:'Orçamentos',i:'📋',m:'orcamentos',s:'E-commerce'},
   ].filter(n => {
     if (n.adminOnly && S.user?.role !== 'Administrador') return false;
@@ -1368,7 +1370,7 @@ ${renderSidebar(nav, 0, 0)}
     }
   }
 
-  const pages={dashboard:renderDashboard,pdv:renderPDV,pedidos:renderPedidos,clientes:renderClientes,produtos:renderProdutos,estoque:renderEstoque,producao:renderProducao,expedicao:renderExpedicao,entregador:renderAppEntregador,financeiro:renderFinanceiro,relatorios:renderRelatorios,alertas:renderAlertas,usuarios:renderUsuarios,colaboradores:renderColaboradores,impressao:renderImpressao,config:renderConfig,ponto:renderPonto,caixa:renderCaixa,backup:renderBackup,whatsapp:renderWhatsApp,ecommerce:renderEcommerce,orcamento:renderOrcamento,categorias:renderCategorias,notasFiscais:renderNotasFiscais,auditLogs:renderAuditLogs,agenteTI:renderAgenteTI};
+  const pages={dashboard:renderDashboard,pdv:renderPDV,pedidos:renderPedidos,clientes:renderClientes,produtos:renderProdutos,estoque:renderEstoque,producao:renderProducao,expedicao:renderExpedicao,entregador:renderAppEntregador,financeiro:renderFinanceiro,relatorios:renderRelatorios,alertas:renderAlertas,usuarios:renderUsuarios,colaboradores:renderColaboradores,impressao:renderImpressao,config:renderConfig,ponto:renderPonto,caixa:renderCaixa,backup:renderBackup,whatsapp:renderWhatsApp,ecommerce:renderEcommerce,orcamento:renderOrcamento,categorias:renderCategorias,notasFiscais:renderNotasFiscais,auditLogs:renderAuditLogs,agenteTI:renderAgenteTI,meuPainel:renderMeuPainel};
   const content = (()=>{ try{ return pages[S.page] ? pages[S.page]() : `<div class="empty card"><div class="empty-icon">🌸</div><p>Em desenvolvimento</p></div>`; }catch(e){ console.error('[render '+S.page+']',e); return `<div class="card" style="color:var(--red);padding:20px;">⚠️ Erro ao carregar o módulo. <button onclick="setPage('dashboard')" class="btn btn-ghost btn-sm" style="margin-top:8px;">← Dashboard</button><br/><small style="color:var(--muted)">${e.message}</small></div>`; } })();
   // Sino: contagem de notificacoes nao-lidas (le direto do localStorage
   // para nao precisar de await dentro de render() sync)
