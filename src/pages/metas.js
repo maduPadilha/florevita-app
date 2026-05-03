@@ -142,8 +142,15 @@ export function calcularRealizado(meta, ordersList = S.orders) {
 }
 
 // ── META EXTRA ──────────────────────────────────────────────
-// Calcula valor total bonus = soma vendas aprovadas no periodo × %
-// Divide igual entre atendentes ativas.
+// 3 modos:
+//   - 'percentual' : % unico sobre vendas aprovadas
+//   - 'valor'      : R$ fixo (dividido entre atendentes)
+//   - 'ticket'     : escalonado por ticket medio (tiers)
+//                    cada tier tem { ticketMedio, percentual }; aplica
+//                    o % do MAIOR tier cujo ticketMedio <= ticketMedio
+//                    realizado. Bonus = totalVendido * %tier
+//
+// Sempre dividido IGUALMENTE entre atendentes ativas.
 export function calcularMetaExtra(metaExtra, ordersList = S.orders) {
   const { inicio, fim } = (metaExtra.dataInicio && metaExtra.dataFim)
     ? { inicio: new Date(metaExtra.dataInicio+'T00:00:00'), fim: new Date(metaExtra.dataFim+'T23:59:59') }
@@ -151,17 +158,57 @@ export function calcularMetaExtra(metaExtra, ordersList = S.orders) {
 
   const orders = Array.isArray(ordersList) ? ordersList : [];
   let totalVendido = 0;
+  let qtdPedidos = 0;
   for (const o of orders) {
     if (!pedidoNoPeriodo(o, inicio, fim)) continue;
     if (!APROVADOS.has(String(o.paymentStatus||''))) continue;
     totalVendido += Number(o.total)||0;
+    qtdPedidos++;
   }
-  const pct = Number(metaExtra.percentual)||0;
-  const valorBonus = totalVendido * (pct/100);
+  const ticketMedio = qtdPedidos ? (totalVendido / qtdPedidos) : 0;
+
+  const modo = metaExtra.modo || 'percentual';
+  let valorBonus = 0;
+  let pctAplicado = 0;
+  let tierAtingido = null;
+  let proximoTier = null;
+  const metaTarget = Number(metaExtra.metaTarget)||0;
+  const pctMeta = metaTarget ? Math.min(100, (totalVendido/metaTarget)*100) : 0;
+
+  if (modo === 'valor') {
+    valorBonus = Number(metaExtra.valorFixo)||0;
+  }
+  else if (modo === 'ticket') {
+    // Tiers ordenados crescente por ticketMedio
+    const tiers = (metaExtra.tiers||[])
+      .map(t => ({ ticketMedio: Number(t.ticketMedio)||0, percentual: Number(t.percentual)||0 }))
+      .filter(t => t.ticketMedio > 0)
+      .sort((a,b) => a.ticketMedio - b.ticketMedio);
+    // Maior tier cujo ticketMedio <= ticketMedio realizado
+    for (const t of tiers) {
+      if (ticketMedio >= t.ticketMedio) tierAtingido = t;
+      else { proximoTier = t; break; }
+    }
+    pctAplicado = tierAtingido ? tierAtingido.percentual : 0;
+    valorBonus = totalVendido * (pctAplicado/100);
+  }
+  else { // 'percentual'
+    pctAplicado = Number(metaExtra.percentual)||0;
+    valorBonus = totalVendido * (pctAplicado/100);
+  }
+
   const atendentes = getEquipePorSetor('vendas');
   const valorIndividual = atendentes.length ? (valorBonus / atendentes.length) : 0;
   return {
+    modo,
     totalVendido,
+    qtdPedidos,
+    ticketMedio,
+    metaTarget,
+    pctMeta,
+    pctAplicado,
+    tierAtingido,
+    proximoTier,
     valorBonus,
     valorIndividual,
     qtdAtendentes: atendentes.length,
@@ -352,28 +399,46 @@ function renderMetasNova() {
 // ─── C) META EXTRA ───────────────────────────────────────────
 function renderMetasExtra() {
   const extras = getMetasExtra();
+  const modo = S._extraModo || 'percentual';
+  // Tiers no formulario (estado em memoria) — default 4 tiers
+  const tiersForm = S._extraTiersDraft || [
+    { ticketMedio: 149.90, percentual: 0.5 },
+    { ticketMedio: 189.90, percentual: 1.0 },
+    { ticketMedio: 249.90, percentual: 1.5 },
+    { ticketMedio: 349.90, percentual: 2.0 },
+  ];
+
+  const modoBtn = (k, label) => `<button type="button" class="btn btn-sm ${modo===k?'btn-primary':'btn-ghost'}" data-extra-modo="${k}">${label}</button>`;
 
   return `
 <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#FEF3C7,#FFFBEB);border:2px solid #FCD34D;">
   <div style="display:flex;align-items:center;gap:10px;">
     <span style="font-size:32px;">🌟</span>
     <div>
-      <div style="font-family:'Playfair Display',serif;font-size:18px;color:#92400E;">Meta Extra — Bônus por % sobre vendas</div>
-      <div style="font-size:12px;color:#92400E;opacity:.8;">% sobre vendas totais aprovadas no período. Valor dividido <strong>igualmente</strong> entre as atendentes ativas.</div>
+      <div style="font-family:'Playfair Display',serif;font-size:18px;color:#92400E;">Meta Extra — Bônus configurável</div>
+      <div style="font-size:12px;color:#92400E;opacity:.8;">3 modos: <strong>% fixo</strong>, <strong>valor R$ fixo</strong>, ou <strong>escalonado por ticket médio</strong>. Valor sempre dividido <strong>igualmente</strong> entre atendentes ativas.</div>
     </div>
   </div>
 </div>
 
 <div class="card" style="margin-bottom:14px;">
   <div class="card-title">➕ Nova Meta Extra</div>
+
+  <!-- Seletor de modo -->
+  <div style="margin-bottom:14px;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Como calcular o bônus?</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      ${modoBtn('percentual', '📊 % sobre vendas')}
+      ${modoBtn('valor',      '💵 Valor R$ fixo')}
+      ${modoBtn('ticket',     '🎯 Escalonado por Ticket Médio')}
+    </div>
+  </div>
+
+  <!-- Campos comuns -->
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
     <div class="fg" style="grid-column:span 2;">
       <label class="fl">Nome</label>
       <input type="text" class="fi" id="extra-nome" placeholder="Ex: Bônus Dia das Mães"/>
-    </div>
-    <div class="fg">
-      <label class="fl">Percentual (%)</label>
-      <input type="number" class="fi" id="extra-pct" min="0.01" max="100" step="0.01" placeholder="Ex: 1.5"/>
     </div>
     <div class="fg">
       <label class="fl">Período</label>
@@ -384,6 +449,10 @@ function renderMetasExtra() {
       </select>
     </div>
     <div class="fg">
+      <label class="fl">Meta de vendas (R$) <span style="color:var(--muted);font-weight:400;font-size:10px;">opcional</span></label>
+      <input type="number" class="fi" id="extra-meta-target" min="0" step="0.01" placeholder="Ex: 150000"/>
+    </div>
+    <div class="fg">
       <label class="fl">Data início</label>
       <input type="date" class="fi" id="extra-data-inicio"/>
     </div>
@@ -391,9 +460,59 @@ function renderMetasExtra() {
       <label class="fl">Data fim</label>
       <input type="date" class="fi" id="extra-data-fim"/>
     </div>
-    <div class="fg" style="grid-column:span 2;display:flex;align-items:flex-end;">
-      <button class="btn btn-primary" id="btn-extra-save" style="width:100%;">🌟 Criar Meta Extra</button>
+  </div>
+
+  <!-- Campos por modo -->
+  ${modo === 'percentual' ? `
+    <div class="fg" style="margin-top:10px;max-width:300px;">
+      <label class="fl">Percentual (%) sobre vendas aprovadas</label>
+      <input type="number" class="fi" id="extra-pct" min="0.01" max="100" step="0.01" placeholder="Ex: 1.5"/>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px;">Bônus total = vendas × % · dividido igualmente entre atendentes</div>
     </div>
+  ` : ''}
+
+  ${modo === 'valor' ? `
+    <div class="fg" style="margin-top:10px;max-width:300px;">
+      <label class="fl">Valor fixo (R$) total do bônus</label>
+      <input type="number" class="fi" id="extra-valor-fixo" min="0.01" step="0.01" placeholder="Ex: 5000"/>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px;">Esse valor será dividido igualmente entre as atendentes</div>
+    </div>
+  ` : ''}
+
+  ${modo === 'ticket' ? `
+    <div style="margin-top:14px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:10px;padding:12px;">
+      <div style="font-size:12px;font-weight:700;color:#92400E;margin-bottom:8px;">🎯 Faixas por Ticket Médio</div>
+      <div style="font-size:11px;color:#92400E;opacity:.8;margin-bottom:10px;">Defina faixas crescentes de ticket médio (R$). O sistema aplica o % da MAIOR faixa cujo ticket médio for atingido.</div>
+      <table style="width:100%;font-size:12px;">
+        <thead><tr style="background:#FEF3C7;">
+          <th style="padding:6px 8px;text-align:left;font-size:10px;color:#92400E;text-transform:uppercase;">Faixa</th>
+          <th style="padding:6px 8px;text-align:right;font-size:10px;color:#92400E;text-transform:uppercase;">Ticket Médio (R$)</th>
+          <th style="padding:6px 8px;text-align:right;font-size:10px;color:#92400E;text-transform:uppercase;">% Bônus</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#92400E;text-transform:uppercase;">Remover</th>
+        </tr></thead>
+        <tbody>
+          ${tiersForm.map((t, i) => `
+            <tr style="border-bottom:1px solid #FCD34D;">
+              <td style="padding:6px 8px;font-weight:700;color:#92400E;">${i+1}ª</td>
+              <td style="padding:4px 8px;text-align:right;">
+                <input type="number" class="fi" data-tier-tm="${i}" value="${t.ticketMedio}" min="0" step="0.01" style="width:120px;text-align:right;font-weight:700;"/>
+              </td>
+              <td style="padding:4px 8px;text-align:right;">
+                <input type="number" class="fi" data-tier-pct="${i}" value="${t.percentual}" min="0" max="100" step="0.01" style="width:80px;text-align:right;font-weight:700;color:#15803D;"/> %
+              </td>
+              <td style="padding:4px 8px;text-align:center;">
+                <button type="button" class="btn btn-ghost btn-xs" data-tier-del="${i}" style="color:#DC2626;">🗑️</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-tier-add" style="margin-top:8px;">➕ Adicionar faixa</button>
+    </div>
+  ` : ''}
+
+  <div style="margin-top:14px;">
+    <button class="btn btn-primary" id="btn-extra-save" style="min-width:200px;">🌟 Criar Meta Extra</button>
   </div>
 </div>
 
@@ -407,36 +526,76 @@ ${extras.length === 0 ? `
 <div style="display:grid;gap:10px;">
   ${extras.sort((a,b) => (b.createdAt||0) - (a.createdAt||0)).map(e => {
     const r = calcularMetaExtra(e);
+    const modoLabel = { percentual:'📊 % fixo', valor:'💵 R$ fixo', ticket:'🎯 Por Ticket Médio' }[r.modo] || '%';
     return `<div class="card" style="border-left:5px solid #F59E0B;background:#FFFBEB;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
         <div>
           <div style="font-size:16px;font-weight:800;color:#92400E;">🌟 ${escHtml(e.nome)}</div>
           <div style="font-size:11px;color:#92400E;opacity:.8;margin-top:2px;">
-            ${e.percentual}% · ${labelPeriodo(e.periodoTipo)} ·
+            ${modoLabel} · ${labelPeriodo(e.periodoTipo)} ·
             ${e.dataInicio?fmtData(e.dataInicio):''} a ${e.dataFim?fmtData(e.dataFim):''}
+            ${r.metaTarget ? ` · 🎯 Meta: ${$c(r.metaTarget)}` : ''}
           </div>
         </div>
         <button class="btn btn-ghost btn-sm" data-extra-del="${e.id}" style="color:#DC2626;">🗑️ Excluir</button>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+      <!-- Resumo principal: vendido + ticket medio + bonus -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
         <div style="background:#fff;border-radius:8px;padding:10px;border:1px solid #FCD34D;">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">Vendido no período</div>
-          <div style="font-size:16px;font-weight:800;color:#92400E;">${$c(r.totalVendido)}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">Vendido</div>
+          <div style="font-size:14px;font-weight:800;color:#92400E;">${$c(r.totalVendido)}</div>
+          <div style="font-size:9px;color:var(--muted);">${r.qtdPedidos} pedidos</div>
         </div>
         <div style="background:#fff;border-radius:8px;padding:10px;border:1px solid #FCD34D;">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">Bônus total (${e.percentual}%)</div>
-          <div style="font-size:16px;font-weight:800;color:#15803D;">${$c(r.valorBonus)}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">Ticket Médio</div>
+          <div style="font-size:14px;font-weight:800;color:#7C3AED;">${$c(r.ticketMedio)}</div>
         </div>
+        ${r.metaTarget ? `<div style="background:#fff;border-radius:8px;padding:10px;border:1px solid #FCD34D;">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">Meta Atingida</div>
+          <div style="font-size:14px;font-weight:800;color:${r.pctMeta>=100?'#15803D':'#DC2626'};">${r.pctMeta.toFixed(0)}%</div>
+          <div style="height:5px;background:#E2E8F0;border-radius:3px;overflow:hidden;margin-top:4px;">
+            <div style="height:100%;width:${Math.min(100,r.pctMeta)}%;background:${r.pctMeta>=100?'#15803D':'#F59E0B'};"></div>
+          </div>
+        </div>` : ''}
         <div style="background:#fff;border-radius:8px;padding:10px;border:1px solid #FCD34D;">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">Atendentes ativas</div>
-          <div style="font-size:16px;font-weight:800;color:#1E293B;">${r.qtdAtendentes}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">Bônus total ${r.pctAplicado?'('+r.pctAplicado+'%)':''}</div>
+          <div style="font-size:14px;font-weight:800;color:#15803D;">${$c(r.valorBonus)}</div>
         </div>
         <div style="background:#15803D;border-radius:8px;padding:10px;color:#fff;">
-          <div style="font-size:10px;text-transform:uppercase;opacity:.85;">Cada atendente recebe</div>
+          <div style="font-size:10px;text-transform:uppercase;opacity:.85;">Cada atendente</div>
           <div style="font-size:18px;font-weight:900;">${$c(r.valorIndividual)}</div>
+          <div style="font-size:9px;opacity:.85;">÷ ${r.qtdAtendentes} atendente(s)</div>
         </div>
       </div>
+
+      <!-- Tabela de tiers (so para modo ticket) -->
+      ${r.modo === 'ticket' && (e.tiers||[]).length ? `
+        <div style="margin-top:12px;background:#fff;border:1px solid #FCD34D;border-radius:8px;padding:10px;">
+          <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px;">🎯 Faixas por Ticket Médio</div>
+          <table style="width:100%;font-size:11px;">
+            <thead><tr style="border-bottom:1px solid #FCD34D;">
+              <th style="padding:5px;text-align:left;font-size:10px;color:var(--muted);">Faixa</th>
+              <th style="padding:5px;text-align:right;font-size:10px;color:var(--muted);">Ticket Médio</th>
+              <th style="padding:5px;text-align:right;font-size:10px;color:var(--muted);">% Bônus</th>
+              <th style="padding:5px;text-align:center;font-size:10px;color:var(--muted);">Status</th>
+            </tr></thead>
+            <tbody>
+              ${(e.tiers||[]).slice().sort((a,b)=>a.ticketMedio-b.ticketMedio).map((t,i) => {
+                const atingido = r.ticketMedio >= t.ticketMedio;
+                const eOMaior  = atingido && (!r.tierAtingido || r.tierAtingido.ticketMedio === t.ticketMedio);
+                return `<tr style="border-bottom:1px solid #FFF7ED;${eOMaior?'background:#DCFCE7;':''}">
+                  <td style="padding:5px;font-weight:700;color:#92400E;">${i+1}ª</td>
+                  <td style="padding:5px;text-align:right;font-weight:600;">${$c(t.ticketMedio)}</td>
+                  <td style="padding:5px;text-align:right;font-weight:700;color:#15803D;">${t.percentual}%</td>
+                  <td style="padding:5px;text-align:center;font-size:14px;">${eOMaior?'✅':atingido?'☑️':'⬜'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+          ${r.proximoTier ? `<div style="margin-top:6px;font-size:10px;color:#92400E;">💡 Faltam <strong>${$c(r.proximoTier.ticketMedio - r.ticketMedio)}</strong> de ticket médio para subir para a faixa de <strong>${r.proximoTier.percentual}%</strong>.</div>` : ''}
+        </div>
+      ` : ''}
 
       <details style="margin-top:8px;">
         <summary style="cursor:pointer;font-size:11px;color:#92400E;font-weight:700;">Ver atendentes que recebem (${r.qtdAtendentes})</summary>
@@ -525,6 +684,22 @@ function fmtData(iso) { if (!iso) return '—'; const [y,m,d] = iso.split('-'); 
 function labelTipo(t) { return { vendas:'💰 Vendas', montagem:'🌸 Montagem', expedicao:'📦 Expedição' }[t] || t; }
 function labelPeriodo(p) { return { semanal:'Semanal', quinzenal:'Quinzenal', mensal:'Mensal' }[p] || p; }
 
+// Le os inputs de tier no DOM e atualiza o draft em S._extraTiersDraft
+function _salvarTiersDraft() {
+  const draft = (S._extraTiersDraft || []).slice();
+  document.querySelectorAll('[data-tier-tm]').forEach(inp => {
+    const i = Number(inp.dataset.tierTm);
+    if (!draft[i]) draft[i] = { ticketMedio:0, percentual:0 };
+    draft[i].ticketMedio = Number(inp.value) || 0;
+  });
+  document.querySelectorAll('[data-tier-pct]').forEach(inp => {
+    const i = Number(inp.dataset.tierPct);
+    if (!draft[i]) draft[i] = { ticketMedio:0, percentual:0 };
+    draft[i].percentual = Number(inp.value) || 0;
+  });
+  if (draft.length) S._extraTiersDraft = draft;
+}
+
 // ── BINDINGS DE EVENTOS ──────────────────────────────────────
 export function bindMetasEvents() {
   const render = () => import('../main.js').then(m => m.render()).catch(()=>{});
@@ -611,29 +786,87 @@ export function bindMetasEvents() {
     });
   });
 
+  // Meta Extra — alternar modo
+  document.querySelectorAll('[data-extra-modo]').forEach(b => {
+    b.addEventListener('click', () => {
+      // Salva tiers atuais antes de re-renderizar
+      _salvarTiersDraft();
+      S._extraModo = b.dataset.extraModo;
+      render();
+    });
+  });
+
+  // Meta Extra — gerenciar tiers (modo 'ticket')
+  // Captura mudancas em qualquer input de tier para persistir no draft
+  document.querySelectorAll('[data-tier-tm], [data-tier-pct]').forEach(inp => {
+    inp.addEventListener('change', _salvarTiersDraft);
+    inp.addEventListener('blur', _salvarTiersDraft);
+  });
+  document.querySelectorAll('[data-tier-del]').forEach(b => {
+    b.addEventListener('click', () => {
+      _salvarTiersDraft();
+      const i = Number(b.dataset.tierDel);
+      const draft = S._extraTiersDraft || [];
+      draft.splice(i, 1);
+      S._extraTiersDraft = draft;
+      render();
+    });
+  });
+  document.getElementById('btn-tier-add')?.addEventListener('click', () => {
+    _salvarTiersDraft();
+    const draft = S._extraTiersDraft || [];
+    draft.push({ ticketMedio: 0, percentual: 0 });
+    S._extraTiersDraft = draft;
+    render();
+  });
+
   // Meta Extra — criar
   document.getElementById('btn-extra-save')?.addEventListener('click', () => {
+    _salvarTiersDraft();
+    const modo = S._extraModo || 'percentual';
     const nome = document.getElementById('extra-nome')?.value.trim();
-    const percentual = Number(document.getElementById('extra-pct')?.value) || 0;
     const periodoTipo = document.getElementById('extra-periodo-tipo')?.value;
     const dataInicio = document.getElementById('extra-data-inicio')?.value;
     const dataFim = document.getElementById('extra-data-fim')?.value;
+    const metaTarget = Number(document.getElementById('extra-meta-target')?.value) || 0;
 
+    // Validacoes comuns
     if (!nome) { toast('Informe o nome da Meta Extra', true); return; }
-    if (!percentual || percentual <= 0 || percentual > 100) { toast('Percentual inválido (0,01 a 100)', true); return; }
     if (!dataInicio || !dataFim) { toast('Defina período (data início e fim)', true); return; }
     if (dataInicio > dataFim) { toast('Data inicial maior que final', true); return; }
     const atendentes = getEquipePorSetor('vendas');
     if (!atendentes.length) { toast('Não há atendentes ativas para receber a Meta Extra', true); return; }
 
+    // Validacoes por modo
+    let payload = { id: 'mx_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      nome, modo, periodoTipo, dataInicio, dataFim, metaTarget, createdAt: Date.now() };
+
+    if (modo === 'percentual') {
+      const percentual = Number(document.getElementById('extra-pct')?.value) || 0;
+      if (!percentual || percentual <= 0 || percentual > 100) { toast('Percentual inválido (0,01 a 100)', true); return; }
+      payload.percentual = percentual;
+    }
+    else if (modo === 'valor') {
+      const valorFixo = Number(document.getElementById('extra-valor-fixo')?.value) || 0;
+      if (!valorFixo || valorFixo <= 0) { toast('Valor fixo deve ser maior que zero', true); return; }
+      payload.valorFixo = valorFixo;
+    }
+    else if (modo === 'ticket') {
+      const tiers = (S._extraTiersDraft||[])
+        .map(t => ({ ticketMedio: Number(t.ticketMedio)||0, percentual: Number(t.percentual)||0 }))
+        .filter(t => t.ticketMedio > 0 && t.percentual > 0)
+        .sort((a,b) => a.ticketMedio - b.ticketMedio);
+      if (!tiers.length) { toast('Cadastre ao menos uma faixa de ticket médio com % > 0', true); return; }
+      payload.tiers = tiers;
+    }
+
     const extras = getMetasExtra();
-    extras.push({
-      id: 'mx_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-      nome, percentual, periodoTipo, dataInicio, dataFim,
-      createdAt: Date.now(),
-    });
+    extras.push(payload);
     setMetasExtra(extras);
     toast('🌟 Meta Extra criada');
+    // Limpa draft
+    S._extraTiersDraft = null;
+    S._extraModo = 'percentual';
     render();
   });
 
@@ -714,22 +947,28 @@ export function renderMetasParaAtendente(user, ordersList = S.orders) {
       // So mostra se a colab e atendente
       const ehAtendente = r.atendentes.some(c => String(c._id) === myId);
       if (!ehAtendente) return '';
+      const modoLbl = { percentual:`${r.pctAplicado}% sobre vendas`, valor:`R$ fixo`, ticket:`Escalonado por ticket médio` }[r.modo] || '';
       return `<div style="margin-top:8px;padding:14px;background:linear-gradient(135deg,#FEF3C7,#FFFBEB);border:2px solid #FCD34D;border-radius:10px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
           <div>
             <div style="font-size:14px;font-weight:800;color:#92400E;">🌟 ${escHtml(e.nome)}</div>
-            <div style="font-size:10px;color:#92400E;opacity:.8;">${e.percentual}% sobre vendas · ${fmtData(e.dataInicio)} a ${fmtData(e.dataFim)}</div>
+            <div style="font-size:10px;color:#92400E;opacity:.8;">${modoLbl} · ${fmtData(e.dataInicio)} a ${fmtData(e.dataFim)}</div>
           </div>
           <div style="text-align:right;">
             <div style="font-size:10px;color:#92400E;text-transform:uppercase;">Você vai receber</div>
             <div style="font-size:22px;font-weight:900;color:#15803D;">${$c(r.valorIndividual)}</div>
           </div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:#92400E;background:#fff;padding:6px 10px;border-radius:6px;">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:11px;color:#92400E;background:#fff;padding:6px 10px;border-radius:6px;">
           <span>Vendido: <strong>${$c(r.totalVendido)}</strong></span>
+          <span>Ticket Médio: <strong style="color:#7C3AED;">${$c(r.ticketMedio)}</strong></span>
           <span>Bônus total: <strong style="color:#15803D;">${$c(r.valorBonus)}</strong></span>
           <span>÷ ${r.qtdAtendentes} atendentes</span>
         </div>
+        ${r.modo === 'ticket' && r.proximoTier ? `
+          <div style="margin-top:6px;font-size:11px;color:#92400E;background:#FFFBEB;padding:6px 10px;border-radius:6px;border:1px dashed #FCD34D;">
+            💡 Próxima faixa: ticket médio de <strong>${$c(r.proximoTier.ticketMedio)}</strong> = bônus de <strong>${r.proximoTier.percentual}%</strong>
+          </div>` : ''}
       </div>`;
     }).join('')}
   ` : ''}
