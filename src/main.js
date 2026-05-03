@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-35';
+const APP_VERSION = '20260503-36';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3109,6 +3109,38 @@ function bindPageActions(){
     {const _el=document.getElementById('btn-rel-fin');if(_el)_el.onclick=async()=>{S.loading=true;render();S.orders=await GET('/orders');S.loading=false;render();};}
     document.querySelectorAll('[data-mark-paid]').forEach(b=>{b.onclick=async()=>{try{await PUT('/orders/'+b.dataset.markPaid,{paymentStatus:'Pago'});S.orders=S.orders.map(o=>o._id===b.dataset.markPaid?{...o,paymentStatus:'Pago'}:o);render();toast('✅ Pagamento confirmado!');}catch(e){toast('Erro: '+(e.message||''),true);}}});
     document.querySelectorAll('[data-pay-bill]').forEach(b=>{b.onclick=()=>{const entries = JSON.parse(localStorage.getItem('fv_financial')||'[]');const updated = entries.map(e=>e.id===b.dataset.payBill?{...e,status:'Pago',paidAt:new Date().toISOString()}:e);localStorage.setItem('fv_financial',JSON.stringify(updated));S.financialEntries=updated;render();toast('✅ Conta marcada como paga!');}});
+
+    // ── VALES (financeiro) ──────────────────────────────────────
+    document.getElementById('vale-filtro-colab')?.addEventListener('change',e=>{S._valeFiltroColab=e.target.value;render();});
+    document.getElementById('vale-filtro-status')?.addEventListener('change',e=>{S._valeFiltroStatus=e.target.value;render();});
+    document.getElementById('vale-filtro-tipo')?.addEventListener('change',e=>{S._valeFiltroTipo=e.target.value;render();});
+    document.getElementById('btn-novo-vale')?.addEventListener('click',()=>{
+      import('./pages/financeiro.js').then(m => m.showValeModal && m.showValeModal());
+    });
+    document.querySelectorAll('[data-vale-baixar]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.valeBaixar;
+      const list = JSON.parse(localStorage.getItem('fv_vales')||'[]');
+      const idx = list.findIndex(x => x.id === id); if (idx<0) return;
+      list[idx].status = 'Descontado';
+      list[idx].descontadoEm = new Date().toISOString();
+      localStorage.setItem('fv_vales', JSON.stringify(list));
+      toast('✅ Marcado como descontado'); render();
+    }));
+    document.querySelectorAll('[data-vale-reabrir]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.valeReabrir;
+      const list = JSON.parse(localStorage.getItem('fv_vales')||'[]');
+      const idx = list.findIndex(x => x.id === id); if (idx<0) return;
+      list[idx].status = 'Aberto'; delete list[idx].descontadoEm;
+      localStorage.setItem('fv_vales', JSON.stringify(list));
+      toast('↩️ Reaberto'); render();
+    }));
+    document.querySelectorAll('[data-vale-del]').forEach(b => b.addEventListener('click', () => {
+      if (!confirm('Excluir este vale?')) return;
+      const id = b.dataset.valeDel;
+      const list = JSON.parse(localStorage.getItem('fv_vales')||'[]').filter(x => x.id !== id);
+      localStorage.setItem('fv_vales', JSON.stringify(list));
+      toast('🗑️ Excluído'); render();
+    }));
   }
 
   // ── Delivery / Entregador ─────────────────────────────────────

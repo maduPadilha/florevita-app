@@ -80,8 +80,11 @@ const fmtData = (iso) => { if (!iso) return ''; const [y,m,d] = String(iso).slic
 function getEmpresa() {
   try {
     const cfg = JSON.parse(localStorage.getItem('fv_config')||'{}');
+    let razaoBase = (cfg.razao || 'MARCIA FLORENTINO DE BARROS PINHEIRO').toUpperCase().trim();
+    // Garante o sufixo ME (Microempresa) na razao social do contracheque
+    if (!/\bME\b$/.test(razaoBase)) razaoBase = razaoBase + ' ME';
     return {
-      razao:    (cfg.razao    || 'MARCIA FLORENTINO DE BARROS PINHEIRO').toUpperCase(),
+      razao:    razaoBase,
       endereco: cfg.endereco || 'Rua BRASILÉIA 17/QD D3 LT 17 LT AGUA, NOVO ALEIXO, Manaus/AM - CEP 69098-026',
       cnpj:     cfg.cnpj     || '11.808.222/0001-51',
       empresaCodigo: cfg.empresaCodigo || '72',

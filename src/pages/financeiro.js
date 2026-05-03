@@ -1,5 +1,5 @@
 import { S } from '../state.js';
-import { $c, $d, sc, rolec, paymentStatusBadge } from '../utils/formatters.js';
+import { $c, $d, sc, rolec, paymentStatusBadge, esc } from '../utils/formatters.js';
 import { GET, POST, DELETE } from '../services/api.js';
 import { toast } from '../utils/helpers.js';
 import { can, findColab, getColabs } from '../services/auth.js';
@@ -215,7 +215,317 @@ ${vencidas.length>0?`<div class="alert al-err">⚠️ <strong>${vencidas.length}
   </div>
 </div>
 
+${renderVales()}
+
 ${renderComissoesMetas()}`;
+}
+
+// ── MODULO VALES ─────────────────────────────────────────────
+// Adiantamentos e compras pessoais de colaboradores que ficam
+// como saldo a descontar na proxima folha (contracheque).
+//
+// Storage: localStorage 'fv_vales' — array de:
+//   { id, colabKey, colabNome, tipo: 'vale'|'compra', descricao,
+//     valor, data, status: 'Aberto'|'Descontado',
+//     produtoCode?, produtoNome?, qtd?, descontoColab? (% off do produto),
+//     observacao, createdAt }
+function _getVales() { try { return JSON.parse(localStorage.getItem('fv_vales')||'[]'); } catch { return []; } }
+function _setVales(arr) { localStorage.setItem('fv_vales', JSON.stringify(arr||[])); }
+
+function renderVales() {
+  // Visivel para Admin/Gerente/Financeiro/Contador (controle de folha)
+  const role = String(S.user?.role||'').toLowerCase();
+  const cargo = String(S.user?.cargo||'').toLowerCase();
+  const ehAdm = role === 'administrador' || cargo === 'admin' || cargo === 'administrador';
+  const ehGer = role === 'gerente' || cargo === 'gerente';
+  const ehFin = cargo === 'financeiro';
+  const ehCnt = cargo === 'contador';
+  if (!ehAdm && !ehGer && !ehFin && !ehCnt) return '';
+
+  const vales = _getVales().sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+  const filtroColab = S._valeFiltroColab || '';
+  const filtroStatus = S._valeFiltroStatus || 'todos';
+  const filtroTipo = S._valeFiltroTipo || 'todos';
+
+  let lista = vales;
+  if (filtroColab) lista = lista.filter(v => v.colabKey === filtroColab);
+  if (filtroStatus !== 'todos') lista = lista.filter(v => v.status === filtroStatus);
+  if (filtroTipo !== 'todos') lista = lista.filter(v => v.tipo === filtroTipo);
+
+  // Importa getColabs dinamicamente para evitar dep circular
+  let colabs = [];
+  try { colabs = JSON.parse(localStorage.getItem('fv_colabs')||'[]').filter(c => c.active !== false); } catch (_) {}
+
+  const totalAberto = vales.filter(v => v.status === 'Aberto').reduce((s,v) => s+(v.valor||0), 0);
+  const totalDescontado = vales.filter(v => v.status === 'Descontado').reduce((s,v) => s+(v.valor||0), 0);
+  // Por colab (em aberto)
+  const porColab = {};
+  vales.filter(v => v.status === 'Aberto').forEach(v => {
+    const k = String(v.colabKey||'');
+    if (!porColab[k]) porColab[k] = { nome:v.colabNome||'?', total:0, qtd:0 };
+    porColab[k].total += v.valor||0;
+    porColab[k].qtd++;
+  });
+  const lstPorColab = Object.values(porColab).sort((a,b) => b.total - a.total);
+
+  return `
+<div class="card" style="margin-top:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <div>
+      <div class="card-title" style="margin:0;">💵 Vales e Retiradas de Colaboradores</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">Adiantamentos + compras pessoais (descontados na folha)</div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="btn-novo-vale">➕ Novo Vale / Retirada</button>
+  </div>
+
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px;">
+    <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:10px;color:#92400E;text-transform:uppercase;font-weight:700;">Saldo em aberto</div>
+      <div style="font-size:18px;font-weight:900;color:#92400E;">${$c(totalAberto)}</div>
+      <div style="font-size:10px;color:#92400E;opacity:.7;">a descontar nas folhas</div>
+    </div>
+    <div style="background:#DCFCE7;border:1px solid #86EFAC;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:10px;color:#15803D;text-transform:uppercase;font-weight:700;">Já descontado</div>
+      <div style="font-size:18px;font-weight:900;color:#15803D;">${$c(totalDescontado)}</div>
+    </div>
+    <div style="background:#DBEAFE;border:1px solid #93C5FD;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:10px;color:#1E40AF;text-transform:uppercase;font-weight:700;">Colabs com vale aberto</div>
+      <div style="font-size:18px;font-weight:900;color:#1E40AF;">${lstPorColab.length}</div>
+    </div>
+  </div>
+
+  ${lstPorColab.length ? `
+  <!-- Resumo por colab (saldos em aberto) -->
+  <div style="background:#FAFAFA;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">📊 Saldos em aberto por colab</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;">
+      ${lstPorColab.map(p => `<div style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 10px;display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+        <span style="font-weight:600;">${p.nome}</span>
+        <span style="color:#92400E;font-weight:800;">${$c(p.total)} <span style="font-size:9px;font-weight:500;">(${p.qtd})</span></span>
+      </div>`).join('')}
+    </div>
+  </div>
+  ` : ''}
+
+  <!-- Filtros -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px;">
+    <span style="font-size:11px;font-weight:700;color:var(--muted);">🔍</span>
+    <select class="fi" id="vale-filtro-colab" style="width:auto;font-size:12px;">
+      <option value="">Todos os colabs</option>
+      ${colabs.sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c => {
+        const k = String(c._id||c.id||c.email||c.name||'');
+        return `<option value="${k}" ${filtroColab===k?'selected':''}>${c.name||'?'}</option>`;
+      }).join('')}
+    </select>
+    <select class="fi" id="vale-filtro-status" style="width:auto;font-size:12px;">
+      <option value="todos">Todos status</option>
+      <option value="Aberto"      ${filtroStatus==='Aberto'?'selected':''}>🟡 Aberto</option>
+      <option value="Descontado"  ${filtroStatus==='Descontado'?'selected':''}>✅ Descontado</option>
+    </select>
+    <select class="fi" id="vale-filtro-tipo" style="width:auto;font-size:12px;">
+      <option value="todos">Todos tipos</option>
+      <option value="vale"   ${filtroTipo==='vale'?'selected':''}>💵 Vale (dinheiro)</option>
+      <option value="compra" ${filtroTipo==='compra'?'selected':''}>🛒 Compra/Retirada</option>
+    </select>
+    <span style="font-size:11px;color:var(--muted);margin-left:auto;">${lista.length} registro(s)</span>
+  </div>
+
+  ${lista.length === 0 ? `
+  <div style="text-align:center;padding:30px;color:var(--muted);font-size:13px;">
+    Nenhum vale registrado.
+  </div>
+  ` : `
+  <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Data</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Colab</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Tipo</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Descrição</th>
+        <th style="padding:8px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Valor</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Status</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Ações</th>
+      </tr></thead>
+      <tbody>
+        ${lista.map(v => {
+          const data = v.data ? v.data.split('-').reverse().join('/') : '—';
+          return `<tr style="border-bottom:1px solid #F1F5F9;${v.status==='Descontado'?'opacity:.65;':''}">
+            <td style="padding:8px;font-size:11px;color:var(--muted);">${data}</td>
+            <td style="padding:8px;font-weight:600;">${esc(v.colabNome||'—')}</td>
+            <td style="padding:8px;">
+              <span style="background:${v.tipo==='compra'?'#FEF3C7':'#DBEAFE'};color:${v.tipo==='compra'?'#92400E':'#1E40AF'};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">${v.tipo==='compra'?'🛒 Compra':'💵 Vale'}</span>
+            </td>
+            <td style="padding:8px;">
+              <div style="font-size:12px;">${esc(v.descricao||'')}</div>
+              ${v.tipo==='compra' && v.produtoNome ? `<div style="font-size:10px;color:var(--muted);">📦 ${v.qtd||1}× ${esc(v.produtoNome)} ${v.descontoColab?`<span style="color:#15803D;">(${v.descontoColab}% desconto)</span>`:''}</div>` : ''}
+              ${v.observacao ? `<div style="font-size:10px;color:var(--muted);font-style:italic;">${esc(v.observacao)}</div>`:''}
+            </td>
+            <td style="padding:8px;text-align:right;font-weight:800;color:${v.status==='Descontado'?'#15803D':'#92400E'};">${$c(v.valor)}</td>
+            <td style="padding:8px;text-align:center;">
+              <span style="background:${v.status==='Descontado'?'#DCFCE7':'#FEF3C7'};color:${v.status==='Descontado'?'#15803D':'#92400E'};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">${v.status==='Descontado'?'✅':'🟡'} ${v.status}</span>
+            </td>
+            <td style="padding:8px;text-align:center;white-space:nowrap;">
+              ${v.status==='Aberto' ? `<button class="btn btn-ghost btn-xs" data-vale-baixar="${v.id}" title="Marcar como descontado na folha" style="color:#15803D;">✅</button>` : `<button class="btn btn-ghost btn-xs" data-vale-reabrir="${v.id}" title="Reabrir (voltar para Aberto)" style="color:#92400E;">↩️</button>`}
+              <button class="btn btn-ghost btn-xs" data-vale-del="${v.id}" style="color:#DC2626;" title="Excluir">🗑️</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+  `}
+</div>
+`;
+}
+
+// -- MODAL VALE / RETIRADA --
+export function showValeModal(){
+  const colabs = getColabs().filter(c => c.active !== false).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const produtos = (S.products||[]).filter(p => p.active !== false).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const today = new Date().toISOString().slice(0,10);
+  S._modal=`<div class="mo" id="mo"><div class="mo-box" onclick="event.stopPropagation()" style="max-width:540px;">
+    <div class="mo-title">💵 Novo Vale / Retirada</div>
+
+    <div class="fr2">
+      <div class="fg"><label class="fl">Colaborador *</label>
+        <select class="fi" id="vm-colab">
+          <option value="">— Selecione —</option>
+          ${colabs.map(c => {
+            const k = String(c._id||c.id||c.email||c.name||'');
+            return `<option value="${k}|${esc(c.name||'')}">${esc(c.name||'')}</option>`;
+          }).join('')}
+        </select>
+      </div>
+      <div class="fg"><label class="fl">Tipo *</label>
+        <select class="fi" id="vm-tipo">
+          <option value="vale">💵 Vale (dinheiro)</option>
+          <option value="compra">🛒 Compra/Retirada de produto</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Bloco para tipo COMPRA -->
+    <div id="vm-bloco-compra" style="display:none;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px;margin:8px 0;">
+      <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px;">🛒 Detalhes da compra (deduzido do salário)</div>
+      <div class="fr2">
+        <div class="fg"><label class="fl">Produto</label>
+          <select class="fi" id="vm-produto">
+            <option value="">— Selecione —</option>
+            ${produtos.map(p => {
+              const code = p.code||p.codigo||'';
+              const preco = Number(p.price||p.preco)||0;
+              return `<option value="${p._id||p.id}|${esc(code)}|${esc(p.name||'')}|${preco}">${code?'#'+code+' — ':''}${esc(p.name||'')} (R$ ${preco.toFixed(2)})</option>`;
+            }).join('')}
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Quantidade</label>
+          <input type="number" class="fi" id="vm-qtd" value="1" min="1" step="1"/>
+        </div>
+      </div>
+      <div class="fr2">
+        <div class="fg"><label class="fl">% Desconto p/ colab</label>
+          <input type="number" class="fi" id="vm-desconto-pct" value="0" min="0" max="100" step="1" placeholder="0"/>
+          <div style="font-size:10px;color:#92400E;">% off do preço de venda (ex: 30 = 30% desconto)</div>
+        </div>
+        <div class="fg"><label class="fl">Valor final (R$)</label>
+          <input type="number" class="fi" id="vm-valor-compra" min="0" step="0.01" placeholder="0,00"/>
+          <div style="font-size:10px;color:#92400E;">Calculado automaticamente — pode ajustar</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fr2">
+      <div class="fg"><label class="fl">Valor (R$) *</label>
+        <input type="number" class="fi" id="vm-valor" min="0" step="0.01" placeholder="0,00"/>
+      </div>
+      <div class="fg"><label class="fl">Data</label>
+        <input type="date" class="fi" id="vm-data" value="${today}"/>
+      </div>
+    </div>
+
+    <div class="fg"><label class="fl">Descrição *</label>
+      <input type="text" class="fi" id="vm-desc" placeholder="Ex: Adiantamento sexta-feira"/>
+    </div>
+
+    <div class="fg"><label class="fl">Observação (opcional)</label>
+      <input type="text" class="fi" id="vm-obs" placeholder=""/>
+    </div>
+
+    <div class="fr2" style="margin-top:14px;">
+      <button class="btn btn-ghost" onclick="document.getElementById('mo').remove();window.S._modal=null;">Cancelar</button>
+      <button class="btn btn-primary" id="btn-salvar-vale">💾 Salvar Vale</button>
+    </div>
+  </div></div>`;
+  // Bind apos inserir no DOM
+  setTimeout(() => {
+    const tipoEl = document.getElementById('vm-tipo');
+    const blocoCompra = document.getElementById('vm-bloco-compra');
+    const prodEl = document.getElementById('vm-produto');
+    const qtdEl  = document.getElementById('vm-qtd');
+    const descPctEl = document.getElementById('vm-desconto-pct');
+    const valorCompraEl = document.getElementById('vm-valor-compra');
+    const valorEl = document.getElementById('vm-valor');
+    const descEl  = document.getElementById('vm-desc');
+
+    const recalc = () => {
+      if (tipoEl.value !== 'compra') return;
+      const raw = prodEl.value || '';
+      const [pId, pCode, pNome, precoStr] = raw.split('|');
+      const preco = Number(precoStr)||0;
+      const qtd = Number(qtdEl.value)||1;
+      const pct = Number(descPctEl.value)||0;
+      const bruto = preco * qtd;
+      const liquido = bruto * (1 - pct/100);
+      valorCompraEl.value = liquido.toFixed(2);
+      valorEl.value = liquido.toFixed(2);
+      if (pNome && !descEl.value) descEl.value = `Compra ${qtd}× ${pNome}` + (pct?` (${pct}% off)`:'');
+    };
+
+    tipoEl.addEventListener('change', () => {
+      blocoCompra.style.display = tipoEl.value === 'compra' ? 'block' : 'none';
+      if (tipoEl.value === 'compra') recalc();
+    });
+    prodEl?.addEventListener('change', recalc);
+    qtdEl?.addEventListener('change', recalc);
+    descPctEl?.addEventListener('change', recalc);
+    valorCompraEl?.addEventListener('change', () => { valorEl.value = valorCompraEl.value; });
+
+    document.getElementById('btn-salvar-vale')?.addEventListener('click', () => {
+      const colabRaw = document.getElementById('vm-colab')?.value || '';
+      const [colabKey, colabNome] = colabRaw.split('|');
+      const tipo  = tipoEl.value;
+      const valor = Number(document.getElementById('vm-valor')?.value)||0;
+      const data  = document.getElementById('vm-data')?.value || today;
+      const desc  = (document.getElementById('vm-desc')?.value||'').trim();
+      const obs   = (document.getElementById('vm-obs')?.value||'').trim();
+
+      if (!colabKey) { toast('Selecione o colab', true); return; }
+      if (!desc)     { toast('Descrição obrigatória', true); return; }
+      if (!valor || valor<=0) { toast('Valor deve ser > 0', true); return; }
+
+      const v = { id:'vl_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+        colabKey, colabNome, tipo, valor, data,
+        descricao: desc, observacao: obs, status:'Aberto', createdAt: Date.now() };
+
+      if (tipo === 'compra') {
+        const raw = prodEl.value || '';
+        const [pId, pCode, pNome] = raw.split('|');
+        v.produtoId = pId||''; v.produtoCode = pCode||''; v.produtoNome = pNome||'';
+        v.qtd = Number(qtdEl.value)||1;
+        v.descontoColab = Number(descPctEl.value)||0;
+      }
+
+      const list = JSON.parse(localStorage.getItem('fv_vales')||'[]');
+      list.push(v);
+      localStorage.setItem('fv_vales', JSON.stringify(list));
+      toast(`✅ ${tipo==='compra'?'Compra':'Vale'} registrada(o)`);
+      document.getElementById('mo').remove();
+      S._modal = null;
+      render();
+    });
+  }, 50);
+  render();
 }
 
 // -- MODAL FINANCEIRO --
