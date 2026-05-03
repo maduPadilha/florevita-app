@@ -494,10 +494,17 @@ ${tab==='geral'?`
 
 <!-- ══ ABA HORARIOS ══════════════════════════════════════════ -->
 ${tab==='horario'?`
+<div class="card" style="background:linear-gradient(135deg,#FAE8E6,#FAF7F5);border:1px solid #FECDD3;text-align:center;padding:30px 20px;">
+  <div style="font-size:48px;margin-bottom:8px;">🕐</div>
+  <h3 style="font-weight:700;color:#9F1239;margin-bottom:6px;">Configuração movida</h3>
+  <p style="font-size:13px;color:var(--ink);margin-bottom:16px;">Turnos e horários agora ficam dentro de <strong>🌐 Site (Avançado)</strong> — junto com as outras configs do site.</p>
+  <button class="btn btn-primary" onclick="S._ecTab='site';render()">→ Ir para Site (Avançado)</button>
+</div>
+<div style="display:none;">
 <div class="g2" style="gap:16px;">
   <div class="card">
-    <div class="card-title">🕐 Dias e Turnos de Entrega</div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Marque os dias e turnos disponíveis para entrega. O cliente verá apenas essas opções no checkout.</p>
+    <div class="card-title">🕐 Dias e Turnos de Entrega (DEPRECATED)</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Esta seção foi movida.</p>
 
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;">📅 Dias da Semana</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:20px;">
@@ -555,6 +562,7 @@ ${tab==='horario'?`
       ${cfg.prazoMsg?`<div style="font-size:11px;color:var(--muted);margin-top:6px;">ℹ️ ${cfg.prazoMsg}</div>`:''}
     </div>
   </div>
+</div>
 </div>
 `:''}
 
