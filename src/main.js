@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-40';
+const APP_VERSION = '20260503-41';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3109,15 +3109,8 @@ function bindPageActions(){
     {const _el=document.getElementById('btn-rel-fin');if(_el)_el.onclick=async()=>{S.loading=true;render();S.orders=await GET('/orders');S.loading=false;render();};}
     document.querySelectorAll('[data-mark-paid]').forEach(b=>{b.onclick=async()=>{try{await PUT('/orders/'+b.dataset.markPaid,{paymentStatus:'Pago'});S.orders=S.orders.map(o=>o._id===b.dataset.markPaid?{...o,paymentStatus:'Pago'}:o);render();toast('✅ Pagamento confirmado!');}catch(e){toast('Erro: '+(e.message||''),true);}}});
     document.querySelectorAll('[data-pay-bill]').forEach(b=>{b.onclick=()=>{
-      const id = b.dataset.payBill;
-      const _match = e => (e._id||e.id) === id;
-      const entries = JSON.parse(localStorage.getItem('fv_financial')||'[]');
-      const updated = entries.map(e=>_match(e)?{...e,status:'Pago',paidAt:new Date().toISOString()}:e);
-      localStorage.setItem('fv_financial',JSON.stringify(updated));
-      // Tambem atualiza a memoria (S.financialEntries pode ter itens que
-      // estao em memoria mas ainda nao no localStorage)
-      S.financialEntries = (S.financialEntries||[]).map(e=>_match(e)?{...e,status:'Pago',paidAt:new Date().toISOString()}:e);
-      render(); toast('✅ Conta marcada como paga!');
+      // Abre modal de pagamento (metodo + caixa se Dinheiro)
+      import('./pages/financeiro.js').then(m => m.showPagarContaModal && m.showPagarContaModal(b.dataset.payBill));
     };});
     // Marcar receita como recebida
     document.querySelectorAll('[data-receive-bill]').forEach(b=>{b.onclick=()=>{

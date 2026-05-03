@@ -816,6 +816,163 @@ function renderVales() {
 `;
 }
 
+// -- MODAL PAGAR CONTA — escolhe metodo + caixa (se Dinheiro) --
+export function showPagarContaModal(billId) {
+  const all = JSON.parse(localStorage.getItem('fv_financial')||'[]');
+  const bill = all.find(c => (c._id||c.id) === billId) ||
+               (S.financialEntries||[]).find(c => (c._id||c.id) === billId);
+  if (!bill) { toast('Conta não encontrada', true); return; }
+
+  // Lista caixas ABERTOS no dia atual (por unidade)
+  let caixas = [];
+  try { caixas = JSON.parse(localStorage.getItem('fv_caixa')||'[]'); } catch(_){}
+  const hoje = new Date().toISOString().split('T')[0];
+  const caixasAbertos = caixas.filter(c => c.date === hoje && !c.fechamento);
+
+  const valor = Number(bill.value || bill.valor) || 0;
+
+  S._modal = `<div class="mo" id="mo"><div class="mo-box" onclick="event.stopPropagation()" style="max-width:480px;">
+    <div class="mo-title">💳 Pagar Conta</div>
+
+    <div style="background:#FAFAFA;border-radius:8px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;">Conta</div>
+      <div style="font-size:14px;font-weight:700;color:#1E293B;margin:4px 0;">${esc(bill.description||bill.descricao||'—')}</div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">
+        <span>${esc(bill.category||bill.categoria||'—')} · ${esc(bill.unit||'Todas')}</span>
+        <span style="font-weight:900;font-size:18px;color:#DC2626;">${$c(valor)}</span>
+      </div>
+    </div>
+
+    <div class="fg">
+      <label class="fl">Método de Pagamento *</label>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+        <button type="button" class="btn btn-ghost" data-pgto-met="Cartão" style="padding:14px 8px;border:2px solid var(--border);text-align:center;font-size:13px;font-weight:700;">
+          💳<br/>Cartão
+        </button>
+        <button type="button" class="btn btn-ghost" data-pgto-met="PIX" style="padding:14px 8px;border:2px solid var(--border);text-align:center;font-size:13px;font-weight:700;">
+          📱<br/>PIX
+        </button>
+        <button type="button" class="btn btn-ghost" data-pgto-met="Dinheiro" style="padding:14px 8px;border:2px solid var(--border);text-align:center;font-size:13px;font-weight:700;">
+          💵<br/>Dinheiro
+        </button>
+      </div>
+    </div>
+
+    <!-- Bloco Dinheiro: seleciona caixa -->
+    <div id="pgto-bloco-dinheiro" style="display:none;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;margin-top:8px;">
+      <div style="font-size:12px;font-weight:800;color:#92400E;margin-bottom:8px;">💵 Saída em Dinheiro — escolha o Caixa</div>
+      ${caixasAbertos.length === 0 ? `
+        <div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:6px;padding:10px;color:#991B1B;font-size:12px;text-align:center;">
+          ⚠️ Nenhum caixa aberto hoje. Abra um caixa no módulo <strong>Caixa</strong> primeiro.
+        </div>
+      ` : `
+        <select class="fi" id="pgto-caixa">
+          <option value="">— Selecione o caixa —</option>
+          ${caixasAbertos.map(cx => {
+            const sangrias = (cx.movimentos||[]).filter(m=>m.tipo==='Sangria').reduce((s,m)=>s+m.valor,0);
+            const supr     = (cx.movimentos||[]).filter(m=>m.tipo==='Suprimento').reduce((s,m)=>s+m.valor,0);
+            const fundoApros = Number(cx.fundoInicial||0) - sangrias + supr;
+            return `<option value="${cx.id || cx._id || (cx.date+'|'+cx.unit)}">🏪 ${esc(cx.unit||'—')} — Aberto às ${esc(cx.horaAbertura||'—')} — Saldo: ${$c(fundoApros)}</option>`;
+          }).join('')}
+        </select>
+        <div style="font-size:10px;color:#92400E;margin-top:6px;font-style:italic;">
+          ℹ️ Será registrada uma <strong>Sangria</strong> automaticamente no caixa selecionado com a descrição da conta.
+        </div>
+      `}
+    </div>
+
+    <div class="fg">
+      <label class="fl">Data do pagamento</label>
+      <input type="date" class="fi" id="pgto-data" value="${hoje}"/>
+    </div>
+
+    <div class="fg">
+      <label class="fl">Observação (opcional)</label>
+      <input type="text" class="fi" id="pgto-obs" placeholder=""/>
+    </div>
+
+    <div class="mo-foot">
+      <button class="btn btn-ghost" onclick="document.getElementById('mo').remove();window.S._modal=null;">Cancelar</button>
+      <button class="btn btn-green" id="btn-confirmar-pgto" disabled>✅ Confirmar Pagamento</button>
+    </div>
+  </div></div>`;
+
+  setTimeout(() => {
+    let metodoSel = '';
+    const blocoD = document.getElementById('pgto-bloco-dinheiro');
+    const btnConf = document.getElementById('btn-confirmar-pgto');
+    const updateBtn = () => {
+      if (!metodoSel) { btnConf.disabled = true; return; }
+      if (metodoSel === 'Dinheiro') {
+        const caixaId = document.getElementById('pgto-caixa')?.value;
+        btnConf.disabled = !caixaId;
+      } else {
+        btnConf.disabled = false;
+      }
+    };
+
+    document.querySelectorAll('[data-pgto-met]').forEach(b => b.addEventListener('click', () => {
+      metodoSel = b.dataset.pgtoMet;
+      // Visual: marca o selecionado
+      document.querySelectorAll('[data-pgto-met]').forEach(x => {
+        x.style.borderColor = x.dataset.pgtoMet === metodoSel ? 'var(--rose)' : 'var(--border)';
+        x.style.background = x.dataset.pgtoMet === metodoSel ? 'var(--rose-l)' : '';
+      });
+      blocoD.style.display = metodoSel === 'Dinheiro' ? 'block' : 'none';
+      updateBtn();
+    }));
+    document.getElementById('pgto-caixa')?.addEventListener('change', updateBtn);
+
+    document.getElementById('btn-confirmar-pgto')?.addEventListener('click', () => {
+      const dataPgto = document.getElementById('pgto-data')?.value || hoje;
+      const obs = document.getElementById('pgto-obs')?.value || '';
+
+      // 1) Marca conta como Pago
+      const _match = e => (e._id||e.id) === billId;
+      const updates = { status:'Pago', paidAt: new Date().toISOString(), metodoPgto: metodoSel, dataPgto, pgtoObs: obs };
+      const arr = JSON.parse(localStorage.getItem('fv_financial')||'[]')
+        .map(e => _match(e) ? { ...e, ...updates } : e);
+      localStorage.setItem('fv_financial', JSON.stringify(arr));
+      S.financialEntries = (S.financialEntries||[]).map(e => _match(e) ? { ...e, ...updates } : e);
+
+      // 2) Se Dinheiro: registra Sangria no caixa
+      if (metodoSel === 'Dinheiro') {
+        const caixaId = document.getElementById('pgto-caixa')?.value;
+        const cxArr = JSON.parse(localStorage.getItem('fv_caixa')||'[]');
+        const idx = cxArr.findIndex(c => (c.id||c._id||(c.date+'|'+c.unit)) === caixaId);
+        if (idx >= 0) {
+          if (!cxArr[idx].movimentos) cxArr[idx].movimentos = [];
+          const desc = `💸 Pagamento: ${bill.description||bill.descricao||'—'}` + (obs?` (${obs})`:'');
+          cxArr[idx].movimentos.push({
+            tipo: 'Sangria', valor,
+            descricao: desc,
+            hora: new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
+            usuario: S.user?.name || 'Sistema',
+            origem: 'pagamento_conta',
+            billId,
+          });
+          localStorage.setItem('fv_caixa', JSON.stringify(cxArr));
+          // Tambem POST p/ backend (se cair, fica local)
+          import('./caixa.js').then(m => {
+            if (m.saveCaixaRegistro) m.saveCaixaRegistro(cxArr[idx]).catch(()=>{});
+          }).catch(()=>{});
+          toast(`✅ Pago em Dinheiro · Sangria registrada no caixa ${cxArr[idx].unit||''}`);
+        } else {
+          toast('Conta paga mas caixa não encontrado — confira o registro', true);
+        }
+      } else {
+        toast(`✅ Pago via ${metodoSel}`);
+      }
+
+      document.getElementById('mo').remove();
+      S._modal = null;
+      render();
+    });
+  }, 60);
+
+  render();
+}
+
 // -- MODAL VALE / RETIRADA --
 export function showValeModal(){
   const colabs = getColabs().filter(c => c.active !== false).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
