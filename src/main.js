@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-7';
+const APP_VERSION = '20260503-8';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2190,46 +2190,134 @@ function bindPageActions(){
       toast('✅ CSV exportado');
     });
 
-    // ── Relatório Chão de Datas Comemorativas ─────────────────
-    document.getElementById('chao-data')?.addEventListener('change', e => { S._chaoData = e.target.value; render(); });
-    document.getElementById('chao-hora')?.addEventListener('input',  e => {
-      clearTimeout(window._chaoHTimer);
-      window._chaoHTimer = setTimeout(()=>{ S._chaoHora = e.target.value; render(); }, 300);
+    // ── Relatório Chão de Datas Comemorativas (3 sub-abas) ────
+    // Sub-aba (produtos / zonas / comandas)
+    document.querySelectorAll('[data-chao-sub]').forEach(b => {
+      b.addEventListener('click', () => { S._chaoSub = b.dataset.chaoSub; render(); });
     });
-    document.getElementById('chao-bairro')?.addEventListener('input', e => {
-      clearTimeout(window._chaoBTimer);
-      window._chaoBTimer = setTimeout(()=>{ S._chaoBairro = e.target.value; render(); }, 300);
-    });
-    document.getElementById('chao-turno')?.addEventListener('change', e => { S._chaoTurno = e.target.value; render(); });
-    document.getElementById('btn-export-chao')?.addEventListener('click', () => {
-      // Reconstroi map (mesmo da pagina)
-      const orders = S.orders || [];
-      const fData    = S._chaoData || '';
-      const fHora    = S._chaoHora || '';
-      const fBairro  = (S._chaoBairro || '').toLowerCase().trim();
-      const fTurno   = S._chaoTurno || '';
-      let pedidos = orders;
-      if (fData)   pedidos = pedidos.filter(o => String(o.scheduledDate||'').slice(0,10) === fData);
-      if (fHora)   pedidos = pedidos.filter(o => String(o.scheduledTime||'').includes(fHora));
-      if (fBairro) pedidos = pedidos.filter(o => String(o.deliveryNeighborhood||o.deliveryZone||'').toLowerCase().includes(fBairro));
-      if (fTurno)  pedidos = pedidos.filter(o => String(o.scheduledPeriod||'').toLowerCase() === fTurno.toLowerCase());
-      const map = {};
-      for (const o of pedidos) for (const it of (o.items||[])) {
-        const key = String(it.code || it.product || it.name || '?');
-        if (!map[key]) map[key] = { code: it.code || it.product || '', name: it.name || '', qty: 0, valor: 0 };
-        map[key].qty += Number(it.qty)||0;
-        map[key].valor += Number(it.totalPrice||(it.unitPrice*it.qty))||0;
-      }
-      const produtos = Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
-      const rows = [['Codigo','Produto','Qtd Total','Valor Total']];
-      for (const p of produtos) rows.push([p.code, p.name, p.qty, p.valor.toFixed(2)]);
+    // Filtros de data (range)
+    document.getElementById('chao-d1')?.addEventListener('change', e => { S._chaoD1 = e.target.value; render(); });
+    document.getElementById('chao-d2')?.addEventListener('change', e => { S._chaoD2 = e.target.value; render(); });
+    document.getElementById('chao-clear-dates')?.addEventListener('click', () => { S._chaoD1=''; S._chaoD2=''; render(); });
+
+    // Helper: filtra pedidos pelo range atual
+    const _chaoPedidosFiltered = () => {
+      const d1 = S._chaoD1 || '', d2 = S._chaoD2 || '';
+      let p = S.orders || [];
+      if (d1 || d2) p = p.filter(o => {
+        const d = String(o.scheduledDate||'').slice(0,10);
+        if (!d) return false;
+        if (d1 && d < d1) return false;
+        if (d2 && d > d2) return false;
+        return true;
+      });
+      return p;
+    };
+    const _chaoCSVDownload = (rows, name) => {
       const csv = '﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
       const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `chao-datas-${fData||'tudo'}-${Date.now()}.csv`; a.click();
+      a.href = url; a.download = name; a.click();
       URL.revokeObjectURL(url);
+    };
+
+    // ── Sub-aba A: Produtos a Montar ──
+    document.getElementById('chao-prod-ordem')?.addEventListener('change', e => { S._chaoProdOrdem = e.target.value; render(); });
+    document.getElementById('btn-export-chao-prod')?.addEventListener('click', () => {
+      const ped = _chaoPedidosFiltered();
+      const map = {};
+      for (const o of ped) for (const it of (o.items||[])) {
+        const k = String(it.code || it.product || it.name || '?');
+        if (!map[k]) map[k] = { code: it.code||it.product||'', name: it.name||'', qty:0 };
+        map[k].qty += Number(it.qty)||0;
+      }
+      const ordem = S._chaoProdOrdem || 'alfa';
+      const prods = Object.values(map);
+      if (ordem === 'qtd') prods.sort((a,b) => b.qty - a.qty || a.name.localeCompare(b.name));
+      else                 prods.sort((a,b) => a.name.localeCompare(b.name,'pt-BR'));
+      const rows = [['#','Codigo','Produto','Qtd a Montar']];
+      prods.forEach((p,i) => rows.push([i+1, p.code, p.name, p.qty]));
+      _chaoCSVDownload(rows, `produtos-montar-${S._chaoD1||'inicio'}-a-${S._chaoD2||'fim'}.csv`);
       toast('✅ CSV exportado');
+    });
+    document.getElementById('btn-print-chao-prod')?.addEventListener('click', () => {
+      const tbl = document.querySelector('#main table');
+      if (!tbl) return;
+      const w = window.open('', '_blank');
+      w.document.write(`<html><head><title>Produtos a Montar</title>
+        <style>body{font-family:Arial;padding:20px;}h1{color:#9F1239;}table{width:100%;border-collapse:collapse;}th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left;}th{background:#FAE8E6;}</style>
+        </head><body><h1>🌸 Produtos a Montar — ${S._chaoD1||'…'} a ${S._chaoD2||'…'}</h1>${tbl.outerHTML}</body></html>`);
+      w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
+    });
+
+    // ── Sub-aba B: Zonas ──
+    document.getElementById('btn-export-chao-zonas')?.addEventListener('click', async () => {
+      const ped = _chaoPedidosFiltered();
+      const { resolveZona, getTurnoPedido, TURNOS, ZONAS_MANAUS } = await import('./utils/zonasManaus.js');
+      const rows = [['Turno','Zona','Bairro','Pedido','Produtos','Hora']];
+      const sorted = [...ped].sort((a,b) => {
+        const wt = { manha:0, tarde:1, noite:2, sem:3 };
+        const ta = wt[getTurnoPedido(a)], tb = wt[getTurnoPedido(b)];
+        if (ta!==tb) return ta-tb;
+        const za = resolveZona(a), zb = resolveZona(b);
+        if (za!==zb) return za.localeCompare(zb);
+        return (a.deliveryNeighborhood||'').localeCompare(b.deliveryNeighborhood||'');
+      });
+      for (const o of sorted) {
+        const num = (o.orderNumber||'').toString().replace(/^PED-?/i,'');
+        const prods = (o.items||[]).map(i=>`${i.qty}x ${i.name||'?'}`).join(' | ');
+        const hora = (o.scheduledTime && o.scheduledTime!=='00:00') ? o.scheduledTime : (o.scheduledPeriod||'');
+        rows.push([
+          TURNOS[getTurnoPedido(o)]?.label || '',
+          ZONAS_MANAUS[resolveZona(o)]?.label || '',
+          o.deliveryNeighborhood||o.deliveryZone||'',
+          '#'+num, prods, hora
+        ]);
+      }
+      _chaoCSVDownload(rows, `zonas-entregas-${S._chaoD1||'inicio'}-a-${S._chaoD2||'fim'}.csv`);
+      toast('✅ CSV exportado');
+    });
+
+    // ── Sub-aba C: Comandas ──
+    document.getElementById('chao-comanda-org')?.addEventListener('change', e => { S._chaoComandaOrg = e.target.value; render(); });
+    document.querySelectorAll('[data-chao-print]').forEach(b => {
+      b.addEventListener('click', () => {
+        const id = b.dataset.chaoPrint;
+        if (typeof window.printComanda === 'function') window.printComanda(id);
+      });
+    });
+    document.getElementById('btn-print-chao-comandas')?.addEventListener('click', async () => {
+      const ped = _chaoPedidosFiltered();
+      const org = S._chaoComandaOrg || 'turno';
+      const { resolveZona, getTurnoPedido } = await import('./utils/zonasManaus.js');
+      let ord = [...ped];
+      if (org === 'turno') {
+        const w = { manha:0, tarde:1, noite:2, sem:3 };
+        ord.sort((a,b) => {
+          const ta = w[getTurnoPedido(a)], tb = w[getTurnoPedido(b)];
+          if (ta!==tb) return ta-tb;
+          return String(a.scheduledTime||'99').localeCompare(String(b.scheduledTime||'99'));
+        });
+      } else if (org === 'zona') {
+        ord.sort((a,b) => {
+          const za = resolveZona(a), zb = resolveZona(b);
+          if (za!==zb) return za.localeCompare(zb);
+          return (a.deliveryNeighborhood||'').localeCompare(b.deliveryNeighborhood||'');
+        });
+      } else {
+        ord.sort((a,b) => (a.deliveryNeighborhood||'zzz').localeCompare(b.deliveryNeighborhood||'zzz','pt-BR'));
+      }
+      if (!ord.length) { toast('Nenhuma comanda para imprimir', true); return; }
+      if (!confirm(`Imprimir ${ord.length} comanda(s) na ordem (${org})?\n\nO navegador abrirá uma janela de impressão por pedido.`)) return;
+      // Sequencial com pequeno delay para o navegador conseguir lidar
+      for (let i=0; i<ord.length; i++) {
+        if (typeof window.printComanda === 'function') {
+          window.printComanda(ord[i]._id);
+          await new Promise(r => setTimeout(r, 600));
+        }
+      }
+      toast(`✅ ${ord.length} comanda(s) enviada(s) para impressão`);
     });
     // Vendas por Unidade
     document.getElementById('rep-prod-filter')?.addEventListener('input', e => {

@@ -3,6 +3,7 @@ import { $c, $d, sc, rolec, ini, segc } from '../utils/formatters.js';
 import { GET, PUT } from '../services/api.js';
 import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab, getColabs } from '../services/auth.js';
+import { ZONAS_MANAUS, resolveZona, getTurnoPedido, TURNOS } from '../utils/zonasManaus.js';
 
 // ── Helpers locais (atividades / metas) ──────────────────────
 function getActivities(){ return JSON.parse(localStorage.getItem('fv_activities')||'[]'); }
@@ -1496,68 +1497,92 @@ ${!colabId ? `
 }
 
 // ── RELATORIO CHAO DE DATAS COMEMORATIVAS ────────────────────
+// 3 sub-abas independentes:
+//  A. 🌸 Produtos a Montar  — date range + lista alfabética c/ qtd
+//  B. 📍 Bairro/Zona        — date range + agrupa por TURNO → ZONA → BAIRRO
+//  C. 🖨️ Comandas p/ Imprimir — date range + organização (zona/bairro/turno) + batch print
 function renderChaoDatas(orders) {
-  const fData    = S._chaoData || '';
-  const fHora    = S._chaoHora || '';
-  const fBairro  = (S._chaoBairro || '').toLowerCase().trim();
-  const fTurno   = S._chaoTurno || '';
+  const sub = S._chaoSub || 'produtos'; // produtos | zonas | comandas
+  const d1  = S._chaoD1 || '';
+  const d2  = S._chaoD2 || '';
 
-  // Filtra pedidos
+  // Filtro comum: range de data de entrega (aceita d1==d2 para 1 dia)
   let pedidos = orders;
-  if (fData) pedidos = pedidos.filter(o => String(o.scheduledDate||'').slice(0,10) === fData);
-  if (fHora) pedidos = pedidos.filter(o => String(o.scheduledTime||'').includes(fHora));
-  if (fBairro) pedidos = pedidos.filter(o => String(o.deliveryNeighborhood||o.deliveryZone||'').toLowerCase().includes(fBairro));
-  if (fTurno) pedidos = pedidos.filter(o => String(o.scheduledPeriod||'').toLowerCase() === fTurno.toLowerCase());
+  if (d1 || d2) {
+    pedidos = pedidos.filter(o => {
+      const d = String(o.scheduledDate||'').slice(0,10);
+      if (!d) return false;
+      if (d1 && d < d1) return false;
+      if (d2 && d > d2) return false;
+      return true;
+    });
+  }
 
-  // Agrupa produtos
+  const subBtn = (k, label) => `<button type="button" class="tab ${sub===k?'active':''}" data-chao-sub="${k}" style="font-size:12px;">${label}</button>`;
+
+  // Header comum (filtros de data + abas)
+  const header = `
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">🌹 Chão de Datas Comemorativas <span style="font-size:11px;color:var(--muted);font-weight:400;">· Produção e logística</span></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:10px;">
+    <div class="fg"><label class="fl">Data de entrega — inicial</label>
+      <input type="date" class="fi" id="chao-d1" value="${d1}"/></div>
+    <div class="fg"><label class="fl">Data de entrega — final</label>
+      <input type="date" class="fi" id="chao-d2" value="${d2}"/></div>
+    <button class="btn btn-ghost btn-sm" id="chao-clear-dates">✕ Limpar datas</button>
+    <div style="margin-left:auto;font-size:11px;color:var(--muted);">${pedidos.length} pedido(s) no período</div>
+  </div>
+  <div class="tabs" style="gap:4px;border-top:1px solid var(--border);padding-top:10px;">
+    ${subBtn('produtos', '🌸 Produtos a Montar')}
+    ${subBtn('zonas',    '📍 Bairro / Zona de Entrega')}
+    ${subBtn('comandas', '🖨️ Comandas para Imprimir')}
+  </div>
+</div>`;
+
+  if (sub === 'produtos') return header + renderChaoProdutos(pedidos);
+  if (sub === 'zonas')    return header + renderChaoZonas(pedidos);
+  if (sub === 'comandas') return header + renderChaoComandas(pedidos);
+  return header;
+}
+
+// ─── A) PRODUTOS A MONTAR ───────────────────────────────────
+function renderChaoProdutos(pedidos) {
+  const ordem = S._chaoProdOrdem || 'alfa'; // alfa | qtd
+  // Agrega produtos
   const map = {};
   for (const o of pedidos) {
     for (const it of (o.items || [])) {
       const key = String(it.code || it.product || it.name || '?');
-      if (!map[key]) map[key] = { code: it.code || it.product || '—', name: it.name || '?', qty: 0, valor: 0 };
-      map[key].qty   += Number(it.qty) || 0;
-      map[key].valor += Number(it.totalPrice || (it.unitPrice * it.qty)) || 0;
+      if (!map[key]) map[key] = { code: it.code || it.product || '—', name: it.name || '?', qty: 0 };
+      map[key].qty += Number(it.qty) || 0;
     }
   }
-  const produtos = Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
+  let produtos = Object.values(map);
+  if (ordem === 'qtd') produtos.sort((a,b) => b.qty - a.qty || a.name.localeCompare(b.name));
+  else                 produtos.sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+
   const totalQtd  = produtos.reduce((s,p) => s+p.qty, 0);
   const totalProd = produtos.length;
 
   return `
-<div class="card" style="margin-bottom:14px;">
-  <div class="card-title">🌹 Chão de Datas Comemorativas <span style="font-size:11px;color:var(--muted);font-weight:400;">· Visão estratégica de produção</span></div>
-  <div class="g3" style="gap:10px;align-items:end;">
-    <div class="fg"><label class="fl">Data de entrega</label>
-      <input type="date" class="fi" id="chao-data" value="${fData}"/></div>
-    <div class="fg"><label class="fl">Horário (parcial)</label>
-      <input type="text" class="fi" id="chao-hora" value="${fHora}" placeholder="14:30"/></div>
-    <div class="fg"><label class="fl">Bairro</label>
-      <input type="text" class="fi" id="chao-bairro" value="${S._chaoBairro||''}" placeholder="Centro"/></div>
-    <div class="fg"><label class="fl">Turno</label>
-      <select class="fi" id="chao-turno">
-        <option value="">Todos</option>
-        <option value="Manhã" ${fTurno==='Manhã'?'selected':''}>🌅 Manhã</option>
-        <option value="Tarde" ${fTurno==='Tarde'?'selected':''}>☀️ Tarde</option>
-        <option value="Noite" ${fTurno==='Noite'?'selected':''}>🌙 Noite</option>
-      </select>
-    </div>
-    <button class="btn btn-primary" id="btn-export-chao">📤 Exportar CSV</button>
-  </div>
-</div>
-
-<div class="card" style="background:linear-gradient(135deg,#FAE8E6,#FAF7F5);margin-bottom:10px;">
-  <div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:10px;">
-    <div style="text-align:center;">
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Pedidos no filtro</div>
-      <div style="font-size:24px;font-weight:900;">${pedidos.length}</div>
-    </div>
+<div class="card" style="margin-bottom:10px;background:linear-gradient(135deg,#FAE8E6,#FAF7F5);">
+  <div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:10px;align-items:center;">
     <div style="text-align:center;">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Produtos diferentes</div>
       <div style="font-size:24px;font-weight:900;color:#9F1239;">${totalProd}</div>
     </div>
     <div style="text-align:center;">
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Total de unidades</div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Total de unidades a montar</div>
       <div style="font-size:24px;font-weight:900;color:#15803D;">${totalQtd}</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span style="font-size:11px;color:var(--muted);">Ordenar:</span>
+      <select class="fi" id="chao-prod-ordem" style="width:auto;font-size:12px;">
+        <option value="alfa" ${ordem==='alfa'?'selected':''}>A → Z (alfabética)</option>
+        <option value="qtd"  ${ordem==='qtd' ?'selected':''}>Quantidade (maior)</option>
+      </select>
+      <button class="btn btn-primary btn-sm" id="btn-export-chao-prod">📤 CSV</button>
+      <button class="btn btn-ghost btn-sm" id="btn-print-chao-prod">🖨️ Imprimir lista</button>
     </div>
   </div>
 </div>
@@ -1565,17 +1590,16 @@ function renderChaoDatas(orders) {
 ${produtos.length === 0 ? `
 <div class="card" style="text-align:center;padding:40px;color:var(--muted);">
   <div style="font-size:48px;margin-bottom:12px;">📭</div>
-  <p>Nenhum produto encontrado com esses filtros.</p>
+  <p>Nenhum produto no período selecionado.</p>
 </div>
 ` : `
 <div class="card" style="overflow-x:auto;">
   <table style="width:100%;border-collapse:collapse;font-size:13px;">
     <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
-      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">#</th>
-      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Código</th>
+      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;width:50px;">#</th>
+      <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;width:110px;">Código</th>
       <th style="padding:12px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Produto</th>
-      <th style="padding:12px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Qtd Total</th>
-      <th style="padding:12px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Valor Total</th>
+      <th style="padding:12px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;width:130px;">Qtd a Montar</th>
     </tr></thead>
     <tbody>
       ${produtos.map((p, i) => `
@@ -1583,19 +1607,226 @@ ${produtos.length === 0 ? `
           <td style="padding:10px 12px;color:var(--muted);font-size:11px;">${i+1}</td>
           <td style="padding:10px 12px;font-family:Monaco,monospace;color:#7C3AED;font-weight:700;">${p.code}</td>
           <td style="padding:10px 12px;font-weight:600;">${p.name}</td>
-          <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;background:#15803D;color:#fff;padding:5px 14px;border-radius:999px;font-weight:900;font-size:14px;">${p.qty}</span></td>
-          <td style="padding:10px 12px;text-align:right;font-weight:700;color:#15803D;">${$c(p.valor)}</td>
+          <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;background:#15803D;color:#fff;padding:6px 18px;border-radius:999px;font-weight:900;font-size:15px;min-width:60px;">${p.qty}</span></td>
         </tr>
       `).join('')}
     </tbody>
   </table>
 </div>
+<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px;margin-top:10px;font-size:12px;color:#1E40AF;">
+  💡 Lista pronta para a equipe de montagem: cada linha indica quantos produtos preparar no período.
+</div>
+`}`;
+}
+
+// ─── B) BAIRRO / ZONA DE ENTREGA ────────────────────────────
+function renderChaoZonas(pedidos) {
+  // Agrupa: TURNO → ZONA → BAIRRO → pedidos
+  const turnosOrdem = ['manha','tarde','noite','sem'];
+  const buckets = {};
+  for (const t of turnosOrdem) buckets[t] = {};
+
+  for (const o of pedidos) {
+    const t = getTurnoPedido(o);
+    const z = resolveZona(o);
+    const b = (o.deliveryNeighborhood || o.deliveryZone || 'Sem bairro').trim() || 'Sem bairro';
+    if (!buckets[t][z]) buckets[t][z] = {};
+    if (!buckets[t][z][b]) buckets[t][z][b] = [];
+    buckets[t][z][b].push(o);
+  }
+
+  const totalP = pedidos.length;
+
+  let html = `
+<div class="card" style="margin-bottom:10px;background:linear-gradient(135deg,#FAE8E6,#FAF7F5);">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Total de entregas</div>
+      <div style="font-size:24px;font-weight:900;color:#9F1239;">${totalP}</div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);max-width:380px;text-align:right;">
+      Pedidos organizados por <strong>turno → zona → bairro</strong> para facilitar o roteiro do entregador.
+    </div>
+    <button class="btn btn-primary btn-sm" id="btn-export-chao-zonas">📤 CSV</button>
+  </div>
+</div>`;
+
+  if (totalP === 0) {
+    html += `<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+      <div style="font-size:48px;margin-bottom:12px;">📭</div>
+      <p>Nenhuma entrega no período selecionado.</p>
+    </div>`;
+    return html;
+  }
+
+  for (const t of turnosOrdem) {
+    const zonas = buckets[t];
+    const zonasKeys = Object.keys(zonas);
+    if (!zonasKeys.length) continue;
+    const meta = TURNOS[t];
+    const totalTurno = zonasKeys.reduce((s,z) => s + Object.values(zonas[z]).reduce((x,arr)=>x+arr.length,0), 0);
+
+    html += `<div class="card" style="margin-bottom:12px;border-left:6px solid ${meta.color};">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid ${meta.color}33;">
+        <span style="font-size:18px;font-weight:900;color:${meta.color};">${meta.label}</span>
+        <span style="background:${meta.color};color:#fff;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:800;">${totalTurno} entrega${totalTurno>1?'s':''}</span>
+      </div>`;
+
+    // Ordena zonas: pelos keys de ZONAS_MANAUS, "Outros" no fim
+    const zonasOrd = zonasKeys.sort((a,b) => {
+      if (a === 'Outros') return 1;
+      if (b === 'Outros') return -1;
+      return a.localeCompare(b, 'pt-BR');
+    });
+
+    for (const zk of zonasOrd) {
+      const zMeta = ZONAS_MANAUS[zk] || { label: zk, color:'#64748B' };
+      const bairros = zonas[zk];
+      const bairrosOrd = Object.keys(bairros).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+      const totalZona = Object.values(bairros).reduce((s,arr)=>s+arr.length,0);
+
+      html += `<div style="margin-bottom:10px;background:${zMeta.color}08;border-radius:8px;padding:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="background:${zMeta.color};color:#fff;border-radius:6px;padding:2px 10px;font-size:11px;font-weight:800;">${zMeta.label}</span>
+          <span style="font-size:11px;color:var(--muted);font-weight:700;">${totalZona} entrega(s)</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:#fff;border-bottom:1px solid ${zMeta.color}33;">
+            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;">Bairro</th>
+            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;">Pedido</th>
+            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;">Produto(s)</th>
+            <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748B;text-transform:uppercase;">Hora</th>
+          </tr></thead>
+          <tbody>`;
+
+      for (const bn of bairrosOrd) {
+        const lista = bairros[bn].sort((a,b) => String(a.scheduledTime||'99').localeCompare(String(b.scheduledTime||'99')));
+        lista.forEach((o, idx) => {
+          const num = (o.orderNumber||o.numero||'').toString().replace(/^PED-?/i,'');
+          const prods = (o.items||[]).map(i => `${i.qty}× ${i.name||'?'}`).join(' · ');
+          const hora = (o.scheduledTime && o.scheduledTime!=='00:00') ? o.scheduledTime : (o.scheduledPeriod || '—');
+          html += `<tr style="border-bottom:1px solid #F1F5F9;background:${idx%2?'rgba(255,255,255,.5)':'transparent'};">
+            <td style="padding:6px 8px;font-weight:600;color:#1E293B;">${idx===0?bn:''}</td>
+            <td style="padding:6px 8px;color:#7C3AED;font-weight:700;font-family:Monaco,monospace;">#${num||'—'}</td>
+            <td style="padding:6px 8px;color:#475569;">${prods||'—'}</td>
+            <td style="padding:6px 8px;text-align:center;font-weight:700;color:${meta.color};">${hora}</td>
+          </tr>`;
+        });
+      }
+      html += `</tbody></table></div>`;
+    }
+    html += `</div>`;
+  }
+  return html;
+}
+
+// ─── C) COMANDAS PARA IMPRIMIR ──────────────────────────────
+function renderChaoComandas(pedidos) {
+  const org = S._chaoComandaOrg || 'turno'; // turno | zona | bairro
+
+  // Ordena pedidos conforme organização
+  let ordenados = [...pedidos];
+  if (org === 'turno') {
+    const w = { manha:0, tarde:1, noite:2, sem:3 };
+    ordenados.sort((a,b) => {
+      const ta = w[getTurnoPedido(a)], tb = w[getTurnoPedido(b)];
+      if (ta !== tb) return ta - tb;
+      return String(a.scheduledTime||'99').localeCompare(String(b.scheduledTime||'99'));
+    });
+  } else if (org === 'zona') {
+    ordenados.sort((a,b) => {
+      const za = resolveZona(a), zb = resolveZona(b);
+      if (za !== zb) return za.localeCompare(zb,'pt-BR');
+      const ba = (a.deliveryNeighborhood||''), bb = (b.deliveryNeighborhood||'');
+      return ba.localeCompare(bb,'pt-BR');
+    });
+  } else { // bairro
+    ordenados.sort((a,b) => {
+      const ba = (a.deliveryNeighborhood||a.deliveryZone||'zzz'), bb = (b.deliveryNeighborhood||b.deliveryZone||'zzz');
+      return ba.localeCompare(bb,'pt-BR');
+    });
+  }
+
+  // Agrupa para exibição (header de seção)
+  const groupKey = (o) => {
+    if (org === 'turno') return TURNOS[getTurnoPedido(o)]?.label || '—';
+    if (org === 'zona')  return ZONAS_MANAUS[resolveZona(o)]?.label || '—';
+    return o.deliveryNeighborhood || o.deliveryZone || 'Sem bairro';
+  };
+  const grupos = {};
+  for (const o of ordenados) {
+    const k = groupKey(o);
+    if (!grupos[k]) grupos[k] = [];
+    grupos[k].push(o);
+  }
+
+  return `
+<div class="card" style="margin-bottom:10px;background:linear-gradient(135deg,#FAE8E6,#FAF7F5);">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Comandas no período</div>
+      <div style="font-size:24px;font-weight:900;color:#9F1239;">${ordenados.length}</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:11px;color:var(--muted);font-weight:700;">Organizar por:</span>
+      <select class="fi" id="chao-comanda-org" style="width:auto;font-size:12px;">
+        <option value="turno"  ${org==='turno' ?'selected':''}>⏰ Turno</option>
+        <option value="zona"   ${org==='zona'  ?'selected':''}>🗺️ Zona</option>
+        <option value="bairro" ${org==='bairro'?'selected':''}>📍 Bairro</option>
+      </select>
+      <button class="btn btn-primary btn-sm" id="btn-print-chao-comandas" ${ordenados.length===0?'disabled':''}>🖨️ Imprimir TODAS na ordem</button>
+    </div>
+  </div>
+</div>
+
+${ordenados.length === 0 ? `
+<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+  <div style="font-size:48px;margin-bottom:12px;">📭</div>
+  <p>Nenhum pedido no período selecionado.</p>
+</div>
+` : `
+<div class="card">
+  ${Object.entries(grupos).map(([gk, lista]) => `
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#FAFAFA;border-radius:8px;margin-bottom:6px;border-left:4px solid var(--rose);">
+        <span style="font-weight:800;color:var(--ink);font-size:13px;">${gk}</span>
+        <span style="background:var(--rose);color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">${lista.length} comanda(s)</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:#fff;border-bottom:1px solid var(--border);">
+          <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;width:90px;">Pedido</th>
+          <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;">Cliente / Destinatário</th>
+          <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;">Bairro</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748B;text-transform:uppercase;width:90px;">Hora</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748B;text-transform:uppercase;width:100px;">Imprimir</th>
+        </tr></thead>
+        <tbody>
+          ${lista.map(o => {
+            const num = (o.orderNumber||o.numero||'').toString().replace(/^PED-?/i,'');
+            const cli = o.clientName || o.client?.name || '—';
+            const dst = o.recipient && o.recipient !== cli ? ` → ${o.recipient}` : '';
+            const bairro = o.deliveryNeighborhood || o.deliveryZone || '—';
+            const hora = (o.scheduledTime && o.scheduledTime!=='00:00') ? o.scheduledTime : (o.scheduledPeriod || '—');
+            return `<tr style="border-bottom:1px solid #F1F5F9;">
+              <td style="padding:6px 8px;color:#7C3AED;font-weight:700;font-family:Monaco,monospace;">#${num||'—'}</td>
+              <td style="padding:6px 8px;font-weight:600;">${cli}<span style="color:#059669;font-weight:500;font-size:11px;">${dst}</span></td>
+              <td style="padding:6px 8px;color:#475569;">${bairro}</td>
+              <td style="padding:6px 8px;text-align:center;font-weight:700;color:#1E40AF;">${hora}</td>
+              <td style="padding:6px 8px;text-align:center;">
+                <button class="btn btn-ghost btn-xs" data-chao-print="${o._id}" title="Imprimir esta comanda">🖨️</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `).join('')}
+</div>
 
 <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px;margin-top:10px;font-size:12px;color:#1E40AF;">
-  💡 <strong>Use este relatório para:</strong> Produção (saber o que montar antes) · Logística (organizar rotas) · Compras (planejar estoque)
+  💡 Use <strong>🖨️ Imprimir TODAS na ordem</strong> para enviar todas as comandas para a impressora seguindo a organização escolhida (turno / zona / bairro).
 </div>
-`}
-`;
+`}`;
 }
 
 // ── TAB ALTA DEMANDA: Relatorio para datas especiais ──────────
