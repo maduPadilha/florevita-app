@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-44';
+const APP_VERSION = '20260503-45';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -1325,11 +1325,16 @@ function renderApp(){
     {k:'auditLogs',l:'Auditoria & Segurança',i:'🔒',m:'auditLogs',s:'Config'},
     {k:'agenteTI',l:'Agente de TI',i:'🤖',m:'agenteTI',s:'Sistema'},
     {k:'ecommerce',l:'E-commerce',i:'🛒',m:'ecommerce',s:'Config', adminOnly:true},
-    {k:'meuPainel',l:'Meu Painel',i:'👤',m:'orders',s:'Principal', hide:['Administrador','Entregador']},
+    {k:'meuPainel',l:'Meu Painel',i:'👤',m:'_alwaysOn',s:'Principal', hide:['Administrador','Entregador']},
     {k:'orcamento',l:'Orçamentos',i:'📋',m:'orcamentos',s:'E-commerce'},
   ].filter(n => {
     if (n.adminOnly && S.user?.role !== 'Administrador') return false;
-    return can(n.m) && !(n.hide||[]).includes(_isEntregador()?'Entregador':S.user?.role);
+    if ((n.hide||[]).includes(_isEntregador()?'Entregador':S.user?.role)) return false;
+    // '_alwaysOn' = item visivel para qualquer colab logado (sem checar
+    // modulos do cadastro). Usado por Meu Painel — toda colab tem direito
+    // a ver o proprio painel pessoal mesmo sem outros modulos liberados.
+    if (n.m === '_alwaysOn') return true;
+    return can(n.m);
   });
 
   // ── GUARDA DE ACESSO POR PÁGINA ─────────────────────────────
@@ -1346,9 +1351,10 @@ function renderApp(){
     notasFiscais:'notasFiscais', auditLogs:'auditLogs',
     agenteTI:'agenteTI',
     entregador:'delivery',
+    meuPainel:'_alwaysOn', // qualquer colab logado pode acessar o proprio painel
   };
   const currentMod = pageToMod[S.page];
-  if(currentMod && !can(currentMod)){
+  if(currentMod && currentMod !== '_alwaysOn' && !can(currentMod)){
     // Página atual não permitida — vai para a primeira do menu ou mostra vazio
     if(nav.length > 0){
       S.page = nav[0].k;

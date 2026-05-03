@@ -54,7 +54,7 @@ const PAGE_TO_MOD = {
   colaboradores:'users', impressao:'impressao', backup:'backup',
   config:'config', ecommerce:'ecommerce', orcamento:'orcamentos',
   entregador:'delivery', notasFiscais:'notasFiscais',
-  rh:'rh', metas:'reports', meuPainel:'orders',
+  rh:'rh', metas:'reports', meuPainel:'_alwaysOn',
   alertas:'alertas', auditLogs:'auditLogs', agenteTI:'agenteTI',
 };
 
@@ -63,6 +63,8 @@ export function setPage(p, pushHistory=true){
 
   // Valida permissão da página destino
   const mod = PAGE_TO_MOD[p];
+  // '_alwaysOn' = pagina liberada para qualquer colab logado (Meu Painel)
+  if (mod === '_alwaysOn') { _doSetPage(p, pushHistory); return; }
   if(mod){
     // Import dinâmico do can() para evitar circular dep
     import('../services/auth.js').then(({ can }) => {
