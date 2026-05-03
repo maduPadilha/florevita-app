@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260502-8';
+const APP_VERSION = '20260502-9';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -1319,9 +1319,12 @@ function renderApp(){
     {k:'config',l:'Configurações',i:'⚙️',m:'config',s:'Config'},
     {k:'auditLogs',l:'Auditoria & Segurança',i:'🔒',m:'auditLogs',s:'Config'},
     {k:'agenteTI',l:'Agente de TI',i:'🤖',m:'agenteTI',s:'Sistema'},
-    {k:'ecommerce',l:'E-commerce',i:'🛒',m:'ecommerce',s:'E-commerce'},
+    {k:'ecommerce',l:'E-commerce',i:'🛒',m:'ecommerce',s:'Config', adminOnly:true},
     {k:'orcamento',l:'Orçamentos',i:'📋',m:'orcamentos',s:'E-commerce'},
-  ].filter(n=>can(n.m) && !(n.hide||[]).includes(_isEntregador()?'Entregador':S.user?.role));
+  ].filter(n => {
+    if (n.adminOnly && S.user?.role !== 'Administrador') return false;
+    return can(n.m) && !(n.hide||[]).includes(_isEntregador()?'Entregador':S.user?.role);
+  });
 
   // ── GUARDA DE ACESSO POR PÁGINA ─────────────────────────────
   // Valida se o usuário tem permissão para acessar a página atual.
@@ -2885,6 +2888,127 @@ function bindPageActions(){
   if(S.page==='usuarios'){
     document.getElementById('user-search')?.addEventListener('input', e=>{ S._userSearch=e.target.value; render(); });
     {const _el=document.getElementById('btn-rel-users');if(_el)_el.onclick=async()=>{S.loading=true; render();const raw = await GET('/users').catch(()=>[]);const hidden = getHiddenUsers();S.users = (raw||[]).filter(x=>!hidden.includes(x._id)).map(mergeUserExtra);S.loading=false; render();};}
+  }
+
+  // ── E-commerce: tab Site (avancado) + Integracoes ─────────────
+  if (S.page === 'ecommerce' && S.user?.role === 'Administrador') {
+    // Datas bloqueadas (estado local)
+    if (!Array.isArray(window._ecBlockedDates2)) window._ecBlockedDates2 = [];
+    const _renderBlocked = () => {
+      const list = document.getElementById('ec2-blocked-dates-list');
+      if (!list) return;
+      list.innerHTML = window._ecBlockedDates2.length
+        ? window._ecBlockedDates2.map(d => `<span style="display:inline-flex;align-items:center;gap:4px;background:#FEE2E2;color:#991B1B;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;">📅 ${d}<button type="button" data-del-d="${d}" style="background:rgba(220,38,38,.2);border:none;color:#991B1B;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;padding:0;">×</button></span>`).join('')
+        : '<span style="font-size:11px;color:var(--muted);font-style:italic;">Nenhuma data bloqueada.</span>';
+      list.querySelectorAll('[data-del-d]').forEach(b => {
+        b.onclick = () => { window._ecBlockedDates2 = window._ecBlockedDates2.filter(x => x !== b.dataset.delD); _renderBlocked(); };
+      });
+    };
+    {const _el = document.getElementById('btn-add-blocked-date2'); if (_el) _el.onclick = () => {
+      const inp = document.getElementById('ec2-block-date-input');
+      const v = inp?.value;
+      if (!v) return;
+      if (!window._ecBlockedDates2.includes(v)) window._ecBlockedDates2.push(v);
+      window._ecBlockedDates2.sort();
+      if (inp) inp.value = '';
+      _renderBlocked();
+    };}
+    const _applyMode = () => {
+      const cat = document.getElementById('ec2-mode-cat');
+      const loja = document.getElementById('ec2-mode-loja');
+      const lc = document.getElementById('ec2-mode-cat-label');
+      const ll = document.getElementById('ec2-mode-loja-label');
+      if (lc) lc.style.borderColor = cat?.checked ? '#C8736A' : 'transparent';
+      if (ll) ll.style.borderColor = loja?.checked ? '#C8736A' : 'transparent';
+    };
+    document.querySelectorAll('input[name="ec2-mode"]').forEach(r => r.onchange = _applyMode);
+
+    // Carregar config E-commerce
+    if (document.getElementById('ec2-accepting')) {
+      (async () => {
+        try {
+          const r = await GET('/settings/ecommerce').catch(()=>null);
+          const cfg = r?.value || {};
+          const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+          const setCb = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v !== false; };
+          const mode = cfg.mode === 'loja' ? 'loja' : 'cat';
+          const r1 = document.getElementById('ec2-mode-' + mode);
+          if (r1) r1.checked = true;
+          _applyMode();
+          setCb('ec2-accepting', cfg.acceptingOrders);
+          set('ec2-delivery-fee',   cfg.deliveryFee);
+          set('ec2-free-above',     cfg.freeShippingAbove);
+          set('ec2-min-order',      cfg.minOrderValue);
+          set('ec2-shipping-note',  cfg.shippingNote);
+          set('ec2-closed-msg',     cfg.closedMessage);
+          set('ec2-wpp-order-msg',  cfg.whatsappOrderMsg);
+          window._ecBlockedDates2 = Array.isArray(cfg.blockedDates) ? [...cfg.blockedDates] : [];
+          _renderBlocked();
+        } catch(_){}
+      })();
+    }
+    {const _el = document.getElementById('btn-save-ecommerce2'); if (_el) _el.onclick = async () => {
+      const get = (id) => document.getElementById(id)?.value?.trim() || '';
+      const modeR = document.querySelector('input[name="ec2-mode"]:checked');
+      const value = {
+        mode: modeR?.value === 'loja' ? 'loja' : 'catalogo',
+        acceptingOrders: document.getElementById('ec2-accepting')?.checked !== false,
+        deliveryFee: Number(get('ec2-delivery-fee')) || 0,
+        freeShippingAbove: Number(get('ec2-free-above')) || 0,
+        minOrderValue: Number(get('ec2-min-order')) || 0,
+        shippingNote: get('ec2-shipping-note') || 'Entrega em toda Manaus.',
+        closedMessage: get('ec2-closed-msg') || 'No momento estamos fechados.',
+        whatsappOrderMsg: get('ec2-wpp-order-msg') || 'Olá! Tenho interesse no produto.',
+        blockedDates: [...(window._ecBlockedDates2||[])],
+      };
+      const status = document.getElementById('ecommerce2-status');
+      if (status) status.textContent = 'Salvando...';
+      try {
+        await PUT('/settings/ecommerce', { value });
+        if (status) { status.textContent = '✅ Salvo! Site reflete em até 60s.'; status.style.color = '#15803D'; }
+        toast('✅ E-commerce salvo');
+      } catch(e) {
+        if (status) { status.textContent = '❌ '+(e.message||'erro'); status.style.color = '#DC2626'; }
+      }
+    };}
+
+    // Carregar Integracoes
+    if (document.getElementById('int2-ga-id')) {
+      (async () => {
+        try {
+          const r = await GET('/settings/integracoes').catch(()=>null);
+          const cfg = r?.value || {};
+          const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v||''; };
+          set('int2-ga-id',     cfg.google?.analyticsId);
+          set('int2-gtm-id',    cfg.google?.tagManagerId);
+          set('int2-gads-id',   cfg.google?.adsConversionId);
+          set('int2-meta-pixel',cfg.meta?.pixelId);
+          set('int2-meta-token',cfg.meta?.conversionsToken);
+          set('int2-mp-token',  cfg.mercadoPago?.accessToken);
+          set('int2-mp-public', cfg.mercadoPago?.publicKey);
+          set('int2-wpp-num',   cfg.whatsapp?.number);
+          set('int2-wpp-msg',   cfg.whatsapp?.defaultMessage);
+        } catch(_){}
+      })();
+    }
+    {const _el = document.getElementById('btn-save-integracoes2'); if (_el) _el.onclick = async () => {
+      const get = (id) => document.getElementById(id)?.value?.trim() || '';
+      const value = {
+        google: { analyticsId: get('int2-ga-id'), tagManagerId: get('int2-gtm-id'), adsConversionId: get('int2-gads-id') },
+        meta: { pixelId: get('int2-meta-pixel'), conversionsToken: get('int2-meta-token') },
+        mercadoPago: { accessToken: get('int2-mp-token'), publicKey: get('int2-mp-public') },
+        whatsapp: { number: get('int2-wpp-num') || '5592993002433', defaultMessage: get('int2-wpp-msg') },
+      };
+      const status = document.getElementById('integracoes2-status');
+      if (status) status.textContent = 'Salvando...';
+      try {
+        await PUT('/settings/integracoes', { value });
+        if (status) { status.textContent = '✅ Salvo!'; status.style.color = '#15803D'; }
+        toast('✅ Integrações salvas');
+      } catch(e) {
+        if (status) { status.textContent = '❌ '+(e.message||'erro'); status.style.color = '#DC2626'; }
+      }
+    };}
   }
 
   // ── Colaboradores ─────────────────────────────────────────────

@@ -168,6 +168,7 @@ export function renderEcommerce(){
 <!-- ABAS -->
 <div class="tabs" style="margin-bottom:16px;flex-wrap:wrap;">
   ${[
+    {k:'site',l:'🌐 Site (Avançado)'},
     {k:'geral',l:'⚙️ Configurações'},
     {k:'horario',l:'🕐 Horários'},
     {k:'pagamentos',l:'💳 Pagamentos'},
@@ -175,12 +176,129 @@ export function renderEcommerce(){
     {k:'redes',l:'📱 Redes Sociais'},
     {k:'banners',l:'🖼️ Banners'},
     {k:'cores',l:'🎨 Aparência'},
+    {k:'integracoes',l:'🔌 Integrações'},
     {k:'preview',l:'👁️ Preview'},
   ].map(t=>`<button class="tab ${tab===t.k?'active':''}" onclick="S._ecTab='${t.k}';render()">${t.l}</button>`).join('')}
   <div style="font-size:11px;color:var(--muted);background:#FAE8E6;padding:8px 14px;border-radius:8px;margin-left:6px;">
     🌸 <strong>Produtos do site:</strong> editados em <a href="javascript:setPage('produtos')" style="color:#9F1239;font-weight:700;">Produtos</a> · marque <em>"Aparecer no E-commerce"</em>
   </div>
 </div>
+
+<!-- ══ ABA SITE (configuracoes avancadas do e-commerce) ══════ -->
+${tab==='site'?`
+<div class="card">
+  <div class="card-title">🌐 Configurações do Site</div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Tudo que controla o comportamento do site público (floriculturalacoseternos.com.br).</div>
+
+  <!-- MODO -->
+  <div style="background:#FAF7F5;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;">
+    <div style="font-weight:700;font-size:12px;margin-bottom:8px;">⚙️ Modo de Operação</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+      <label style="display:flex;flex-direction:column;background:#fff;border:2px solid transparent;border-radius:8px;padding:10px;cursor:pointer;" id="ec2-mode-cat-label">
+        <div style="display:flex;align-items:center;gap:6px;"><input type="radio" name="ec2-mode" value="catalogo" id="ec2-mode-cat" style="accent-color:#C8736A;"/><strong style="font-size:12px;">📚 Catálogo Online</strong></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">Vitrine + WhatsApp. Sem checkout/pagamento.</div>
+      </label>
+      <label style="display:flex;flex-direction:column;background:#fff;border:2px solid transparent;border-radius:8px;padding:10px;cursor:pointer;" id="ec2-mode-loja-label">
+        <div style="display:flex;align-items:center;gap:6px;"><input type="radio" name="ec2-mode" value="loja" id="ec2-mode-loja" style="accent-color:#C8736A;"/><strong style="font-size:12px;">🛒 Loja Completa</strong></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">Cliente compra direto no site (Pix/Cartão via MP).</div>
+      </label>
+    </div>
+  </div>
+
+  <label style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;cursor:pointer;">
+    <input type="checkbox" id="ec2-accepting" style="width:18px;height:18px;accent-color:#15803D;"/>
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:13px;">🟢 Aceitando pedidos online</div>
+      <div style="font-size:10px;color:var(--muted);">Desligue para pausar (loja mostra mensagem de fechado)</div>
+    </div>
+  </label>
+
+  <div class="fr2" style="gap:8px;">
+    <div class="fg"><label class="fl">Frete fixo (R$)</label>
+      <input class="fi" type="number" step="0.01" id="ec2-delivery-fee" placeholder="15.00"/></div>
+    <div class="fg"><label class="fl">Frete grátis acima de (R$)</label>
+      <input class="fi" type="number" step="0.01" id="ec2-free-above" placeholder="0 = desativado"/></div>
+  </div>
+  <div class="fg"><label class="fl">Pedido mínimo (R$)</label>
+    <input class="fi" type="number" step="0.01" id="ec2-min-order" placeholder="0 = sem mínimo"/></div>
+  <div class="fg"><label class="fl">Mensagem do frete (visível no checkout)</label>
+    <input class="fi" id="ec2-shipping-note" placeholder="Entrega em toda Manaus. Taxa fixa."/></div>
+  <div class="fg"><label class="fl">Mensagem quando fechado</label>
+    <input class="fi" id="ec2-closed-msg" placeholder="No momento estamos fora do horário online."/></div>
+  <div class="fg"><label class="fl">Mensagem padrão WhatsApp ao pedir</label>
+    <input class="fi" id="ec2-wpp-order-msg" placeholder="Olá! Fiquei interessado(a) no(s) produto(s) abaixo..."/></div>
+
+  <!-- Datas bloqueadas -->
+  <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px;margin-bottom:10px;">
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px;">📅 Datas bloqueadas para entrega</div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;">
+      <input type="date" id="ec2-block-date-input" class="fi" style="flex:1;font-size:12px;"/>
+      <button type="button" id="btn-add-blocked-date2" class="btn btn-primary btn-sm">+ Bloquear</button>
+    </div>
+    <div id="ec2-blocked-dates-list" style="display:flex;flex-wrap:wrap;gap:5px;min-height:24px;"></div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-save-ecommerce2" style="width:100%;margin-top:6px;">💾 Salvar Configurações</button>
+  <div id="ecommerce2-status" style="margin-top:6px;font-size:11px;text-align:center;color:var(--muted);"></div>
+</div>
+` : ''}
+
+<!-- ══ ABA INTEGRAÇÕES (Google, Meta, MP, Facebook Feed) ══════ -->
+${tab==='integracoes'?`
+<div class="card">
+  <div class="card-title">🔌 Integrações e APIs</div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Tokens secretos ficam no servidor. IDs públicos são lidos pelo site automaticamente.</div>
+
+  <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+    <div style="font-weight:700;font-size:13px;color:#4285F4;margin-bottom:8px;">📊 Google</div>
+    <div class="fr2" style="gap:8px;">
+      <div class="fg"><label class="fl">Google Analytics 4 ID</label>
+        <input class="fi" id="int2-ga-id" placeholder="G-XXXXXXXXXX"/></div>
+      <div class="fg"><label class="fl">Tag Manager ID</label>
+        <input class="fi" id="int2-gtm-id" placeholder="GTM-XXXXXXX"/></div>
+    </div>
+    <div class="fg"><label class="fl">Google Ads — ID de Conversão</label>
+      <input class="fi" id="int2-gads-id" placeholder="AW-XXXXXXXXX/yyyyyyy"/></div>
+  </div>
+
+  <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+    <div style="font-weight:700;font-size:13px;color:#1877F2;margin-bottom:8px;">📘 Meta (Facebook / Instagram)</div>
+    <div class="fr2" style="gap:8px;">
+      <div class="fg"><label class="fl">Meta Pixel ID</label>
+        <input class="fi" id="int2-meta-pixel" placeholder="123456789012345"/></div>
+      <div class="fg"><label class="fl">Conversions API Token <span style="font-size:9px;color:var(--red);">(secreto)</span></label>
+        <input class="fi" id="int2-meta-token" type="password" placeholder="EAAB..."/></div>
+    </div>
+    <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:8px 10px;margin-top:8px;">
+      <div style="font-size:11px;color:#1E40AF;font-weight:700;margin-bottom:4px;">🛍️ Facebook / Instagram Shopping</div>
+      <div style="font-size:10px;color:#3730A3;">URL do feed (cole no Catalog Manager):</div>
+      <input readonly value="https://florevita-backend-2-0.onrender.com/api/public/feed/facebook.xml" style="width:100%;margin-top:4px;padding:5px 8px;border:1px solid #BFDBFE;border-radius:5px;background:#fff;font-size:10px;font-family:monospace;color:#1E40AF;cursor:pointer;" onclick="this.select();document.execCommand('copy');alert('URL copiada')"/>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+    <div style="font-weight:700;font-size:13px;color:#009EE3;margin-bottom:8px;">💳 Mercado Pago</div>
+    <div class="fg"><label class="fl">Access Token <span style="font-size:9px;color:var(--red);">(secreto)</span></label>
+      <input class="fi" id="int2-mp-token" type="password" placeholder="APP_USR-..."/></div>
+    <div class="fg"><label class="fl">Public Key</label>
+      <input class="fi" id="int2-mp-public" placeholder="APP_USR-..."/></div>
+    <div style="font-size:10px;color:var(--muted);background:#F0F9FF;padding:6px 8px;border-radius:6px;">
+      ℹ️ Webhook automático: <code>https://florevita-backend-2-0.onrender.com/api/public/mp/webhook</code>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+    <div style="font-weight:700;font-size:13px;color:#25D366;margin-bottom:8px;">💬 WhatsApp</div>
+    <div class="fg"><label class="fl">Número (com DDI+DDD, sem espaços)</label>
+      <input class="fi" id="int2-wpp-num" placeholder="5592993002433"/></div>
+    <div class="fg"><label class="fl">Mensagem padrão</label>
+      <input class="fi" id="int2-wpp-msg" placeholder="Olá! Quero comprar 🌹"/></div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-save-integracoes2" style="width:100%;">💾 Salvar Integrações</button>
+  <div id="integracoes2-status" style="margin-top:6px;font-size:11px;text-align:center;color:var(--muted);"></div>
+</div>
+` : ''}
 
 <!-- ══ ABA GERAL ══════════════════════════════════════════════ -->
 ${tab==='geral'?`
