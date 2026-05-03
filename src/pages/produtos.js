@@ -198,17 +198,17 @@ export function renderProdutos(){
       const cats = Array.isArray(p.categories) ? p.categories : [p.category||p.categoria].filter(Boolean);
       if (!cats.includes(catFilter)) return false;
     }
-    if (statusFilter === 'destaque') {
+    if (statusFilter === 'ativo') {
+      if (p.activeOnSite === false) return false;
+    } else if (statusFilter === 'inativo') {
+      if (p.activeOnSite !== false) return false;
+    } else if (statusFilter === 'destaque') {
       if (p.destaque !== true) return false;
     } else if (statusFilter === 'lowstock') {
       const total = Number(p.estoque||0) + Number(p.stock||0);
       const min = Number(p.estoqueMinimo||p.minStock||5);
       if (total > min) return false;
-    } else if (statusFilter === 'archived') {
-      if (p.archived !== true) return false;
     }
-    // Por padrao esconde arquivados (so mostra se filter='archived')
-    if (statusFilter !== 'archived' && p.archived === true) return false;
     return true;
   });
   // Expose filtered list for export consumers (full filtered list, not paginated)
@@ -283,26 +283,27 @@ export function renderProdutos(){
         ✓ <strong>${sel.size}</strong> produto${sel.size===1?'':'s'} selecionado${sel.size===1?'':'s'}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-sm" data-bulk="ativar" style="background:#DCFCE7;color:#15803D;border:1px solid #22C55E;">⚡ Ativar selecionados</button>
+        <button class="btn btn-sm" data-bulk="desativar" style="background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;">⏻ Desativar selecionados</button>
         <button class="btn btn-sm" data-bulk="destacar" style="background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;">⭐ Destacar</button>
         <button class="btn btn-sm" data-bulk="undestacar" style="background:#fff;color:#92400E;border:1px solid #F59E0B;">☆ Tirar destaque</button>
         <button class="btn btn-sm" data-bulk="estoque" style="background:#DBEAFE;color:#1E40AF;border:1px solid #3B82F6;">📦 Definir estoque</button>
-        <button class="btn btn-sm" data-bulk="ativar" style="background:#DCFCE7;color:#15803D;border:1px solid #22C55E;">✅ Ativar (desarquivar)</button>
-        <button class="btn btn-sm" data-bulk="arquivar" style="background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;">📁 Arquivar</button>
         ${S.user?.role === 'Administrador' ? `<button class="btn btn-sm" data-bulk="excluir" style="background:#7F1D1D;color:#fff;">🗑️ Excluir</button>` : ''}
-        <button class="btn btn-ghost btn-sm" data-bulk="clear">✕ Limpar seleção</button>
+        <button class="btn btn-ghost btn-sm" data-bulk="clear">✕ Limpar</button>
       </div>
     </div>`;
   })()}
-  <!-- TABS de status -->
+  <!-- TABS de status (estilo pill) -->
   <div style="display:flex;background:#FAF7F5;border-radius:10px;padding:4px;gap:2px;margin-bottom:14px;overflow-x:auto;">
     ${[
-      {k:'',         l:'Todos'},
-      {k:'destaque', l:'⭐ Destaques'},
-      {k:'lowstock', l:'⚠️ Estoque baixo'},
-      {k:'archived', l:'📁 Arquivados'},
+      {k:'',         l:'Todos',          c:''},
+      {k:'ativo',    l:'● Ativos',       c:'#15803D'},
+      {k:'inativo',  l:'● Inativos',     c:'#64748B'},
+      {k:'destaque', l:'⭐ Destaques',   c:'#D97706'},
     ].map(t => {
       const active = (S._prodStatus||'') === t.k;
-      return `<button data-tab-status="${t.k}" style="flex:1;min-width:120px;padding:10px 14px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:${active?'700':'500'};color:${active?'var(--primary)':'#64748B'};background:${active?'#fff':'transparent'};box-shadow:${active?'0 1px 3px rgba(0,0,0,.06)':'none'};transition:all .2s;">${t.l}</button>`;
+      const count = filtered.length; // contagem com TODOS filtros aplicados (so funciona pra tab atual)
+      return `<button data-tab-status="${t.k}" style="flex:1;min-width:120px;padding:10px 14px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:${active?'700':'500'};color:${active?(t.c||'var(--primary)'):'#64748B'};background:${active?'#fff':'transparent'};box-shadow:${active?'0 1px 3px rgba(0,0,0,.06)':'none'};transition:all .2s;">${t.l}</button>`;
     }).join('')}
   </div>
 
@@ -326,7 +327,7 @@ export function renderProdutos(){
       const low=(p.stock||0)<=(p.minStock||5);
       const codigoProd = p.code || p.sku || '';
       const isSelected = (S._prodSelected instanceof Set) && S._prodSelected.has(p._id);
-      const isArchived = p.archived === true;
+      const isAtivo = p.activeOnSite !== false; // default true
       const img = p.imagem||p.images?.[0]||p.image||'';
       return `<tr style="border-bottom:1px solid #F1F5F9;${isSelected?'background:#FEF7F5;':''}">
         <td style="text-align:center;padding:10px 6px;"><input type="checkbox" data-prod-sel="${p._id}" ${isSelected?'checked':''} style="cursor:pointer;accent-color:var(--primary);width:16px;height:16px;"/></td>
@@ -341,12 +342,12 @@ export function renderProdutos(){
         <td style="padding:10px 6px;text-align:right;font-weight:700;color:#1E293B;font-size:13px;">${$c(p.salePrice)}</td>
         <td style="padding:10px 6px;text-align:center;"><span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:${mg>=50?'#DCFCE7':mg>=30?'#FEF3C7':'#FEE2E2'};color:${mg>=50?'#15803D':mg>=30?'#92400E':'#991B1B'};">${mg}%</span></td>
         <td style="padding:10px 6px;text-align:center;font-weight:600;color:${low?'#DC2626':'#1E293B'};font-size:13px;">${p.stock||0}</td>
-        <td style="padding:10px 6px;text-align:center;">${isArchived?'<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700;background:#FEE2E2;color:#991B1B;">📁 Arquivado</span>':'<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700;background:#DCFCE7;color:#15803D;">● Ativo</span>'}</td>
+        <td style="padding:10px 6px;text-align:center;">${isAtivo?'<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700;background:#DCFCE7;color:#15803D;">● Ativo</span>':'<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700;background:#F3F4F6;color:#64748B;">● Inativo</span>'}</td>
         <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
           <button type="button" data-act="destaque" data-id="${p._id}" title="${p.destaque?'Tirar destaque':'Marcar destaque'}" style="background:${p.destaque?'#FEF3C7':'transparent'};color:${p.destaque?'#D97706':'#94A3B8'};border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">⭐</button>
           <button type="button" data-act="edit" data-id="${p._id}" title="Editar" style="background:transparent;color:#3B82F6;border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">✏️</button>
           <button type="button" data-act="stock" data-id="${p._id}" title="Estoque" style="background:transparent;color:#10B981;border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">📦</button>
-          <button type="button" data-act="${isArchived?'unarchive':'archive'}" data-id="${p._id}" title="${isArchived?'Reativar':'Arquivar'}" style="background:transparent;color:${isArchived?'#10B981':'#DC2626'};border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">${isArchived?'⚡':'⏻'}</button>
+          <button type="button" data-act="${isAtivo?'desativar':'ativar'}" data-id="${p._id}" title="${isAtivo?'Desativar (sai do site)':'Ativar (entra no site)'}" style="background:transparent;color:${isAtivo?'#DC2626':'#10B981'};border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">${isAtivo?'⏻':'⚡'}</button>
           ${S.user?.role === 'Administrador' ? `<button type="button" data-act="delete" data-id="${p._id}" title="Excluir" style="background:transparent;color:#7F1D1D;border:none;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;">🗑️</button>` : ''}
         </td>
       </tr>`;

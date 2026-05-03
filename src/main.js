@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260502-6';
+const APP_VERSION = '20260502-7';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2440,15 +2440,19 @@ function bindPageActions(){
 
         // Acoes que usam PUT
         const updates = {
-          destaque: { destaque: !prod.destaque },
-          archive:  { archived: true },
-          unarchive:{ archived: false },
+          destaque:  { destaque: !prod.destaque },
+          ativar:    { activeOnSite: true },
+          desativar: { activeOnSite: false },
         }[act];
         if (!updates) return;
         try {
           await PUT('/products/' + id, updates);
           Object.assign(prod, updates);
-          const labels = { destaque: prod.destaque?'⭐ Em destaque':'☆ Destaque removido', archive:'📁 Arquivado', unarchive:'✅ Reativado' };
+          const labels = {
+            destaque: prod.destaque?'⭐ Em destaque':'☆ Destaque removido',
+            ativar:    '⚡ Ativado no site',
+            desativar: '⏻ Desativado no site',
+          };
           toast(labels[act] || '✅ OK');
           render();
         } catch(e) { toast('❌ '+(e.message||'erro'), true); }
@@ -2519,15 +2523,14 @@ function bindPageActions(){
           return;
         }
 
-        // Ativar/Arquivar/Destacar
+        // Ativar/Desativar/Destacar (afeta activeOnSite ou destaque)
         const updates = {
-          ativar: { archived: false },
-          arquivar: { archived: true },
-          destacar: { destaque: true },
-          undestacar: { destaque: false },
+          ativar:    { activeOnSite: true },
+          desativar: { activeOnSite: false },
+          destacar:  { destaque: true },
+          undestacar:{ destaque: false },
         }[action];
         if (!updates) return;
-        if (action === 'arquivar' && !confirm(`Arquivar ${ids.length} produto(s)? Eles não vão mais aparecer no PDV nem no site.`)) return;
 
         let ok = 0;
         for (const id of ids) {
@@ -2539,7 +2542,7 @@ function bindPageActions(){
           } catch(_){}
         }
         S._prodSelected.clear();
-        const labels = { ativar:'ativados', arquivar:'arquivados', destacar:'destacados', undestacar:'sem destaque' };
+        const labels = { ativar:'ativados no site', desativar:'desativados', destacar:'destacados', undestacar:'sem destaque' };
         toast(`✅ ${ok} produto(s) ${labels[action]}`);
         render();
       };
