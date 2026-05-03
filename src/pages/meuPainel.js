@@ -21,13 +21,33 @@ async function loadPontos(userId) {
   } catch { return []; }
 }
 
+// ── HISTORICO DE PEDIDOS DEDICADO (para acumular comissoes meses anteriores)
+// S.orders e limitado a 300 mais recentes (cache global); para o Meu Painel
+// precisamos de um historico maior para que colaboradoras com volume alto
+// vejam comissoes de meses anteriores. Buscamos ate 2000 pedidos uma vez
+// por sessao (cache 5min).
+let _ordersHistCache = null;
+let _ordersHistCacheAt = 0;
+async function loadOrdersHistorico() {
+  if (_ordersHistCache && (Date.now() - _ordersHistCacheAt) < 5*60_000) return _ordersHistCache;
+  try {
+    const r = await GET('/orders?limit=2000').catch(() => null);
+    _ordersHistCache = Array.isArray(r) ? r : [];
+    _ordersHistCacheAt = Date.now();
+    return _ordersHistCache;
+  } catch { return []; }
+}
+
 // Comissão calculada localmente (S.orders ja foi carregado)
 // Considera 3 tipos:
 //  - Venda: % sobre vendas em que ele e o vendedorId selecionado no PDV
 //  - Montagem: R$ fixo por produto montado (status 'Pronto'/'Em preparo' concluido)
 //  - Expedicao: R$ fixo por produto expedido (status 'Saiu p/ entrega' ou 'Entregue')
-function calcularComissoes(user) {
-  const orders = Array.isArray(S.orders) ? S.orders : [];
+function calcularComissoes(user, ordersOverride) {
+  // Usa historico dedicado se disponivel (mais meses), senao S.orders
+  const orders = Array.isArray(ordersOverride) && ordersOverride.length
+    ? ordersOverride
+    : (Array.isArray(S.orders) ? S.orders : []);
   const myEmail = String(user?.email||'').toLowerCase();
   const myId    = String(user?._id||user?.id||'');
   const myColabId = String(user?.colabId||'');
@@ -156,9 +176,15 @@ export function renderMeuPainel() {
       import('../main.js').then(m => m.render()).catch(()=>{});
     });
   }
+  // Dispara carga do historico (ate 2000 pedidos) para acumular meses anteriores
+  if (!_ordersHistCache) {
+    loadOrdersHistorico().then(() => {
+      import('../main.js').then(m => m.render()).catch(()=>{});
+    });
+  }
   const pontosRaw = _pontosCache || [];
   const pontos = agruparPontosPorDia(pontosRaw);
-  const comissoes = calcularComissoes(u);
+  const comissoes = calcularComissoes(u, _ordersHistCache);
   const totalAcumulado = comissoes.reduce((s,c) => s + c.total, 0);
   const totalVendaCom  = comissoes.reduce((s,c) => s + c.vendaComissao, 0);
   const totalMontCom   = comissoes.reduce((s,c) => s + c.montagemComissao, 0);
