@@ -26,7 +26,11 @@ function renderPaginasSection(cfg) {
     <div class="card" style="padding:14px;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div>
-          <div style="font-weight:700;font-size:15px;">${p.titulo}</div>
+          <div style="font-weight:700;font-size:15px;">${p.titulo} ${(() => {
+            const pos = p.position || 'footer';
+            const lbl = pos==='header'?'<span style="background:#DBEAFE;color:#1E40AF;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-left:6px;">📍 TOPO</span>':pos==='both'?'<span style="background:#DCFCE7;color:#15803D;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-left:6px;">📍 TOPO + RODAPÉ</span>':pos==='hidden'?'<span style="background:#F3F4F6;color:#64748B;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-left:6px;">🔗 OCULTA</span>':'<span style="background:#FAE8E6;color:#9F1239;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-left:6px;">📍 RODAPÉ</span>';
+            return lbl;
+          })()}</div>
           <div style="font-size:11px;color:var(--muted);">/${p.slug||p.titulo.toLowerCase().replace(/\s/g,'-')} · ${p.ativa?'✅ Publicada':'❌ Rascunho'}</div>
         </div>
         <div style="display:flex;gap:6px;">
@@ -100,7 +104,18 @@ export function ecSavePagamentos(){
 
 export function ecSaveBanners(){
   const count=document.querySelectorAll('[id^="bn-title-"]').length; const banners=[];
-  for(let i=0;i<count;i++){ const t=document.getElementById(`bn-title-${i}`)?.value?.trim()||''; if(!t) continue; banners.push({icon:document.getElementById(`bn-icon-${i}`)?.value||'🌸',title:t,sub:document.getElementById(`bn-sub-${i}`)?.value||'',cta:document.getElementById(`bn-cta-${i}`)?.value||'Ver mais',cat:document.getElementById(`bn-cat-${i}`)?.value||''}); }
+  for(let i=0;i<count;i++){
+    const t=document.getElementById(`bn-title-${i}`)?.value?.trim()||'';
+    if(!t) continue;
+    banners.push({
+      icon:document.getElementById(`bn-icon-${i}`)?.value||'🌸',
+      title:t,
+      sub:document.getElementById(`bn-sub-${i}`)?.value||'',
+      cta:document.getElementById(`bn-cta-${i}`)?.value||'Ver mais',
+      cat:document.getElementById(`bn-cat-${i}`)?.value||'',
+      image:document.getElementById(`bn-img-${i}`)?.value?.trim()||'',
+    });
+  }
   saveEcCfgSync({...getEcCfgSync(),banners}); toast('✅ Banners salvos!'); render();
 }
 
@@ -124,11 +139,73 @@ export function ecSaveLayout(){ const g=id=>document.getElementById(id); saveEcC
 
 export function applyPalette(p,s,a){ saveEcCfgSync({...getEcCfgSync(),primaryColor:p,primaryLight:s,accentColor:a}); toast('✅ Paleta aplicada!'); render(); }
 
-export function ecSaveRedes(){ const redes=['instagram','facebook','tiktok','youtube','pinterest','whatsapp','telegram','twitter']; const social={}; redes.forEach(r=>{ const url=document.getElementById(`ec-social-${r}`)?.value?.trim(); const ativo=document.getElementById(`ec-social-ativo-${r}`)?.checked; if(url&&ativo) social[r]=url; }); saveEcCfgSync({...getEcCfgSync(),social}); toast('✅ Redes salvas!'); render(); }
+export function ecSaveRedes(){
+  const redes=['instagram','facebook','tiktok','youtube','pinterest','whatsapp','telegram','twitter'];
+  const social={};
+  const socialPos={};
+  redes.forEach(r=>{
+    const url=document.getElementById(`ec-social-${r}`)?.value?.trim();
+    const pos=document.getElementById(`ec-social-pos-${r}`)?.value || 'footer';
+    if(url){
+      social[r]=url;
+      socialPos[r]=pos;
+    }
+  });
+  saveEcCfgSync({...getEcCfgSync(),social,socialPos});
+  toast('✅ Redes salvas!'); render();
+}
 
-export function ecNewPagina(idx=null){ const cfg=getEcCfgSync(); const pags=cfg.paginas||[]; const pag=idx!==null?pags[idx]:{titulo:'',slug:'',conteudo:'',ativa:true}; S._modal=`<div class="mo" onclick="if(event.target===this){S._modal='';render();}"><div class="mo-box" style="max-width:580px;max-height:92vh;overflow-y:auto;" onclick="event.stopPropagation()"><div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">📄 ${idx!==null?'Editar':'Nova'} Página</div><div class="fg" style="margin-bottom:10px;"><label class="fl">Título *</label><input class="fi" id="pag-titulo" value="${pag.titulo||''}" placeholder="Ex: Sobre Nós" oninput="const s=document.getElementById('pag-slug');if(s&&!s.value)s.value=this.value.toLowerCase().replace(/\\s+/g,'-').replace(/[^\\w-]/g,'')"/></div><div class="fg" style="margin-bottom:10px;"><label class="fl">Slug (URL)</label><input class="fi" id="pag-slug" value="${pag.slug||''}" placeholder="sobre-nos"/></div><div class="fg" style="margin-bottom:14px;"><label class="fl">Conteúdo</label><textarea class="fi" id="pag-conteudo" rows="8" style="resize:vertical;">${pag.conteudo||''}</textarea></div><label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer;"><input type="checkbox" id="pag-ativa" ${pag.ativa!==false?'checked':''} style="accent-color:var(--primary);"/> Página publicada</label><div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:1;" onclick="ecSavePagina(${idx!==null?idx:'null'})">💾 Salvar</button><button class="btn btn-ghost" onclick="S._modal='';render()">Cancelar</button></div></div></div>`; render(); }
+export function ecNewPagina(idx=null){
+  const cfg=getEcCfgSync();
+  const pags=cfg.paginas||[];
+  const pag=idx!==null?pags[idx]:{titulo:'',slug:'',conteudo:'',ativa:true,position:'footer'};
+  const pos = pag.position || 'footer';
+  S._modal=`<div class="mo" onclick="if(event.target===this){S._modal='';render();}">
+    <div class="mo-box" style="max-width:580px;max-height:92vh;overflow-y:auto;" onclick="event.stopPropagation()">
+      <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">📄 ${idx!==null?'Editar':'Nova'} Página</div>
+      <div class="fg" style="margin-bottom:10px;"><label class="fl">Título *</label>
+        <input class="fi" id="pag-titulo" value="${pag.titulo||''}" placeholder="Ex: Sobre Nós" oninput="const s=document.getElementById('pag-slug');if(s&&!s.value)s.value=this.value.toLowerCase().replace(/\\s+/g,'-').replace(/[^\\w-]/g,'')"/></div>
+      <div class="fg" style="margin-bottom:10px;"><label class="fl">Slug (URL)</label>
+        <input class="fi" id="pag-slug" value="${pag.slug||''}" placeholder="sobre-nos"/></div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">📍 Onde aparece no site</label>
+        <select class="fi" id="pag-position">
+          <option value="footer" ${pos==='footer'?'selected':''}>Apenas no Rodapé</option>
+          <option value="header" ${pos==='header'?'selected':''}>Apenas no Topo (menu)</option>
+          <option value="both"   ${pos==='both'?'selected':''}>Topo + Rodapé</option>
+          <option value="hidden" ${pos==='hidden'?'selected':''}>Não exibir (apenas URL direta)</option>
+        </select>
+      </div>
+      <div class="fg" style="margin-bottom:14px;"><label class="fl">Conteúdo</label>
+        <textarea class="fi" id="pag-conteudo" rows="8" style="resize:vertical;">${pag.conteudo||''}</textarea></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer;">
+        <input type="checkbox" id="pag-ativa" ${pag.ativa!==false?'checked':''} style="accent-color:var(--primary);"/> Página publicada</label>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="ecSavePagina(${idx!==null?idx:'null'})">💾 Salvar</button>
+        <button class="btn btn-ghost" onclick="S._modal='';render()">Cancelar</button>
+      </div>
+    </div></div>`;
+  render();
+}
 
-export function ecSavePagina(idx){ const t=document.getElementById('pag-titulo')?.value?.trim(); if(!t) return toast('❌ Título obrigatório',true); const cfg=getEcCfgSync(); const pags=[...(cfg.paginas||[])]; const nova={titulo:t,slug:document.getElementById('pag-slug')?.value?.trim()||t.toLowerCase().replace(/\s+/g,'-'),conteudo:document.getElementById('pag-conteudo')?.value||'',ativa:document.getElementById('pag-ativa')?.checked??true}; if(idx!==null&&idx!==undefined&&idx!=='null') pags[parseInt(idx)]=nova; else pags.push(nova); saveEcCfgSync({...cfg,paginas:pags}); S._modal=''; render(); toast('✅ Página salva!'); }
+export function ecSavePagina(idx){
+  const t=document.getElementById('pag-titulo')?.value?.trim();
+  if(!t) return toast('❌ Título obrigatório',true);
+  const cfg=getEcCfgSync();
+  const pags=[...(cfg.paginas||[])];
+  const nova={
+    titulo:t,
+    slug:document.getElementById('pag-slug')?.value?.trim()||t.toLowerCase().replace(/\s+/g,'-'),
+    conteudo:document.getElementById('pag-conteudo')?.value||'',
+    ativa:document.getElementById('pag-ativa')?.checked??true,
+    position: document.getElementById('pag-position')?.value || 'footer',
+  };
+  if(idx!==null&&idx!==undefined&&idx!=='null') pags[parseInt(idx)]=nova;
+  else pags.push(nova);
+  saveEcCfgSync({...cfg,paginas:pags});
+  S._modal=''; render();
+  toast('✅ Página salva!');
+}
 
 export function ecTogglePagina(i){ const cfg=getEcCfgSync(); const pags=[...(cfg.paginas||[])]; pags[i]={...pags[i],ativa:!pags[i].ativa}; saveEcCfgSync({...cfg,paginas:pags}); render(); toast(pags[i].ativa?'✅ Publicada!':'❌ Ocultada'); }
 
@@ -610,7 +687,12 @@ ${tab==='redes'?`
           <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px;">${r.l}</label>
           <input class="fi" id="ec-social-${r.k}" value="${cfg.social?.[r.k]||''}" placeholder="${r.p}" style="font-size:12px;"/>
         </div>
-        <input type="checkbox" id="ec-social-ativo-${r.k}" ${cfg.social?.[r.k]?'checked':''} style="accent-color:var(--primary);width:16px;height:16px;" title="Exibir na loja"/>
+        <select id="ec-social-pos-${r.k}" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;flex-shrink:0;" title="Onde aparece">
+          ${(() => {
+            const cur = cfg.socialPos?.[r.k] || 'footer';
+            return ['footer','header','both','hidden'].map(p=>`<option value="${p}" ${cur===p?'selected':''}>${p==='footer'?'📍 Rodapé':p==='header'?'📍 Topo':p==='both'?'Topo+Rodapé':'Oculto'}</option>`).join('');
+          })()}
+        </select>
       </div>`).join('')}
     </div>
     <button class="btn btn-primary" onclick="ecSaveRedes()" style="width:100%;margin-top:16px;padding:12px;">💾 Salvar Redes Sociais</button>
@@ -652,7 +734,7 @@ ${tab==='banners'?`
         </div>
       </div>
       <div class="fr2" style="gap:10px;">
-        <div class="fg"><label class="fl">Emoji / ícone</label>
+        <div class="fg"><label class="fl">Emoji / ícone (fallback)</label>
           <input class="fi" id="bn-icon-${i}" value="${b.icon||'🌸'}" style="font-size:20px;text-align:center;width:70px;"/></div>
         <div class="fg"><label class="fl">Título *</label>
           <input class="fi" id="bn-title-${i}" value="${b.title||''}"/></div>
@@ -665,6 +747,14 @@ ${tab==='banners'?`
             <option value="">Página inicial</option>
             ${[...new Set(S.products.map(p=>p.category).filter(Boolean))].map(c=>`<option ${b.cat===c?'selected':''}>${c}</option>`).join('')}
           </select></div>
+        <div class="fg" style="grid-column:span 2;"><label class="fl">🖼️ Imagem do banner (URL ou upload)</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input class="fi" id="bn-img-${i}" value="${b.image||''}" placeholder="https://... ou clique para upload" style="flex:1;font-size:11px;"/>
+            <input type="file" id="bn-img-file-${i}" accept="image/*" style="display:none;" onchange="(()=>{const f=this.files[0];if(!f)return;if(f.size>2*1024*1024){alert('Max 2 MB');return;}const r=new FileReader();r.onload=(e)=>{document.getElementById('bn-img-${i}').value=e.target.result;document.getElementById('bn-preview-${i}').src=e.target.result;document.getElementById('bn-preview-${i}').style.display='block';};r.readAsDataURL(f);})()"/>
+            <label for="bn-img-file-${i}" class="btn btn-ghost btn-sm" style="cursor:pointer;flex-shrink:0;">📤 Upload</label>
+          </div>
+          ${b.image?`<img id="bn-preview-${i}" src="${b.image}" style="max-width:200px;max-height:80px;margin-top:6px;border-radius:6px;border:1px solid var(--border);"/>`:`<img id="bn-preview-${i}" style="display:none;max-width:200px;max-height:80px;margin-top:6px;border-radius:6px;border:1px solid var(--border);"/>`}
+        </div>
       </div>
       <!-- Preview mini -->
       <div style="margin-top:10px;background:linear-gradient(135deg,#3D0A20,#8B2252);border-radius:8px;padding:16px;color:#fff;display:flex;align-items:center;gap:16px;">
