@@ -25,7 +25,9 @@ import { getColabs } from '../services/auth.js';
 import { normalizeUnidade, labelUnidade } from '../utils/unidadeRules.js';
 
 // Lista canonica de unidades disponiveis para meta
+// Slug 'todas' agrega TODAS as unidades (sem filtro por unit/saleUnit).
 export const UNIDADES_META = [
+  { slug: 'todas',         label: '🌐 Todas as Unidades' },
   { slug: 'cdle',          label: 'CDLE' },
   { slug: 'novo_aleixo',   label: 'Loja Novo Aleixo' },
   { slug: 'allegro',       label: 'Loja Allegro Mall' },
@@ -85,6 +87,7 @@ export function colabsPorTipoMeta(tipo) {
   if (tipo === 'vendas')    return colabs.filter(c => isAtend(c));
   if (tipo === 'producao')  return colabs.filter(c => (isAtend(c) || isProd(c)) && !isEntreg(c));
   if (tipo === 'expedicao') return colabs.filter(c => (isAtend(c) || isExp(c))  && !isEntreg(c));
+  if (tipo === 'produto')   return colabs.filter(c => isAtend(c)); // mesma lista de vendas
   return colabs;
 }
 
@@ -103,13 +106,16 @@ export function calcularRealizado(meta, ordersList = S.orders) {
     colab = getColabs().find(c => _colabKey(c) === String(meta.colabId));
     if (!colab) return { realizado:0, pct:0, atingida:false, ultrapassou:false, inicio, fim };
   } else if (escopo === 'unidade') {
-    unidadeSlug = normalizeUnidade(meta.unidade);
+    unidadeSlug = String(meta.unidade||'').toLowerCase() === 'todas'
+      ? 'todas'
+      : normalizeUnidade(meta.unidade);
     if (!unidadeSlug) return { realizado:0, pct:0, atingida:false, ultrapassou:false, inicio, fim };
   }
 
-  // Helper: pedido pertence a unidade?
+  // Helper: pedido pertence a unidade? ('todas' => sempre true)
   const pedidoNaUnidade = (o) => {
     if (!unidadeSlug) return false;
+    if (unidadeSlug === 'todas') return true;
     if (unidadeSlug === 'ecommerce') {
       const src = String(o.source||'').toLowerCase();
       return src.includes('ecomm') || src === 'site' || src === 'e-commerce';
@@ -117,6 +123,23 @@ export function calcularRealizado(meta, ordersList = S.orders) {
     const u  = normalizeUnidade(o.unit || o.unidade);
     const su = normalizeUnidade(o.saleUnit);
     return u === unidadeSlug || su === unidadeSlug;
+  };
+
+  // Helper: item bate com produto-alvo da meta?
+  const itemBateProduto = (it) => {
+    const codeAlvo = String(meta.produtoCode||'').toUpperCase().trim();
+    const idAlvo   = String(meta.produtoId||'').trim();
+    const nomeAlvo = String(meta.produtoNome||'').toLowerCase().trim();
+    if (idAlvo) {
+      if (String(it.product||it._id||it.productId||'') === idAlvo) return true;
+    }
+    if (codeAlvo) {
+      if (String(it.code||'').toUpperCase().trim() === codeAlvo) return true;
+    }
+    if (nomeAlvo) {
+      if (String(it.name||'').toLowerCase().trim() === nomeAlvo) return true;
+    }
+    return false;
   };
 
   let realizado = 0;
@@ -148,6 +171,20 @@ export function calcularRealizado(meta, ordersList = S.orders) {
       const bate = escopo === 'unidade' ? pedidoNaUnidade(o)
         : _isMine(colab, o.expedidorId, o.expedidorEmail, o.driverColabId, o.driverName);
       if (bate) realizado += 1;
+    }
+    else if (meta.tipo === 'produto') {
+      // Conta UNIDADES vendidas de um produto especifico em pedidos APROVADOS
+      if (!_PG_APROV.has(String(o.paymentStatus||''))) continue;
+      // Filtro por escopo:
+      let pedidoBate;
+      if (escopo === 'unidade') pedidoBate = pedidoNaUnidade(o);
+      else pedidoBate = _isMine(colab, o.vendedorId, o.vendedorEmail) ||
+        (!o.vendedorId && _isMine(colab, o.createdByColabId, o.createdByEmail, o.criadoPor, o.createdBy, o.createdByName));
+      if (!pedidoBate) continue;
+      // Soma qty dos items que batem com o produto-alvo
+      for (const it of (o.items||[])) {
+        if (itemBateProduto(it)) realizado += Number(it.qty)||1;
+      }
     }
   }
   const valorMeta = Number(meta.valorMeta) || 0;
@@ -232,13 +269,17 @@ function renderMetasList() {
     const status = pctStatus(r.pct);
     const tipoLabel = labelTipo(m.tipo);
     const unit = m.tipo === 'vendas' ? 'R$' : 'un';
-    const fmtVal = v => unit==='R$' ? $c(v) : `${Math.round(v)} ${m.tipo==='producao'?'produtos':'entregas'}`;
+    const fmtVal = v => unit==='R$' ? $c(v) : `${Math.round(v)} ${m.tipo==='producao'?'produtos':m.tipo==='produto'?'un':'entregas'}`;
     const bonusLbl = m.bonusModo === 'individual' ? '👤 Bônus individual' : '👥 Bônus de equipe (dividido)';
+    const prodTag = m.tipo === 'produto'
+      ? `<div style="display:inline-block;margin-top:3px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">📦 ${m.produtoCode?'#'+m.produtoCode+' · ':''}${escHtml(m.produtoNome||'(produto)')}</div>`
+      : '';
     return `<div style="background:${corBg};border-left:5px solid ${cor};border-radius:8px;padding:12px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
         <div>
           <div style="font-size:14px;font-weight:800;color:#1E293B;">${tipoLabel} ${status.emoji} ${escHtml(m.nome||'')}</div>
           <div style="font-size:11px;color:var(--muted);">${labelPeriodo(m.periodoTipo)} · ${fmtData(m.dataInicio)} a ${fmtData(m.dataFim)}</div>
+          ${prodTag}
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
           ${m.visivel
@@ -371,11 +412,17 @@ function renderMetasList() {
 function _capturarFormDraft() {
   const get = id => document.getElementById(id);
   if (!get('meta-nome')) return; // form nao montado
+  // Produto vem encodado como "id|code|nome"
+  const prodRaw = get('meta-produto')?.value || '';
+  const [pId, pCode, pNome] = prodRaw.split('|');
   S._metaDraft = {
     nome:        get('meta-nome')?.value || '',
     tipo:        get('meta-tipo')?.value || '',
     colabId:     get('meta-colab')?.value || '',
     unidade:     get('meta-unidade')?.value || '',
+    produtoId:   pId   || S._metaDraft?.produtoId   || '',
+    produtoCode: pCode || S._metaDraft?.produtoCode || '',
+    produtoNome: pNome || S._metaDraft?.produtoNome || '',
     periodoTipo: get('meta-periodo-tipo')?.value || '',
     dataInicio:  get('meta-data-inicio')?.value || '',
     dataFim:     get('meta-data-fim')?.value || '',
@@ -426,6 +473,7 @@ function renderMetasNova() {
           <option value="vendas"    ${tipo==='vendas'   ?'selected':''}>💰 Vendas (R$)</option>
           <option value="producao"  ${tipo==='producao' ?'selected':''}>🌹 Produção / Montagem (qtd produtos)</option>
           <option value="expedicao" ${tipo==='expedicao'?'selected':''}>🚚 Expedição (qtd entregas)</option>
+          <option value="produto"   ${tipo==='produto'  ?'selected':''}>📦 Produto Específico (qtd vendida)</option>
         </select>
       </div>
 
@@ -468,9 +516,32 @@ function renderMetasNova() {
         <input type="date" class="fi" id="meta-data-fim" value="${meta.dataFim||''}"/>
       </div>
 
+      ${tipo === 'produto' ? `
       <div class="fg" style="grid-column:span 2;">
-        <label class="fl">🎯 Valor da meta <span style="color:var(--muted);font-size:11px;">(${tipo==='vendas'?'R$':tipo==='producao'?'produtos':'entregas'})</span></label>
-        <input type="number" class="fi" id="meta-valor" min="0" step="${tipo==='vendas'?'0.01':'1'}" value="${meta.valorMeta||''}" placeholder="${tipo==='vendas'?'Ex: 30000':tipo==='producao'?'Ex: 200':'Ex: 100'}"/>
+        <label class="fl">📦 Produto-alvo <span style="color:var(--red)">*</span></label>
+        <select class="fi" id="meta-produto">
+          <option value="">— Selecione um produto —</option>
+          ${(S.products||[]).filter(p => p.active !== false).sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(p => {
+            const code = p.code || p.codigo || '';
+            const sel = (String(meta.produtoId||'') === String(p._id||p.id) || (code && code === meta.produtoCode));
+            return `<option value="${p._id||p.id}|${code}|${escHtml(p.name||'')}" ${sel?'selected':''}>${code?'#'+code+' — ':''}${escHtml(p.name||'?')}</option>`;
+          }).join('')}
+        </select>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px;">O sistema soma a quantidade vendida deste produto no período (pedidos aprovados).</div>
+      </div>
+      ` : ''}
+
+      <div class="fg" style="grid-column:span 2;">
+        <label class="fl">🎯 Valor da meta <span style="color:var(--muted);font-size:11px;">(${
+          tipo==='vendas'    ? 'R$' :
+          tipo==='producao'  ? 'qtd produtos' :
+          tipo==='expedicao' ? 'qtd entregas' :
+          tipo==='produto'   ? 'unidades do produto' : ''})</span></label>
+        <input type="number" class="fi" id="meta-valor" min="0" step="${tipo==='vendas'?'0.01':'1'}" value="${meta.valorMeta||''}" placeholder="${
+          tipo==='vendas'    ? 'Ex: 30000' :
+          tipo==='producao'  ? 'Ex: 200'   :
+          tipo==='expedicao' ? 'Ex: 100'   :
+          tipo==='produto'   ? 'Ex: 50 (vender 50 unidades)' : 'Ex: 100'}"/>
       </div>
 
       <div class="fg">
@@ -667,7 +738,7 @@ ${naoBateram.length > 0 ? `
 // ── HELPERS DE FORMATACAO ────────────────────────────────────
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmtData(iso) { if (!iso) return '—'; const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; }
-function labelTipo(t) { return { vendas:'💰 Vendas', producao:'🌹 Produção', expedicao:'🚚 Expedição' }[t] || t; }
+function labelTipo(t) { return { vendas:'💰 Vendas', producao:'🌹 Produção', expedicao:'🚚 Expedição', produto:'📦 Produto' }[t] || t; }
 function labelPeriodo(p) { return { semanal:'Semanal', mensal:'Mensal' }[p] || p; }
 
 function pctCor(pct) {
@@ -728,8 +799,9 @@ export function bindMetasEvents() {
   });
 
   // Captura draft ao digitar/blur em qualquer campo do form (defensivo)
-  ['meta-nome','meta-colab','meta-unidade','meta-periodo-tipo','meta-data-inicio',
-   'meta-data-fim','meta-valor','meta-bonus-modo','meta-bonus-valor','meta-visivel'
+  ['meta-nome','meta-colab','meta-unidade','meta-produto','meta-periodo-tipo',
+   'meta-data-inicio','meta-data-fim','meta-valor','meta-bonus-modo',
+   'meta-bonus-valor','meta-visivel'
   ].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', _capturarFormDraft);
@@ -748,10 +820,14 @@ export function bindMetasEvents() {
     const bonusModo   = document.getElementById('meta-bonus-modo')?.value;
     const bonusValor  = Number(document.getElementById('meta-bonus-valor')?.value) || 0;
     const visivel     = !!document.getElementById('meta-visivel')?.checked;
+    // Produto-alvo (so se tipo === 'produto')
+    const prodRaw = document.getElementById('meta-produto')?.value || '';
+    const [produtoId, produtoCode, produtoNome] = prodRaw.split('|');
 
     if (!nome)       { toast('Informe o nome da meta', true); return; }
     if (escopo === 'colab'   && !colabId)  { toast('Selecione uma colaboradora', true); return; }
     if (escopo === 'unidade' && !unidade)  { toast('Selecione uma unidade', true); return; }
+    if (tipo === 'produto'   && !produtoId && !produtoCode && !produtoNome) { toast('Selecione um produto-alvo', true); return; }
     if (!dataInicio || !dataFim) { toast('Defina período (datas início e fim)', true); return; }
     if (dataInicio > dataFim) { toast('Data inicial maior que final', true); return; }
     if (!valorMeta || valorMeta <= 0) { toast('Valor da meta deve ser > 0', true); return; }
@@ -759,7 +835,9 @@ export function bindMetasEvents() {
 
     const metas = getMetas();
     const editId = S._metasEditId;
-    const payload = { nome, escopo, tipo, colabId, unidade, periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor, visivel };
+    const payload = { nome, escopo, tipo, colabId, unidade,
+      produtoId: produtoId||'', produtoCode: produtoCode||'', produtoNome: produtoNome||'',
+      periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor, visivel };
     if (editId) {
       const idx = metas.findIndex(m => m.id === editId);
       if (idx >= 0) {
@@ -830,7 +908,7 @@ export function renderMetasParaAtendente(user, ordersList = S.orders) {
     const status = pctStatus(r.pct);
     const tipoLbl = labelTipo(m.tipo);
     const unit = m.tipo === 'vendas' ? 'R$' : 'un';
-    const fmtVal = v => unit==='R$' ? $c(v) : `${Math.round(v)} ${m.tipo==='producao'?'produtos':'entregas'}`;
+    const fmtVal = v => unit==='R$' ? $c(v) : `${Math.round(v)} ${m.tipo==='producao'?'produtos':m.tipo==='produto'?'un':'entregas'}`;
     return `<div style="margin-bottom:10px;padding:12px;background:${corBg};border-left:4px solid ${cor};border-radius:8px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
         <div>
