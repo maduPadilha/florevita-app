@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-29';
+const APP_VERSION = '20260503-30';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -78,6 +78,7 @@ import { renderAgenteTI, bindAgenteTIEvents } from './pages/agenteTI.js';
 import { renderEcommerce } from './pages/ecommerce.js';
 import { renderMeuPainel } from './pages/meuPainel.js';
 import { renderMetas, bindMetasEvents } from './pages/metas.js';
+import { renderRH, bindRHEvents } from './pages/rh.js';
 import { renderCategorias } from './pages/categorias.js';
 import { renderOrcamento, getOrcamentos, saveOrcamentos, calcOrcamento, newOrcItem } from './pages/orcamento.js';
 import { renderAppEntregador, confirmDeliveryByQR, showFullImg, abrirRota, bindRotaButtons } from './pages/entregador.js';
@@ -1313,6 +1314,7 @@ function renderApp(){
     {k:'notasFiscais',l:'Notas Fiscais',i:'🧾',m:'notasFiscais',s:'Financeiro'},
     {k:'relatorios',l:'Relatórios',i:'📈',m:'reports',s:'Financeiro'},
     {k:'metas',l:'Metas',i:'🎯',m:'reports',s:'Financeiro', adminOnly:true},
+    {k:'rh',l:'RH (Recursos Humanos)',i:'🧑‍💼',m:'users',s:'Config', adminOnly:true},
     {k:'alertas',l:'Alertas',i:'🔔',m:'alertas',s:'Sistema'},
     {k:'whatsapp',l:'WhatsApp',i:'💬',m:'whatsapp',s:'Sistema'},
     {k:'usuarios',l:'Usuários',i:'👤',m:'users',s:'Config'},
@@ -1337,7 +1339,7 @@ function renderApp(){
     dashboard:'dashboard', pdv:'pdv', caixa:'caixa', pedidos:'orders',
     clientes:'clients', produtos:'products', categorias:'products',
     estoque:'stock', producao:'production', expedicao:'delivery',
-    ponto:'ponto', financeiro:'financial', relatorios:'reports', metas:'reports',
+    ponto:'ponto', financeiro:'financial', relatorios:'reports', metas:'reports', rh:'users',
     alertas:'alertas', whatsapp:'whatsapp', usuarios:'users',
     colaboradores:'users', impressao:'impressao', backup:'backup',
     config:'config', ecommerce:'ecommerce', orcamento:'orcamentos',
@@ -1372,7 +1374,7 @@ ${renderSidebar(nav, 0, 0)}
     }
   }
 
-  const pages={dashboard:renderDashboard,pdv:renderPDV,pedidos:renderPedidos,clientes:renderClientes,produtos:renderProdutos,estoque:renderEstoque,producao:renderProducao,expedicao:renderExpedicao,entregador:renderAppEntregador,financeiro:renderFinanceiro,relatorios:renderRelatorios,alertas:renderAlertas,usuarios:renderUsuarios,colaboradores:renderColaboradores,impressao:renderImpressao,config:renderConfig,ponto:renderPonto,caixa:renderCaixa,backup:renderBackup,whatsapp:renderWhatsApp,ecommerce:renderEcommerce,orcamento:renderOrcamento,categorias:renderCategorias,notasFiscais:renderNotasFiscais,auditLogs:renderAuditLogs,agenteTI:renderAgenteTI,meuPainel:renderMeuPainel,metas:renderMetas};
+  const pages={dashboard:renderDashboard,pdv:renderPDV,pedidos:renderPedidos,clientes:renderClientes,produtos:renderProdutos,estoque:renderEstoque,producao:renderProducao,expedicao:renderExpedicao,entregador:renderAppEntregador,financeiro:renderFinanceiro,relatorios:renderRelatorios,alertas:renderAlertas,usuarios:renderUsuarios,colaboradores:renderColaboradores,impressao:renderImpressao,config:renderConfig,ponto:renderPonto,caixa:renderCaixa,backup:renderBackup,whatsapp:renderWhatsApp,ecommerce:renderEcommerce,orcamento:renderOrcamento,categorias:renderCategorias,notasFiscais:renderNotasFiscais,auditLogs:renderAuditLogs,agenteTI:renderAgenteTI,meuPainel:renderMeuPainel,metas:renderMetas,rh:renderRH};
   const content = (()=>{ try{ return pages[S.page] ? pages[S.page]() : `<div class="empty card"><div class="empty-icon">🌸</div><p>Em desenvolvimento</p></div>`; }catch(e){ console.error('[render '+S.page+']',e); return `<div class="card" style="color:var(--red);padding:20px;">⚠️ Erro ao carregar o módulo. <button onclick="setPage('dashboard')" class="btn btn-ghost btn-sm" style="margin-top:8px;">← Dashboard</button><br/><small style="color:var(--muted)">${e.message}</small></div>`; } })();
   // Sino: contagem de notificacoes nao-lidas (le direto do localStorage
   // para nao precisar de await dentro de render() sync)
@@ -2439,6 +2441,11 @@ function bindPageActions(){
   // ── Metas ─────────────────────────────────────────────────────
   if(S.page==='metas'){
     try{ bindMetasEvents(); }catch(e){ console.error('bindMetasEvents', e); }
+  }
+
+  // ── RH ────────────────────────────────────────────────────────
+  if(S.page==='rh'){
+    try{ bindRHEvents(); }catch(e){ console.error('bindRHEvents', e); }
   }
 
 
