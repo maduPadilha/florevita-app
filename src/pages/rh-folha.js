@@ -67,6 +67,20 @@ function round2(n) { return Math.round((n||0)*100)/100; }
 
 // ── HELPERS ──────────────────────────────────────────────────
 function _colabKey(c) { return String(c?._id || c?.id || c?.backendId || c?.email || c?.name || ''); }
+
+// Folha de Pagamento atende SOMENTE colaboradores com cargo
+// 'Atendimento' ou 'Gerente'. Outros (Producao, Expedicao, Financeiro,
+// Entregador, Contador) NAO entram na folha — sao remuneracoes
+// gerenciadas em outros lugares (ex: comissao por produto/entrega).
+function _colabsFolha() {
+  const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  return getColabs()
+    .filter(c => c.active !== false)
+    .filter(c => {
+      const car = norm(c.cargo);
+      return car.includes('atend') || car.includes('gerente');
+    });
+}
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmtNum(n, decs=2) {
   return (Number(n)||0).toLocaleString('pt-BR', { minimumFractionDigits: decs, maximumFractionDigits: decs });
@@ -116,7 +130,7 @@ ${sub === 'historico' ? renderHistorico()    : ''}
 
 // ─── A) LISTA DE COLABS COM STATUS DE CADASTRO ──────────────
 function renderColabsLista() {
-  const colabs = getColabs().filter(c => c.active !== false).sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  const colabs = _colabsFolha().sort((a,b) => (a.name||'').localeCompare(b.name||''));
   const dadosAll = getRHDados();
   return `
 <div class="card" style="margin-bottom:12px;">
@@ -154,7 +168,7 @@ ${colabs.map(c => {
 // ─── B) FORM DADOS RH POR COLAB ─────────────────────────────
 function renderDadosColab() {
   const colabKey = S._rhFolhaColab || '';
-  const colabs = getColabs().filter(c => c.active !== false);
+  const colabs = _colabsFolha();
   const colab = colabs.find(c => _colabKey(c) === colabKey);
   if (!colab) {
     return `<div class="card" style="text-align:center;padding:30px;color:var(--muted);">
@@ -245,7 +259,7 @@ function renderGerarFolha() {
   const colabKey = S._rhFolhaColab || '';
   const tipoDoc  = S._rhFolhaTipo  || 'contracheque'; // contracheque | adiantamento
   const mesAno   = S._rhFolhaMes   || (() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; })();
-  const colabs = getColabs().filter(c => c.active !== false);
+  const colabs = _colabsFolha();
   const colab = colabs.find(c => _colabKey(c) === colabKey);
   const dados = colab ? getDadosColab(colabKey) : {};
 
