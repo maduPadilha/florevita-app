@@ -23,44 +23,33 @@ function getMetasPeriod(per){
   return start;
 }
 
-function getColabStats(colab){
-  if(!colab) return {vendas:0,comissao:0,montagens:0,expedicoes:0};
-  const acts = getActivities();
-  const ids = new Set([colab.id, colab.backendId].filter(Boolean));
-  const emailLow = (colab.email||'').toLowerCase();
+// ── HELPERS UNIFICADOS (v2) ──────────────────────────────────
+// Status de pagamento que contam como venda confirmada (faturamento).
+const _PG_APROV = new Set(['Aprovado','Pago','aprovado','pago','Pago na Entrega','Recebido']);
 
-  const mPer = colab.metas?.montagemPer || 'dia';
-  const ePer = colab.metas?.expedicaoPer || 'dia';
-  const mStart = getMetasPeriod(mPer);
-  const eStart = getMetasPeriod(ePer);
-
-  let vendas=0, comissao=0, montagens=0, expedicoes=0;
-  acts.forEach(a=>{
-    const byId   = ids.has(a.userId);
-    const byEmail= (a.userEmail||'').toLowerCase()===emailLow;
-    const byName = (a.userName||'').toLowerCase()===(colab.name||'').toLowerCase();
-    const isMe   = byId || byEmail || byName;
-    if(!isMe) return;
-    const aDate = new Date(a.date);
-    if(a.type==='venda'){
-      vendas++;
-      const pct = colab.metas?.comissaoVenda||colab.metas?.vendaPct||0;
-      comissao += (a.total||0) * (pct/100);
-    }
-    if(a.type==='montagem' && aDate >= mStart){
-      montagens++;
-      comissao += colab.metas?.comissaoMontagem||0;
-    }
-    if(a.type==='expedicao' && aDate >= eStart){
-      expedicoes++;
-      comissao += colab.metas?.comissaoExpedicao||0;
-    }
-  });
-  return {vendas, comissao, montagens, expedicoes};
+// Identifica se 'orderField' (string|id) bate com o colab informado.
+// Usa _id, backendId, email e nome (case-insensitive). Tolerante a
+// pedidos antigos com valores em formatos diferentes.
+function _isMine(colab, ...vals) {
+  if (!colab) return false;
+  const ids = new Set([colab._id, colab.id, colab.backendId].filter(Boolean).map(String));
+  const emailLow = String(colab.email||'').toLowerCase();
+  const nameLow  = String(colab.name ||'').toLowerCase();
+  for (const v of vals) {
+    if (v == null || v === '') continue;
+    const s = String(v);
+    if (ids.has(s)) return true;
+    const sLow = s.toLowerCase();
+    if (emailLow && sLow === emailLow) return true;
+    if (nameLow  && sLow === nameLow)  return true;
+  }
+  return false;
 }
 
-// Versão que respeita o período escolhido no Relatórios (dia/semana/mes/mes_ant/todos)
-// Separa comissão por tipo (venda / montagem / expedição) e total de faturamento de vendas.
+// Usa S.orders (fonte da verdade) — campos vendedorId / montadorId /
+// expedidorId / driverColabId / driverName + paymentStatus aprovado.
+// Activities (legado) fica como complemento — soma so o que NAO veio
+// pelo orders (evita duplicar).
 function getColabStatsForPeriod(colab, inPeriod){
   const base = {
     vendas:0, fatVendas:0, comissaoVenda:0,
@@ -69,34 +58,64 @@ function getColabStatsForPeriod(colab, inPeriod){
     comissaoTotal:0
   };
   if(!colab) return base;
-  const acts = getActivities();
-  const ids = new Set([colab.id, colab.backendId].filter(Boolean));
-  const emailLow = (colab.email||'').toLowerCase();
-  const nameLow  = (colab.name ||'').toLowerCase();
   const pctV = Number(colab.metas?.comissaoVenda ?? colab.metas?.vendaPct ?? 0) || 0;
   const vM   = Number(colab.metas?.comissaoMontagem  ?? 0) || 0;
   const vE   = Number(colab.metas?.comissaoExpedicao ?? 0) || 0;
 
-  acts.forEach(a=>{
-    if(!inPeriod(a.date)) return;
-    const byId   = a.userId && ids.has(a.userId);
-    const byEmail= emailLow && (a.userEmail||'').toLowerCase()===emailLow;
-    const byName = nameLow  && (a.userName ||'').toLowerCase()===nameLow;
-    if(!(byId || byEmail || byName)) return;
-    if(a.type==='venda'){
-      base.vendas++;
-      base.fatVendas += (a.total||0);
-      base.comissaoVenda += (a.total||0) * (pctV/100);
-    } else if(a.type==='montagem'){
-      base.montagens++;
-      base.comissaoMontagem += vM;
-    } else if(a.type==='expedicao'){
-      base.expedicoes++;
-      base.comissaoExpedicao += vE;
+  const orders = Array.isArray(S.orders) ? S.orders : [];
+  for (const o of orders) {
+    const dataRef = o.createdAt || o.scheduledDate;
+    if (!inPeriod(dataRef)) continue;
+    const itemsQty = (o.items||[]).reduce((s,i)=>s+(Number(i.qty)||1), 0) || 1;
+
+    // VENDAS — pedido APROVADO + colab e o vendedor (fallback createdBy)
+    const aprov = _PG_APROV.has(String(o.paymentStatus||''));
+    if (aprov) {
+      const ehMinhaVenda = _isMine(colab, o.vendedorId, o.vendedorEmail) ||
+        (!o.vendedorId && _isMine(colab, o.createdByColabId, o.createdByEmail, o.criadoPor, o.createdBy, o.createdByName));
+      if (ehMinhaVenda) {
+        base.vendas++;
+        base.fatVendas += Number(o.total)||0;
+        base.comissaoVenda += (Number(o.total)||0) * (pctV/100);
+      }
     }
-  });
+
+    // MONTAGEM — status >= Pronto + colab e o montador
+    const st = String(o.status||'').toLowerCase();
+    if (['pronto','saiu p/ entrega','entregue'].some(x => st.includes(x))) {
+      if (_isMine(colab, o.montadorId, o.montadorEmail)) {
+        base.montagens += itemsQty;
+        base.comissaoMontagem += vM * itemsQty;
+      }
+    }
+
+    // EXPEDICAO — status Entregue + colab e expedidor/driver
+    if (st.includes('entregue')) {
+      if (_isMine(colab, o.expedidorId, o.expedidorEmail, o.driverColabId, o.driverName)) {
+        base.expedicoes++;
+        base.comissaoExpedicao += vE;
+      }
+    }
+  }
+
   base.comissaoTotal = base.comissaoVenda + base.comissaoMontagem + base.comissaoExpedicao;
   return base;
+}
+
+// Versao "simples" usada no card antigo de Metas — periodos do colab.
+// Agora delegada para a versao unificada usando inPeriod baseado na meta.
+function getColabStats(colab){
+  if(!colab) return {vendas:0,comissao:0,montagens:0,expedicoes:0};
+  const mPer = colab.metas?.montagemPer || 'dia';
+  const mStart = getMetasPeriod(mPer);
+  const inPeriod = d => { const dt = new Date(d); return !isNaN(dt) && dt >= mStart; };
+  const s = getColabStatsForPeriod(colab, inPeriod);
+  return {
+    vendas: s.vendas,
+    comissao: s.comissaoTotal,
+    montagens: s.montagens,
+    expedicoes: s.expedicoes,
+  };
 }
 
 function metaBar(atual, meta, label, unit=''){
@@ -541,29 +560,45 @@ export function renderRelatorios(){
   if(!selColab) Object.values(orphanMap).forEach(o=>byUser.push(o));
 
   // Por entregador — usa a TAXA REAL APLICADA em cada pedido (auditoria)
+  // v2: identifica o entregador por driverColabId/expedidorId/driverName
+  // (qualquer um) — pedidos antigos so tem driverName, novos tem ID.
   const byDriver={};
-  getColabs().filter(c=>c.cargo==='Entregador'&&c.active!==false).forEach(c=>{
+  const entregadoresAtivos = getColabs().filter(c => c.cargo === 'Entregador' && c.active !== false);
+  entregadoresAtivos.forEach(c => {
     const key = (c.name||'').trim();
-    if(key) byDriver[key]={entregas:0,total:0,ganho:0,valorPorEntrega:c.metas?.valorEntrega||0,colabId:c.id};
+    if (key) byDriver[key] = { entregas:0, total:0, ganho:0,
+      valorPorEntrega: c.metas?.valorEntrega || 0,
+      colabId: c._id || c.id,
+      _idsAceitos: new Set([c._id, c.id, c.backendId, (c.email||'').toLowerCase(), (c.name||'').toLowerCase()].filter(Boolean).map(String))
+    };
   });
   entregues.forEach(o=>{
-    // Prioriza a taxa registrada no momento da expedição (auditoria)
-    // Fallback: taxa atual do pedido; último fallback: taxa configurada do colab
     const appliedFee = (typeof o.assignedDeliveryFee === 'number') ? o.assignedDeliveryFee
                      : (typeof o.deliveryFee === 'number' ? o.deliveryFee : 0);
-    const d=(o.driverName||'').trim();
-    if(!d){
-      if(!byDriver['Sem entregador'])byDriver['Sem entregador']={entregas:0,total:0,ganho:0,valorPorEntrega:0,colabId:null};
-      byDriver['Sem entregador'].entregas++;
-      byDriver['Sem entregador'].total+=(o.total||0);
-      byDriver['Sem entregador'].ganho+=appliedFee;
-      return;
+    // Tenta identificar entregador pelos IDs novos (driverColabId/expedidorId), depois nome
+    const candidates = [
+      o.driverColabId, o.expedidorId, o.expedidorEmail,
+      (o.driverName||'').toLowerCase()
+    ].filter(Boolean).map(String);
+    let key = null;
+    for (const k of Object.keys(byDriver)) {
+      const aceitos = byDriver[k]._idsAceitos;
+      if (candidates.some(c => aceitos.has(c))) { key = k; break; }
     }
-    const key = Object.keys(byDriver).find(k=>k.toLowerCase()===d.toLowerCase()) || d;
-    if(!byDriver[key]) byDriver[key]={entregas:0,total:0,ganho:0,valorPorEntrega:0,colabId:null};
+    // Fallback: usa driverName mesmo se o entregador nao esta ativo no cadastro
+    if (!key) {
+      const d = (o.driverName||'').trim();
+      if (!d) {
+        if (!byDriver['Sem entregador']) byDriver['Sem entregador'] = { entregas:0, total:0, ganho:0, valorPorEntrega:0, colabId:null, _idsAceitos:new Set() };
+        key = 'Sem entregador';
+      } else {
+        if (!byDriver[d]) byDriver[d] = { entregas:0, total:0, ganho:0, valorPorEntrega:0, colabId:null, _idsAceitos:new Set([d.toLowerCase()]) };
+        key = d;
+      }
+    }
     byDriver[key].entregas++;
-    byDriver[key].total+=(o.total||0);
-    byDriver[key].ganho+=appliedFee;
+    byDriver[key].total += (o.total||0);
+    byDriver[key].ganho += appliedFee;
   });
 
   // Por pgto
@@ -1288,65 +1323,93 @@ ${tab==='clientes'?`
   </div>
 </div>`:''}
 
-<!-- TAB: METAS -->
-${tab==='metas'?`
+<!-- TAB: MONTAGENS -->
+${tab==='montagens'?(()=>{
+  // Lista pedidos cujo status esteja >= 'Pronto' (inclui Saiu p/ entrega e Entregue)
+  // Identifica o montador via montadorId/montadorEmail; fallback para o atendente.
+  const montados = filtered.filter(o => {
+    const st = String(o.status||'').toLowerCase();
+    return ['pronto','saiu p/ entrega','entregue'].some(x => st.includes(x));
+  });
+  // Agrupa por montador
+  const colabs = getColabs().filter(c => c.active !== false && c.cargo !== 'Entregador');
+  const byMont = {};
+  colabs.forEach(c => {
+    const k = (c.name||'').trim();
+    if (k) byMont[k] = { qtd:0, produtos:0, comissao:0,
+      por: Number(c.metas?.comissaoMontagem)||0,
+      _idsAceitos: new Set([c._id, c.id, c.backendId, (c.email||'').toLowerCase(), k.toLowerCase()].filter(Boolean).map(String))
+    };
+  });
+  let semMontador = 0, totalProds = 0;
+  montados.forEach(o => {
+    const itQty = (o.items||[]).reduce((s,i)=>s+(Number(i.qty)||1), 0) || 1;
+    totalProds += itQty;
+    const candidates = [o.montadorId, o.montadorEmail, (o.montadorNome||'').toLowerCase()].filter(Boolean).map(String);
+    let key = null;
+    for (const k of Object.keys(byMont)) {
+      if (candidates.some(c => byMont[k]._idsAceitos.has(c))) { key = k; break; }
+    }
+    if (!key) { semMontador++; return; }
+    byMont[key].qtd++;
+    byMont[key].produtos += itQty;
+    byMont[key].comissao += byMont[key].por * itQty;
+  });
+  const linhas = Object.entries(byMont).filter(([,v]) => v.qtd>0).sort((a,b)=>b[1].produtos-a[1].produtos);
+
+  return `
 <div class="card" style="margin-bottom:14px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-    <div style="font-family:'Playfair Display',serif;font-size:16px;">🎯 Ranking — ${(S._relMetaPer||'mes')==='dia'?'Hoje':(S._relMetaPer||'mes')==='semana'?'Semana':'Este Mês'}</div>
-    <div style="display:flex;gap:5px;">
-      ${['dia','semana','mes'].map(p=>`<button class="btn btn-sm ${(S._relMetaPer||'mes')===p?'btn-primary':'btn-ghost'}" data-meta-per="${p}">${p==='dia'?'Hoje':p==='semana'?'Semana':'Mês'}</button>`).join('')}
-    </div>
+  <div class="card-title">🌿 Montagens — ${periodLabel}</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px;">
+    <div class="mc rose"><div class="mc-label">Pedidos montados</div><div class="mc-val">${montados.length}</div></div>
+    <div class="mc leaf"><div class="mc-label">Produtos montados</div><div class="mc-val">${totalProds}</div></div>
+    <div class="mc gold"><div class="mc-label">Sem montador</div><div class="mc-val">${semMontador}</div></div>
+    <div class="mc purple"><div class="mc-label">Total comissões</div><div class="mc-val">${$c(linhas.reduce((s,[,v])=>s+v.comissao,0))}</div></div>
+  </div>
+  ${linhas.length===0 ? `<div class="empty"><p>Nenhuma montagem com colaborador identificado.</p></div>` : `
+  <div class="tw"><table>
+    <thead><tr>
+      <th>Montador</th>
+      <th style="text-align:right;">Pedidos</th>
+      <th style="text-align:right;">Produtos</th>
+      <th style="text-align:right;">R$/produto</th>
+      <th style="text-align:right;">Comissão Total</th>
+    </tr></thead>
+    <tbody>
+      ${linhas.map(([nome, v]) => `<tr>
+        <td style="font-weight:600;">${nome}</td>
+        <td style="text-align:right;">${v.qtd}</td>
+        <td style="text-align:right;color:var(--leaf);font-weight:700;">${v.produtos}</td>
+        <td style="text-align:right;color:var(--muted);">${v.por?$c(v.por):'—'}</td>
+        <td style="text-align:right;font-weight:800;color:var(--leaf);">${$c(v.comissao)}</td>
+      </tr>`).join('')}
+    </tbody>
+    <tfoot><tr style="background:var(--cream);font-weight:700;">
+      <td>TOTAL</td>
+      <td style="text-align:right;">${linhas.reduce((s,[,v])=>s+v.qtd,0)}</td>
+      <td style="text-align:right;">${linhas.reduce((s,[,v])=>s+v.produtos,0)}</td>
+      <td></td>
+      <td style="text-align:right;color:var(--leaf);">${$c(linhas.reduce((s,[,v])=>s+v.comissao,0))}</td>
+    </tr></tfoot>
+  </table></div>
+  `}
+  <div style="font-size:11px;color:var(--muted);margin-top:10px;font-style:italic;">
+    ℹ️ Conta pedidos com status ≥ Pronto. Comissão = R$ por produto (configurado no cadastro do colaborador) × quantidade.
   </div>
 </div>
-${(()=>{
-  const colabs=getColabs().filter(c=>c.active!==false);
-  if(!colabs.length) return '<div class="empty card"><p>Nenhum colaborador cadastrado.</p></div>';
-  const per=S._relMetaPer||'mes';
-  const perLabel=per==='dia'?'hoje':per==='semana'?'semana':'mês';
-  const barC=p=>p>=100?'var(--leaf)':p>=60?'#F59E0B':'var(--red)';
-  const rows=colabs.map(c=>{
-    const mt=c.metas||{};
-    const saved={mP:mt.montagemPer,eP:mt.expedicaoPer};
-    if(mt.montagemQtd) mt.montagemPer=per;
-    if(mt.expedicaoQtd) mt.expedicaoPer=per;
-    const st=getColabStats(c);
-    mt.montagemPer=saved.mP; mt.expedicaoPer=saved.eP;
-    let pts=0,n=0;
-    if(mt.vendaPct&&st.vendas){pts+=100;n++;}
-    if(mt.montagemQtd){pts+=Math.min(100,Math.round(st.montagens/(mt.montagemQtd||1)*100));n++;}
-    if(mt.expedicaoQtd){pts+=Math.min(100,Math.round(st.expedicoes/(mt.expedicaoQtd||1)*100));n++;}
-    return{c,mt,st,score:n?Math.round(pts/n):0};
-  }).sort((a,b)=>b.score-a.score);
-  const medals=['🥇','🥈','🥉'];
-  return '<div style="display:grid;gap:10px;">'+rows.map(({c,mt,st,score},i)=>`
-<div style="background:#fff;border-radius:var(--rl);border:1px solid var(--border);padding:14px;box-shadow:var(--shadow);">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-    <span style="font-size:22px">${medals[i]||'👤'}</span>
-    <div class="av" style="width:36px;height:36px;font-size:13px;">${ini(c.name)}</div>
-    <div style="flex:1"><div style="font-weight:700;font-size:13px">${c.name}</div>
-      <span class="tag ${rolec(c.cargo)}" style="font-size:10px">${c.cargo||'—'}</span></div>
-    <div style="text-align:center;">
-      <div style="font-size:22px;font-weight:800;color:${barC(score)}">${score}%</div>
-      <div style="font-size:10px;color:var(--muted)">desempenho</div>
-    </div>
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
-    ${mt.vendaPct?`<div style="background:var(--cream);border-radius:8px;padding:8px;text-align:center;">
-      <div style="font-size:10px;color:var(--muted)">💰 Comissão</div>
-      <div style="font-weight:700;color:var(--leaf);font-size:15px">R$ ${st.comissao.toFixed(2)}</div>
-      <div style="font-size:10px;color:var(--muted)">${st.vendas} vendas · ${mt.vendaPct}%</div></div>`:''}
-    ${mt.montagemQtd?`<div style="background:var(--cream);border-radius:8px;padding:8px;">
-      <div style="font-size:10px;color:var(--muted);margin-bottom:4px">🌸 Montagem/${perLabel}</div>
-      ${metaBar(st.montagens,mt.montagemQtd,'')}
-      <div style="font-size:10px;color:var(--muted);margin-top:2px;text-align:center">${st.montagens}/${mt.montagemQtd}</div></div>`:''}
-    ${mt.expedicaoQtd?`<div style="background:var(--cream);border-radius:8px;padding:8px;">
-      <div style="font-size:10px;color:var(--muted);margin-bottom:4px">📦 Expedição/${perLabel}</div>
-      ${metaBar(st.expedicoes,mt.expedicaoQtd,'')}
-      <div style="font-size:10px;color:var(--muted);margin-top:2px;text-align:center">${st.expedicoes}/${mt.expedicaoQtd}</div></div>`:''}
-    ${!mt.vendaPct&&!mt.montagemQtd&&!mt.expedicaoQtd?`<div style="color:var(--muted);font-size:11px;padding:8px;">Sem metas — edite o colaborador.</div>`:''}
-  </div>
-</div>`).join('')+'</div>';
-})()}
+`;
+})():''}
+
+<!-- TAB: METAS — redirecionado para o modulo dedicado -->
+${tab==='metas'?`
+<div class="card" style="text-align:center;padding:40px 20px;background:linear-gradient(135deg,#FAE8E6,#FFF7F5);border:1px solid #FECDD3;">
+  <div style="font-size:48px;margin-bottom:14px;">🎯</div>
+  <div style="font-family:'Playfair Display',serif;font-size:22px;color:#9F1239;margin-bottom:10px;">Metas e Bônus</div>
+  <p style="color:var(--muted);font-size:14px;margin-bottom:18px;max-width:500px;margin-left:auto;margin-right:auto;">
+    O módulo de Metas foi movido para um espaço dedicado, com auto-distribuição por setor (Vendas / Montagem / Expedição), Meta Extra e ranking.
+  </p>
+  <button class="btn btn-primary" onclick="setPage('metas')" style="font-size:14px;">🎯 Ir para Metas e Bônus</button>
+</div>
 `:''}
 
 ${tab==='operacao'?renderTabOperacao(period, periodLabel):''}
@@ -1368,18 +1431,20 @@ function renderPorColaborador(orders, period, periodLabel) {
   const setor    = S._relSetor    || 'todos';
   const ordenar  = S._relOrdenar  || 'data';
 
-  const colabs = (S.colaboradores || []).filter(c => c.active !== false && c.cargo !== 'Entregador');
-  const colab  = colabs.find(c => String(c._id) === String(colabId));
+  // Fix v2: usa getColabs() em vez de S.colaboradores (que nao existe)
+  const colabs = getColabs().filter(c => c.active !== false && c.cargo !== 'Entregador');
+  const colab  = colabs.find(c => String(c._id || c.id) === String(colabId));
 
-  // Filtra pedidos atribuidos ao colab por setor
+  // Filtra pedidos atribuidos ao colab por setor — aceita _id, id, backendId,
+  // email e nome (tolerante a pedidos antigos com formatos diferentes).
   let pedidos = [];
-  if (colabId) {
-    const matchVendedor = (o) => String(o.vendedorId||o.createdByColabId||o.criadoPor||'') === String(colabId);
-    const matchMontador = (o) => String(o.montadorId||'') === String(colabId);
-    const matchExpedidor = (o) => String(o.expedidorId||'') === String(colabId);
+  if (colabId && colab) {
+    const matchVendedor   = (o) => _isMine(colab, o.vendedorId, o.vendedorEmail, o.createdByColabId, o.createdByEmail, o.criadoPor, o.createdBy, o.createdByName);
+    const matchMontador   = (o) => _isMine(colab, o.montadorId, o.montadorEmail, o.montadorNome);
+    const matchExpedidor  = (o) => _isMine(colab, o.expedidorId, o.expedidorEmail, o.driverColabId, o.driverName);
     pedidos = orders.filter(o => {
-      if (setor === 'vendas') return matchVendedor(o);
-      if (setor === 'montagem') return matchMontador(o);
+      if (setor === 'vendas')    return matchVendedor(o);
+      if (setor === 'montagem')  return matchMontador(o);
       if (setor === 'expedicao') return matchExpedidor(o);
       return matchVendedor(o) || matchMontador(o) || matchExpedidor(o);
     });
@@ -1404,7 +1469,7 @@ function renderPorColaborador(orders, period, periodLabel) {
     <div class="fg"><label class="fl">Colaborador</label>
       <select class="fi" id="rel-colab-id">
         <option value="">— Selecione —</option>
-        ${colabs.sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(c => `<option value="${c._id}" ${colabId===c._id?'selected':''}>${c.name} (${c.cargo})</option>`).join('')}
+        ${colabs.sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(c => { const cid = c._id || c.id || c.backendId; return `<option value="${cid}" ${String(colabId)===String(cid)?'selected':''}>${c.name} (${c.cargo||'—'})</option>`; }).join('')}
       </select>
     </div>
     <div class="fg"><label class="fl">Setor</label>
@@ -1474,9 +1539,9 @@ ${!colabId ? `
     <tbody>
       ${pedidos.map(o => {
         const setores = [];
-        if (String(o.vendedorId||o.createdByColabId||'') === String(colabId)) setores.push('💰');
-        if (String(o.montadorId||'') === String(colabId)) setores.push('🌸');
-        if (String(o.expedidorId||'') === String(colabId)) setores.push('📦');
+        if (_isMine(colab, o.vendedorId, o.vendedorEmail, o.createdByColabId, o.createdByEmail, o.criadoPor, o.createdBy, o.createdByName)) setores.push('💰');
+        if (_isMine(colab, o.montadorId, o.montadorEmail, o.montadorNome)) setores.push('🌸');
+        if (_isMine(colab, o.expedidorId, o.expedidorEmail, o.driverColabId, o.driverName)) setores.push('📦');
         const dataVenda = o.createdAt ? new Date(o.createdAt).toLocaleDateString('pt-BR') : '—';
         const dataExp   = o.expedidoEm ? new Date(o.expedidoEm).toLocaleDateString('pt-BR') : '—';
         return `<tr style="border-bottom:1px solid #F1F5F9;">
