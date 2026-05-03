@@ -193,11 +193,20 @@ export function renderMeuPainel() {
   const comissoes = calcularComissoes(u, _ordersHistCache);
   // Bloco de Metas (vendas/montagem/expedicao + Meta Extra) — usa historico
   const metasHTML = renderMetasParaAtendente(u, _ordersHistCache);
-  const totalAcumulado = comissoes.reduce((s,c) => s + c.total, 0);
-  const totalVendaCom  = comissoes.reduce((s,c) => s + c.vendaComissao, 0);
-  const totalMontCom   = comissoes.reduce((s,c) => s + c.montagemComissao, 0);
-  const totalExpCom    = comissoes.reduce((s,c) => s + c.expedicaoComissao, 0);
-  const qtdPedidos     = comissoes.reduce((s,c) => s + c.vendaCount, 0);
+
+  // Cards do TOPO mostram apenas o MES ATUAL (Manaus UTC-4) — a tabela
+  // abaixo continua mostrando todos os meses acumulados.
+  const _now = new Date();
+  const _manaus = new Date(_now.getTime() - (4*60 + _now.getTimezoneOffset())*60000);
+  const _mesAtual = _manaus.toISOString().slice(0,7); // YYYY-MM
+  const cMes = comissoes.find(c => c.mes === _mesAtual) || {
+    vendaCount:0, vendaComissao:0, montagemComissao:0, expedicaoComissao:0, total:0
+  };
+  const totalAcumulado = cMes.total;
+  const totalVendaCom  = cMes.vendaComissao;
+  const totalMontCom   = cMes.montagemComissao;
+  const totalExpCom    = cMes.expedicaoComissao;
+  const qtdPedidos     = cMes.vendaCount;
 
   return `
 <div class="card" style="background:linear-gradient(135deg,#FAE8E6,#FAF7F5);border:1px solid #FECDD3;margin-bottom:14px;">
@@ -215,7 +224,7 @@ export function renderMeuPainel() {
 <div class="g2" style="gap:14px;">
   <!-- COMISSOES -->
   <div class="card">
-    <div class="card-title">💰 Minhas Vendas e Comissões</div>
+    <div class="card-title">💰 Minhas Vendas e Comissões <span style="font-size:11px;color:var(--muted);font-weight:400;">· Cards = mês atual (${fmtMes(_mesAtual)})</span></div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px;">
       <div style="background:#DCFCE7;border-radius:8px;padding:10px;text-align:center;">
         <div style="font-size:9px;color:#15803D;font-weight:700;text-transform:uppercase;">💰 Vendas (%)</div>
