@@ -6,6 +6,7 @@
 import { S } from '../state.js';
 import { $c } from '../utils/formatters.js';
 import { GET } from '../services/api.js';
+import { renderMetasParaAtendente } from './metas.js';
 
 // Cache em memoria dos pontos do user (evita refetch a cada render)
 // TTL curto (15s) para o ponto do dia atual aparecer rapido apos bater.
@@ -190,6 +191,8 @@ export function renderMeuPainel() {
   const pontosRaw = _pontosCache || [];
   const pontos = agruparPontosPorDia(pontosRaw);
   const comissoes = calcularComissoes(u, _ordersHistCache);
+  // Bloco de Metas individuais (admin define) — usa historico do colab
+  const metasHTML = renderMetasParaAtendente(u, _ordersHistCache);
 
   // Cards do TOPO mostram apenas o MES ATUAL (Manaus UTC-4) — a tabela
   // abaixo continua mostrando todos os meses acumulados.
@@ -308,5 +311,7 @@ export function renderMeuPainel() {
     </div>
   </div>
 </div>
+
+${metasHTML}
 `;
 }
