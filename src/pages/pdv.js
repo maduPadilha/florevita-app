@@ -210,7 +210,10 @@ export function renderPDV(){
 
     <!-- VENDEDOR (quem fez a venda \u2014 pode ser diferente do logado) -->
     ${(() => {
-      const colabs = (S.colaboradores || []).filter(c => c.active !== false && (c.cargo === 'Atendimento' || c.cargo === 'atendente' || c.cargo === 'Gerente' || c.cargo === 'gerente'));
+      // Todos os colaboradores ativos podem ser vendedores (atendentes
+      // tambem fazem montagem/expedicao, e qualquer um pode vender no
+      // PDV em campanhas, datas comemorativas, etc).
+      const colabs = (S.colaboradores || []).filter(c => c.active !== false && c.cargo !== 'Entregador');
       // Default: o proprio user logado se nao definido
       if (!PDV.vendedorId && S.user) {
         PDV.vendedorId = S.user._id || S.user.colabId || '';
