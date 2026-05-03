@@ -5,7 +5,7 @@
 //
 // Filtros: por data range, mes, semana, ou colaborador especifico.
 import { S } from '../state.js';
-import { $c } from '../utils/formatters.js';
+import { $c, esc } from '../utils/formatters.js';
 import { GET } from '../services/api.js';
 import { toast } from '../utils/helpers.js';
 import { getColabs } from '../services/auth.js';
@@ -209,12 +209,14 @@ ${renderRHFiltros()}
 <div class="tabs" style="margin-bottom:14px;gap:5px;">
   ${subBtn('pontos',    '🕐 Pontos Eletrônicos')}
   ${subBtn('horas',     '⏱️ Relatório de Horas')}
+  ${subBtn('feriados',  '🎉 Trabalho em Feriados')}
   ${subBtn('comissoes', '💰 Comissões')}
   ${subBtn('folha',     '🧾 Folha de Pagamento')}
 </div>
 
 ${sub === 'pontos'    ? renderRHPontos()    : ''}
 ${sub === 'horas'     ? renderRHHoras()     : ''}
+${sub === 'feriados'  ? renderRHFeriados()  : ''}
 ${sub === 'comissoes' ? renderRHComissoes() : ''}
 ${sub === 'folha'     ? renderRHFolha()     : ''}
 `;
@@ -352,6 +354,198 @@ function renderRHPontos() {
 }
 
 // ─── RELATORIO DE HORAS (mensal/dia/colab) ──────────────────
+// ─── FERIADOS NACIONAIS + MANAUS/AM ─────────────────────────
+// Lista de feriados nacionais (fixos) + alguns regionais de Manaus.
+// Pascoa/Carnaval/Corpus Christi sao MOVEIS — calculados via algoritmo
+// de Gauss para qualquer ano.
+function _feriadosDoAno(ano) {
+  // Pascoa pelo algoritmo de Gauss (Catholic Easter)
+  const a = ano % 19;
+  const b = Math.floor(ano / 100);
+  const c = ano % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19*a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2*e + 2*i - h - k) % 7;
+  const m = Math.floor((a + 11*h + 22*l) / 451);
+  const month = Math.floor((h + l - 7*m + 114) / 31);
+  const day = ((h + l - 7*m + 114) % 31) + 1;
+  const pascoa = new Date(ano, month-1, day);
+  // Datas derivadas
+  const carnavalTer = new Date(pascoa); carnavalTer.setDate(pascoa.getDate() - 47);
+  const carnavalSeg = new Date(pascoa); carnavalSeg.setDate(pascoa.getDate() - 48);
+  const sextaSanta  = new Date(pascoa); sextaSanta.setDate(pascoa.getDate() - 2);
+  const corpus      = new Date(pascoa); corpus.setDate(pascoa.getDate() + 60);
+  const fmt = (d) => `${ano}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return [
+    { data: `${ano}-01-01`, nome: 'Confraternização Universal',     escopo: 'Nacional' },
+    { data: fmt(carnavalSeg), nome: 'Carnaval (segunda)',           escopo: 'Nacional (facultativo)' },
+    { data: fmt(carnavalTer), nome: 'Carnaval (terça)',             escopo: 'Nacional (facultativo)' },
+    { data: fmt(sextaSanta),  nome: 'Sexta-feira Santa',            escopo: 'Nacional' },
+    { data: fmt(pascoa),      nome: 'Páscoa',                       escopo: 'Religioso' },
+    { data: `${ano}-04-21`, nome: 'Tiradentes',                     escopo: 'Nacional' },
+    { data: `${ano}-05-01`, nome: 'Dia do Trabalho',                escopo: 'Nacional' },
+    { data: fmt(corpus),      nome: 'Corpus Christi',               escopo: 'Nacional (facultativo)' },
+    { data: `${ano}-07-05`, nome: 'Adesão do Amazonas à Independência', escopo: 'Estadual (AM)' },
+    { data: `${ano}-09-05`, nome: 'Elevação do Amazonas à Província', escopo: 'Estadual (AM)' },
+    { data: `${ano}-09-07`, nome: 'Independência do Brasil',        escopo: 'Nacional' },
+    { data: `${ano}-10-12`, nome: 'Nossa Senhora Aparecida',        escopo: 'Nacional' },
+    { data: `${ano}-10-24`, nome: 'Aniversário de Manaus',          escopo: 'Municipal' },
+    { data: `${ano}-11-02`, nome: 'Finados',                        escopo: 'Nacional' },
+    { data: `${ano}-11-15`, nome: 'Proclamação da República',       escopo: 'Nacional' },
+    { data: `${ano}-11-20`, nome: 'Consciência Negra',              escopo: 'Nacional' },
+    { data: `${ano}-12-08`, nome: 'Nossa Senhora da Conceição',     escopo: 'Municipal (Manaus)' },
+    { data: `${ano}-12-25`, nome: 'Natal',                          escopo: 'Nacional' },
+  ];
+}
+
+function renderRHFeriados() {
+  const ano = Number(S._rhFeriadoAno) || new Date().getFullYear();
+  const colabFiltro = S._rhFeriadoColab || '';
+  const feriados = _feriadosDoAno(ano);
+
+  const pontos = _pontosCache || [];
+  if (!pontos.length) {
+    return `<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+      <div style="font-size:36px;">⏳</div><p>Carregando registros de ponto...</p>
+    </div>`;
+  }
+
+  const colabs = getColabs().filter(c => c.active !== false);
+  // Colab de cada registro de ponto (lookup por userId)
+  const colabPorId = {};
+  colabs.forEach(c => {
+    [c._id, c.id, c.backendId].filter(Boolean).forEach(k => { colabPorId[String(k)] = c; });
+  });
+
+  // Para cada feriado, lista quem trabalhou (tem qualquer registro
+  // chegada/saida naquele dia)
+  const dadosFeriados = feriados.map(f => {
+    const trabalhou = [];
+    for (const r of pontos) {
+      const dataReg = r.date || (r.createdAt ? String(r.createdAt).slice(0,10) : '');
+      if (dataReg !== f.data) continue;
+      // Considera "trabalhou" se tem chegada OU entrada OU saida
+      const tem = !!(r.chegada || r.entrada || r.saida || r.saidaAlmoco || r.voltaAlmoco);
+      if (!tem) continue;
+      const colab = colabPorId[String(r.userId||'')] || { name: r.userName||'?', cargo:'—', _id: r.userId };
+      // Aplica filtro de colab se houver
+      if (colabFiltro && _colabKey(colab) !== colabFiltro) continue;
+      // Calcula horas trabalhadas
+      let horasMin = 0;
+      if (r.chegada && r.saida) {
+        const total = toMin(r.saida) - toMin(r.chegada);
+        const almoco = (r.saidaAlmoco && r.voltaAlmoco) ? (toMin(r.voltaAlmoco) - toMin(r.saidaAlmoco)) : 0;
+        horasMin = Math.max(0, total - almoco);
+      }
+      trabalhou.push({
+        colab,
+        entrada: r.chegada || r.entrada || '',
+        saidaAlmoco: r.saidaAlmoco || '',
+        voltaAlmoco: r.voltaAlmoco || '',
+        saida: r.saida || '',
+        horasMin,
+      });
+    }
+    // Ordena por nome
+    trabalhou.sort((a,b) => (a.colab.name||'').localeCompare(b.colab.name||''));
+    return { ...f, trabalhou };
+  });
+
+  // Filtra para mostrar so os que tem alguem que trabalhou (ou todos
+  // se o ADM nao filtrou colab — assim ele ve feriados sem trabalho tb)
+  const fmtH = (mins) => `${Math.floor(mins/60)}h${String(mins%60).padStart(2,'0')}`;
+  const fmtData = (yyyymmdd) => { const [y,m,d] = yyyymmdd.split('-'); const dt = new Date(y,m-1,d); const dn = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][dt.getDay()]; return `${d}/${m}/${y} (${dn})`; };
+
+  const totalTrab = dadosFeriados.reduce((s,f) => s+f.trabalhou.length, 0);
+  const feriadosComTrab = dadosFeriados.filter(f => f.trabalhou.length>0).length;
+
+  return `
+<!-- Filtros -->
+<div class="card" style="margin-bottom:14px;padding:12px;background:linear-gradient(135deg,#FAE8E6,#FFF7F5);border:1px solid #FECDD3;">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <span style="font-size:11px;font-weight:800;color:#9F1239;text-transform:uppercase;">📅 Ano:</span>
+    <select class="fi" id="rh-feriado-ano" style="width:auto;font-size:12px;">
+      ${[ano-2, ano-1, ano, ano+1].map(y => `<option value="${y}" ${y===ano?'selected':''}>${y}</option>`).join('')}
+    </select>
+    <span style="font-size:11px;font-weight:800;color:#9F1239;text-transform:uppercase;">👤 Colab:</span>
+    <select class="fi" id="rh-feriado-colab" style="width:auto;font-size:12px;">
+      <option value="">Todos</option>
+      ${colabs.sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c => {
+        const k = _colabKey(c);
+        return `<option value="${k}" ${colabFiltro===k?'selected':''}>${c.name||'?'}</option>`;
+      }).join('')}
+    </select>
+    <span style="margin-left:auto;font-size:11px;color:#9F1239;font-weight:700;">${feriadosComTrab} feriado(s) com trabalho · ${totalTrab} registro(s)</span>
+  </div>
+</div>
+
+<div style="display:grid;gap:10px;">
+${dadosFeriados.map(f => {
+  const dt = new Date(f.data+'T12:00:00');
+  const passado = dt < new Date();
+  const cor = f.trabalhou.length > 0 ? '#DC2626' : passado ? '#94A3B8' : '#15803D';
+  const corBg = f.trabalhou.length > 0 ? '#FEE2E2' : passado ? '#F3F4F6' : '#DCFCE7';
+  return `<div style="background:${corBg};border-left:5px solid ${cor};border-radius:8px;padding:12px 14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:${f.trabalhou.length?'10px':'0'};">
+      <div>
+        <div style="font-size:14px;font-weight:800;color:#1E293B;">🎉 ${esc(f.nome)}</div>
+        <div style="font-size:11px;color:var(--muted);">📅 ${fmtData(f.data)} · ${esc(f.escopo)}</div>
+      </div>
+      <div style="text-align:right;">
+        ${f.trabalhou.length > 0
+          ? `<div style="background:${cor};color:#fff;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;">⚠️ ${f.trabalhou.length} trabalhou${f.trabalhou.length>1?'ram':''}</div>`
+          : passado
+            ? `<span style="font-size:11px;color:var(--muted);">Sem registros</span>`
+            : `<span style="font-size:11px;color:#15803D;font-weight:700;">📅 Próximo</span>`}
+      </div>
+    </div>
+    ${f.trabalhou.length > 0 ? `
+    <div style="background:#fff;border-radius:6px;padding:8px;margin-top:6px;">
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:1px solid var(--border);">
+          <th style="padding:5px 8px;text-align:left;font-size:10px;color:var(--muted);text-transform:uppercase;">Colab</th>
+          <th style="padding:5px 8px;text-align:left;font-size:10px;color:var(--muted);text-transform:uppercase;">Cargo</th>
+          <th style="padding:5px 8px;text-align:center;font-size:10px;color:var(--muted);text-transform:uppercase;">Entrada</th>
+          <th style="padding:5px 8px;text-align:center;font-size:10px;color:var(--muted);text-transform:uppercase;">Almoço</th>
+          <th style="padding:5px 8px;text-align:center;font-size:10px;color:var(--muted);text-transform:uppercase;">Retorno</th>
+          <th style="padding:5px 8px;text-align:center;font-size:10px;color:var(--muted);text-transform:uppercase;">Saída</th>
+          <th style="padding:5px 8px;text-align:right;font-size:10px;color:#DC2626;text-transform:uppercase;">Horas</th>
+        </tr></thead>
+        <tbody>
+        ${f.trabalhou.map(t => `<tr style="border-bottom:1px solid #F1F5F9;">
+          <td style="padding:5px 8px;font-weight:700;">${esc(t.colab.name||'')}</td>
+          <td style="padding:5px 8px;font-size:11px;color:var(--muted);">${esc(t.colab.cargo||'')}</td>
+          <td style="padding:5px 8px;text-align:center;font-family:Monaco,monospace;color:#15803D;">${t.entrada||'—'}</td>
+          <td style="padding:5px 8px;text-align:center;font-family:Monaco,monospace;color:#D97706;">${t.saidaAlmoco||'—'}</td>
+          <td style="padding:5px 8px;text-align:center;font-family:Monaco,monospace;color:#D97706;">${t.voltaAlmoco||'—'}</td>
+          <td style="padding:5px 8px;text-align:center;font-family:Monaco,monospace;color:#DC2626;">${t.saida||'—'}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:800;color:#DC2626;">${t.horasMin?fmtH(t.horasMin):'⚠️ incompl.'}</td>
+        </tr>`).join('')}
+        </tbody>
+        <tfoot><tr style="background:#FEF2F2;font-weight:800;">
+          <td colspan="6" style="padding:6px 8px;text-align:right;color:#DC2626;">Total horas em feriado:</td>
+          <td style="padding:6px 8px;text-align:right;color:#DC2626;font-size:14px;">${fmtH(f.trabalhou.reduce((s,t)=>s+t.horasMin,0))}</td>
+        </tr></tfoot>
+      </table>
+    </div>
+    ` : ''}
+  </div>`;
+}).join('')}
+</div>
+
+<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px;margin-top:14px;font-size:11px;color:#1E40AF;">
+  💡 <strong>Como funciona:</strong> O sistema cruza a tabela de feriados (Nacional + AM + Manaus) com os pontos batidos.
+  Quem aparece "trabalhou" tem direito a hora extra/folga compensatória conforme acordo trabalhista. Use para auditar
+  e calcular adicionais devidos.
+</div>
+`;
+}
+
 function renderRHHoras() {
   const periodo = S._rhPeriodo || 'mes';
   const colabId = S._rhColabId || '';
@@ -630,6 +824,10 @@ export function bindRHEvents() {
   });
   document.getElementById('rh-date1')?.addEventListener('change', e => { S._rhDate1 = e.target.value; render(); });
   document.getElementById('rh-date2')?.addEventListener('change', e => { S._rhDate2 = e.target.value; render(); });
+
+  // Aba Feriados — filtros proprios
+  document.getElementById('rh-feriado-ano')?.addEventListener('change', e => { S._rhFeriadoAno = e.target.value; render(); });
+  document.getElementById('rh-feriado-colab')?.addEventListener('change', e => { S._rhFeriadoColab = e.target.value; render(); });
 
   // Sub-modulo Folha de Pagamento (binds proprios)
   if (S._rhSub === 'folha') {
