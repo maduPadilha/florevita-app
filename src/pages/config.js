@@ -728,7 +728,7 @@ export function renderConfig(){
       <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
         <div style="font-weight:700;font-size:13px;color:#25D366;margin-bottom:8px;">💬 WhatsApp</div>
         <div class="fg"><label class="fl">Número (com DDI+DDD, sem espaços)</label>
-          <input class="fi" id="int-wpp-num" placeholder="5592994064132"/></div>
+          <input class="fi" id="int-wpp-num" placeholder="5592993002433"/></div>
         <div class="fg"><label class="fl">Mensagem padrão de saudação</label>
           <input class="fi" id="int-wpp-msg" placeholder="Olá! Quero comprar 🌹"/></div>
       </div>
@@ -1310,7 +1310,7 @@ export function bindConfigActions(){
         publicKey:   get('int-mp-public'),
       },
       whatsapp: {
-        number: get('int-wpp-num') || '5592994064132',
+        number: get('int-wpp-num') || '5592993002433',
         defaultMessage: get('int-wpp-msg'),
       },
     };
