@@ -9,6 +9,7 @@ import { $c } from '../utils/formatters.js';
 import { GET } from '../services/api.js';
 import { toast } from '../utils/helpers.js';
 import { getColabs } from '../services/auth.js';
+import { renderRHFolha, bindRHFolhaEvents } from './rh-folha.js';
 
 // ── CACHE ────────────────────────────────────────────────────
 let _pontosCache = null;
@@ -209,11 +210,13 @@ ${renderRHFiltros()}
   ${subBtn('pontos',    '🕐 Pontos Eletrônicos')}
   ${subBtn('horas',     '⏱️ Relatório de Horas')}
   ${subBtn('comissoes', '💰 Comissões')}
+  ${subBtn('folha',     '🧾 Folha de Pagamento')}
 </div>
 
 ${sub === 'pontos'    ? renderRHPontos()    : ''}
 ${sub === 'horas'     ? renderRHHoras()     : ''}
 ${sub === 'comissoes' ? renderRHComissoes() : ''}
+${sub === 'folha'     ? renderRHFolha()     : ''}
 `;
 }
 
@@ -627,4 +630,9 @@ export function bindRHEvents() {
   });
   document.getElementById('rh-date1')?.addEventListener('change', e => { S._rhDate1 = e.target.value; render(); });
   document.getElementById('rh-date2')?.addEventListener('change', e => { S._rhDate2 = e.target.value; render(); });
+
+  // Sub-modulo Folha de Pagamento (binds proprios)
+  if (S._rhSub === 'folha') {
+    try { bindRHFolhaEvents(); } catch (e) { console.error('bindRHFolhaEvents', e); }
+  }
 }
