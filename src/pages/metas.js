@@ -893,13 +893,64 @@ export function bindMetasEvents() {
 }
 
 // ── VIEW ATENDENTE (Meu Painel) ──────────────────────────────
-// Cada colab ve apenas as proprias metas que o ADM marcou como
-// VISIVEL (m.visivel === true). Enquanto o ADM nao publica, a meta
-// fica privada — so o ADM ve no modulo Metas.
+// Cada colab ve as proprias metas individuais + as metas da unidade
+// dela (e as 'todas') desde que o ADM tenha publicado (m.visivel===true).
+//
+// Mostra:
+//   - Nome da meta + tipo
+//   - Unidade (se for meta de unidade)
+//   - Valor da meta + realizado + % com barra colorida
+//   - Bonus INDIVIDUAL DELA (se modo equipe, mostra a parte dela)
 export function renderMetasParaAtendente(user, ordersList = S.orders) {
   const myKey = String(user?._id || user?.id || '');
-  const metas = getMetas().filter(m => String(m.colabId) === myKey && m.visivel === true);
+  const myUnitSlug = normalizeUnidade(user?.unidade || user?.unit) || '';
+  const allVisiveis = getMetas().filter(m => m.visivel === true);
+
+  // 1) Metas individuais dela
+  const minhasIndiv = allVisiveis.filter(m =>
+    (m.escopo||'colab') === 'colab' && String(m.colabId) === myKey
+  );
+
+  // 2) Metas de unidade onde ela participa: 'todas' OU unidade dela
+  const minhasUnid = allVisiveis.filter(m => {
+    if ((m.escopo||'colab') !== 'unidade') return false;
+    const slug = String(m.unidade||'').toLowerCase();
+    if (slug === 'todas') return true;
+    return slug === myUnitSlug;
+  });
+
+  const metas = [...minhasIndiv, ...minhasUnid];
   if (!metas.length) return '';
+
+  // Helper: calcula a parte do bonus que ESTA colab vai receber
+  // - bonus individual: valor cheio
+  // - bonus equipe (colab): bonusValor / qtd_no_grupo (mesmo nome+tipo+periodo)
+  // - bonus equipe (unidade): bonusValor / qtd_atendentes_da_unidade
+  const calcularMinhaParte = (m) => {
+    const total = Number(m.bonusValor) || 0;
+    if ((m.bonusModo||'individual') === 'individual') return { share: total, divisor: 1 };
+    if ((m.escopo||'colab') === 'unidade') {
+      // Atendentes da unidade — para 'todas' usa todas
+      const slug = String(m.unidade||'').toLowerCase();
+      let qtd;
+      if (slug === 'todas') qtd = colabsPorTipoMeta('vendas').length || 1;
+      else {
+        qtd = colabsPorTipoMeta('vendas').filter(c => normalizeUnidade(c.unidade||c.unit) === slug).length || 1;
+      }
+      return { share: total / qtd, divisor: qtd };
+    }
+    // bonus equipe entre colabs: agrupa metas-irmas (mesmo nome+tipo+periodo)
+    const grupo = allVisiveis.filter(x =>
+      (x.escopo||'colab') === 'colab' &&
+      x.bonusModo === 'equipe' &&
+      x.nome === m.nome &&
+      x.tipo === m.tipo &&
+      x.dataInicio === m.dataInicio &&
+      x.dataFim === m.dataFim
+    );
+    const qtd = grupo.length || 1;
+    return { share: total / qtd, divisor: qtd };
+  };
 
   const blocos = metas.map(m => {
     const r = calcularRealizado(m, ordersList);
@@ -909,14 +960,29 @@ export function renderMetasParaAtendente(user, ordersList = S.orders) {
     const tipoLbl = labelTipo(m.tipo);
     const unit = m.tipo === 'vendas' ? 'R$' : 'un';
     const fmtVal = v => unit==='R$' ? $c(v) : `${Math.round(v)} ${m.tipo==='producao'?'produtos':m.tipo==='produto'?'un':'entregas'}`;
+    const ehUnid = (m.escopo||'colab') === 'unidade';
+    const lblUnid = ehUnid
+      ? (String(m.unidade||'').toLowerCase()==='todas' ? '🌐 Todas as Unidades' : ('🏪 ' + (labelUnidade(m.unidade) || m.unidade)))
+      : '';
+    const tagProduto = m.tipo === 'produto'
+      ? `<div style="display:inline-block;margin-top:3px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;">📦 ${m.produtoCode?'#'+m.produtoCode+' · ':''}${escHtml(m.produtoNome||'')}</div>`
+      : '';
+
+    const minha = calcularMinhaParte(m);
+    const bonusLbl = (m.bonusModo||'individual') === 'individual'
+      ? `Seu bônus`
+      : `Sua parte (1 de ${minha.divisor})`;
+
     return `<div style="margin-bottom:10px;padding:12px;background:${corBg};border-left:4px solid ${cor};border-radius:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-        <div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+        <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:800;color:#1E293B;">${tipoLbl} ${status.emoji} ${escHtml(m.nome||'')}</div>
           <div style="font-size:10px;color:var(--muted);">${labelPeriodo(m.periodoTipo)} · ${fmtData(m.dataInicio)} a ${fmtData(m.dataFim)}</div>
+          ${ehUnid ? `<div style="display:inline-block;margin-top:3px;background:#FAE8E6;color:#9F1239;border:1px solid #FECDD3;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">${lblUnid}</div>` : ''}
+          ${tagProduto}
         </div>
         <div style="text-align:right;">
-          <div style="font-size:18px;font-weight:900;color:${cor};">${r.pct.toFixed(0)}%</div>
+          <div style="font-size:22px;font-weight:900;color:${cor};">${r.pct.toFixed(0)}%</div>
           <div style="font-size:9px;color:${cor};font-weight:700;">${status.label}</div>
         </div>
       </div>
@@ -924,12 +990,20 @@ export function renderMetasParaAtendente(user, ordersList = S.orders) {
         <span>Meta: <strong>${fmtVal(m.valorMeta)}</strong></span>
         <span>Realizado: <strong style="color:${cor};">${fmtVal(r.realizado)}</strong></span>
       </div>
-      <div style="height:8px;background:rgba(255,255,255,.6);border-radius:4px;overflow:hidden;">
+      <div style="height:8px;background:rgba(255,255,255,.6);border-radius:4px;overflow:hidden;margin-bottom:8px;">
         <div style="height:100%;width:${Math.min(100,r.pct)}%;background:${cor};transition:width .4s;"></div>
       </div>
-      ${r.atingida ? `<div style="margin-top:8px;padding:6px 10px;background:#fff;border:1px solid ${cor};border-radius:6px;font-size:12px;color:${cor};font-weight:700;text-align:center;">
-        ${r.ultrapassou ? '🏆 ULTRAPASSOU' : '🎉 META ATINGIDA'} — Bônus: ${$c(m.bonusValor)}
-      </div>` : ''}
+      <!-- BLOCO DE BONUS — sempre visivel, so o valor que ELA recebe -->
+      <div style="background:#fff;border:2px solid ${r.atingida?cor:'#E2E8F0'};border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">${bonusLbl}</div>
+          <div style="font-size:11px;color:#475569;">${r.atingida ? `${r.ultrapassou?'🏆 ULTRAPASSOU — receba já':'🎉 ATINGIDA — receba já'}` : '⏳ Receberá ao bater 100%'}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:9px;color:var(--muted);">${r.atingida ? 'A receber' : 'Vai receber'}</div>
+          <div style="font-size:22px;font-weight:900;color:${r.atingida ? '#15803D' : '#1E293B'};">${$c(minha.share)}</div>
+        </div>
+      </div>
     </div>`;
   }).join('');
 
