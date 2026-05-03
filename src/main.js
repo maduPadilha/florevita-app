@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-46';
+const APP_VERSION = '20260503-47';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2303,6 +2303,63 @@ function bindPageActions(){
 
     // ── Sub-aba C: Comandas ──
     document.getElementById('chao-comanda-org')?.addEventListener('change', e => { S._chaoComandaOrg = e.target.value; render(); });
+
+    // Chips de filtro (turno/zona/bairro/prioridade) — toggle multi-select
+    document.querySelectorAll('[data-chao-fil]').forEach(b => {
+      b.addEventListener('click', () => {
+        const kind = b.dataset.chaoFil;
+        const val  = b.dataset.chaoFilVal;
+        const stateKey = { turno:'_chaoFilTurnos', zona:'_chaoFilZonas', bairro:'_chaoFilBairros', prioridade:'_chaoFilPrioridades' }[kind];
+        if (!stateKey) return;
+        const arr = S[stateKey] || [];
+        const idx = arr.indexOf(val);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(val);
+        S[stateKey] = [...arr];
+        render();
+      });
+    });
+
+    // Limpar filtros
+    document.getElementById('btn-chao-fil-clear')?.addEventListener('click', () => {
+      S._chaoFilTurnos = []; S._chaoFilZonas = []; S._chaoFilBairros = []; S._chaoFilPrioridades = [];
+      render();
+    });
+
+    // Selecao individual e por grupo
+    document.querySelectorAll('[data-chao-sel]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.chaoSel;
+        const arr = S._chaoSelecionados || [];
+        const idx = arr.indexOf(id);
+        if (cb.checked && idx < 0) arr.push(id);
+        else if (!cb.checked && idx >= 0) arr.splice(idx, 1);
+        S._chaoSelecionados = [...arr];
+        render();
+      });
+    });
+    document.querySelectorAll('[data-chao-sel-grupo]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const ids = (cb.dataset.chaoSelGrupo||'').split(',').filter(Boolean);
+        const arr = new Set(S._chaoSelecionados || []);
+        if (cb.checked) ids.forEach(id => arr.add(id));
+        else            ids.forEach(id => arr.delete(id));
+        S._chaoSelecionados = [...arr];
+        render();
+      });
+    });
+
+    // Selecionar todas / Limpar selecao
+    document.getElementById('btn-chao-sel-all')?.addEventListener('click', () => {
+      const ped = _chaoPedidosFiltered();
+      const ids = ped.map(o => String(o._id));
+      S._chaoSelecionados = ids;
+      render();
+    });
+    document.getElementById('btn-chao-sel-none')?.addEventListener('click', () => {
+      S._chaoSelecionados = [];
+      render();
+    });
+
     document.querySelectorAll('[data-chao-print]').forEach(b => {
       b.addEventListener('click', () => {
         const id = b.dataset.chaoPrint;
@@ -2313,7 +2370,36 @@ function bindPageActions(){
       const ped = _chaoPedidosFiltered();
       const org = S._chaoComandaOrg || 'turno';
       const { resolveZona, getTurnoPedido } = await import('./utils/zonasManaus.js');
-      let ord = [...ped];
+
+      // Aplica MESMO filtro multi-select do render
+      const filT = new Set(S._chaoFilTurnos||[]);
+      const filZ = new Set(S._chaoFilZonas||[]);
+      const filB = new Set(S._chaoFilBairros||[]);
+      const filP = new Set(S._chaoFilPrioridades||[]);
+      const _prio = (o) => {
+        if (!o.createdAt || !o.scheduledDate) return 'normal';
+        const dd = Math.floor((new Date(o.scheduledDate) - new Date(o.createdAt))/86400000);
+        if (dd >= 14) return 'alta';
+        if (dd >= 7)  return 'media';
+        if (dd >= 3)  return 'baixa';
+        return 'normal';
+      };
+      let filtrados = ped.filter(o => {
+        if (filT.size && !filT.has(getTurnoPedido(o))) return false;
+        if (filZ.size && !filZ.has(resolveZona(o))) return false;
+        if (filB.size) {
+          const b = (o.deliveryNeighborhood || o.deliveryZone || '').trim();
+          if (!filB.has(b)) return false;
+        }
+        if (filP.size && !filP.has(_prio(o))) return false;
+        return true;
+      });
+
+      // Se ha selecao manual, prioriza ela (apos filtros)
+      const selSet = new Set(S._chaoSelecionados||[]);
+      if (selSet.size > 0) filtrados = filtrados.filter(o => selSet.has(String(o._id)));
+
+      let ord = [...filtrados];
       if (org === 'turno') {
         const w = { manha:0, tarde:1, noite:2, sem:3 };
         ord.sort((a,b) => {
@@ -2327,6 +2413,9 @@ function bindPageActions(){
           if (za!==zb) return za.localeCompare(zb);
           return (a.deliveryNeighborhood||'').localeCompare(b.deliveryNeighborhood||'');
         });
+      } else if (org === 'prioridade') {
+        const w = { alta:0, media:1, baixa:2, normal:3 };
+        ord.sort((a,b) => w[_prio(a)] - w[_prio(b)]);
       } else {
         ord.sort((a,b) => (a.deliveryNeighborhood||'zzz').localeCompare(b.deliveryNeighborhood||'zzz','pt-BR'));
       }

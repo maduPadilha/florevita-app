@@ -1841,10 +1841,40 @@ function renderChaoZonas(pedidos) {
 
 // ─── C) COMANDAS PARA IMPRIMIR ──────────────────────────────
 function renderChaoComandas(pedidos) {
-  const org = S._chaoComandaOrg || 'turno'; // turno | zona | bairro
+  const org = S._chaoComandaOrg || 'turno'; // turno | zona | bairro | prioridade
 
-  // Ordena pedidos conforme organização
-  let ordenados = [...pedidos];
+  // Filtros pre-selecao
+  const filTurnos    = new Set(S._chaoFilTurnos    || []); // ['manha','tarde','noite','sem']
+  const filZonas     = new Set(S._chaoFilZonas     || []); // ['Centro-Sul','Leste',...]
+  const filBairros   = new Set(S._chaoFilBairros   || []); // ['Centro','Aleixo',...]
+  const filPrioridades = new Set(S._chaoFilPrioridades || []); // ['alta','media','baixa']
+  const selecionados = new Set(S._chaoSelecionados || []); // _ids dos pedidos marcados
+
+  // Helper: prioridade por antecedencia (criado vs entrega)
+  const _prioridadeOrdem = { alta:0, media:1, baixa:2, normal:3 };
+  const _prioridadePedido = (o) => {
+    if (!o.createdAt || !o.scheduledDate) return { key:'normal', label:'Normal', cor:'#64748B' };
+    const dd = Math.floor((new Date(o.scheduledDate) - new Date(o.createdAt))/86400000);
+    if (dd >= 14) return { key:'alta',  label:'🎯 Alta',  cor:'#DC2626' };
+    if (dd >= 7)  return { key:'media', label:'📅 Média', cor:'#F59E0B' };
+    if (dd >= 3)  return { key:'baixa', label:'⏰ Baixa', cor:'#15803D' };
+    return { key:'normal', label:'Normal', cor:'#64748B' };
+  };
+
+  // Aplica filtros
+  let filtrados = pedidos.filter(o => {
+    if (filTurnos.size && !filTurnos.has(getTurnoPedido(o))) return false;
+    if (filZonas.size && !filZonas.has(resolveZona(o))) return false;
+    if (filBairros.size) {
+      const b = (o.deliveryNeighborhood || o.deliveryZone || '').trim();
+      if (!filBairros.has(b)) return false;
+    }
+    if (filPrioridades.size && !filPrioridades.has(_prioridadePedido(o).key)) return false;
+    return true;
+  });
+
+  // Ordena
+  let ordenados = [...filtrados];
   if (org === 'turno') {
     const w = { manha:0, tarde:1, noite:2, sem:3 };
     ordenados.sort((a,b) => {
@@ -1856,20 +1886,24 @@ function renderChaoComandas(pedidos) {
     ordenados.sort((a,b) => {
       const za = resolveZona(a), zb = resolveZona(b);
       if (za !== zb) return za.localeCompare(zb,'pt-BR');
-      const ba = (a.deliveryNeighborhood||''), bb = (b.deliveryNeighborhood||'');
-      return ba.localeCompare(bb,'pt-BR');
+      return (a.deliveryNeighborhood||'').localeCompare(b.deliveryNeighborhood||'','pt-BR');
+    });
+  } else if (org === 'prioridade') {
+    ordenados.sort((a,b) => {
+      const pa = _prioridadeOrdem[_prioridadePedido(a).key];
+      const pb = _prioridadeOrdem[_prioridadePedido(b).key];
+      if (pa !== pb) return pa - pb;
+      return String(a.scheduledTime||'99').localeCompare(String(b.scheduledTime||'99'));
     });
   } else { // bairro
-    ordenados.sort((a,b) => {
-      const ba = (a.deliveryNeighborhood||a.deliveryZone||'zzz'), bb = (b.deliveryNeighborhood||b.deliveryZone||'zzz');
-      return ba.localeCompare(bb,'pt-BR');
-    });
+    ordenados.sort((a,b) => (a.deliveryNeighborhood||'zzz').localeCompare(b.deliveryNeighborhood||'zzz','pt-BR'));
   }
 
-  // Agrupa para exibição (header de seção)
+  // Agrupa para exibição
   const groupKey = (o) => {
     if (org === 'turno') return TURNOS[getTurnoPedido(o)]?.label || '—';
     if (org === 'zona')  return ZONAS_MANAUS[resolveZona(o)]?.label || '—';
+    if (org === 'prioridade') return _prioridadePedido(o).label;
     return o.deliveryNeighborhood || o.deliveryZone || 'Sem bairro';
   };
   const grupos = {};
@@ -1879,21 +1913,101 @@ function renderChaoComandas(pedidos) {
     grupos[k].push(o);
   }
 
+  // Listas de opcoes para os filtros chips
+  const turnosDisponiveis = [
+    { k:'manha', l:'🌅 Manhã' },
+    { k:'tarde', l:'☀️ Tarde' },
+    { k:'noite', l:'🌙 Noite' },
+    { k:'sem',   l:'❓ Sem turno' },
+  ];
+  const zonasDisponiveis = Object.entries(ZONAS_MANAUS).map(([k,v]) => ({ k, l:v.label }));
+  const bairrosDisponiveis = [...new Set(pedidos.map(o => (o.deliveryNeighborhood||o.deliveryZone||'').trim()).filter(Boolean))].sort();
+  const prioridadesDisponiveis = [
+    { k:'alta',   l:'🎯 Alta',   cor:'#DC2626' },
+    { k:'media',  l:'📅 Média',  cor:'#F59E0B' },
+    { k:'baixa',  l:'⏰ Baixa',  cor:'#15803D' },
+    { k:'normal', l:'Normal',    cor:'#64748B' },
+  ];
+
+  const chipFiltro = (kind, key, label, cor) => {
+    const ativo = (
+      (kind==='turno'      && filTurnos.has(key))    ||
+      (kind==='zona'       && filZonas.has(key))     ||
+      (kind==='bairro'     && filBairros.has(key))   ||
+      (kind==='prioridade' && filPrioridades.has(key))
+    );
+    const c = cor || '#9F1239';
+    return `<button type="button" data-chao-fil="${kind}" data-chao-fil-val="${esc(key)}"
+      style="background:${ativo?c:'#fff'};color:${ativo?'#fff':c};border:1px solid ${c};
+      border-radius:14px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">
+      ${ativo?'✓ ':''}${label}
+    </button>`;
+  };
+
+  // Quantos selecionados (apos filtro)
+  const idsAposFiltro = new Set(ordenados.map(o => String(o._id)));
+  const qtdSelecAposFiltro = [...selecionados].filter(id => idsAposFiltro.has(id)).length;
+  // Quantos vao imprimir: se ha selecionados use, senao todos do filtro
+  const idsParaImprimir = qtdSelecAposFiltro > 0
+    ? ordenados.filter(o => selecionados.has(String(o._id)))
+    : ordenados;
+
   return `
 <div class="card" style="margin-bottom:10px;background:linear-gradient(135deg,#FAE8E6,#FAF7F5);">
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
     <div>
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Comandas no período</div>
-      <div style="font-size:24px;font-weight:900;color:#9F1239;">${ordenados.length}</div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Comandas (após filtros)</div>
+      <div style="font-size:24px;font-weight:900;color:#9F1239;">${ordenados.length} <span style="font-size:13px;color:var(--muted);font-weight:500;">de ${pedidos.length} no período</span></div>
+      ${qtdSelecAposFiltro > 0 ? `<div style="font-size:11px;color:#15803D;font-weight:700;margin-top:2px;">✓ ${qtdSelecAposFiltro} selecionado(s) para imprimir</div>` : ''}
     </div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <span style="font-size:11px;color:var(--muted);font-weight:700;">Organizar por:</span>
       <select class="fi" id="chao-comanda-org" style="width:auto;font-size:12px;">
-        <option value="turno"  ${org==='turno' ?'selected':''}>⏰ Turno</option>
-        <option value="zona"   ${org==='zona'  ?'selected':''}>🗺️ Zona</option>
-        <option value="bairro" ${org==='bairro'?'selected':''}>📍 Bairro</option>
+        <option value="turno"      ${org==='turno'     ?'selected':''}>⏰ Turno</option>
+        <option value="zona"       ${org==='zona'      ?'selected':''}>🗺️ Zona</option>
+        <option value="bairro"     ${org==='bairro'    ?'selected':''}>📍 Bairro</option>
+        <option value="prioridade" ${org==='prioridade'?'selected':''}>🎯 Prioridade</option>
       </select>
-      <button class="btn btn-primary btn-sm" id="btn-print-chao-comandas" ${ordenados.length===0?'disabled':''}>🖨️ Imprimir TODAS na ordem</button>
+      <button class="btn btn-primary btn-sm" id="btn-print-chao-comandas" ${idsParaImprimir.length===0?'disabled':''}>
+        🖨️ Imprimir ${qtdSelecAposFiltro>0 ? qtdSelecAposFiltro+' selecionada(s)' : 'TODAS '+ordenados.length}
+      </button>
+    </div>
+  </div>
+
+  <!-- Filtros Multi-select por chip -->
+  <div style="display:grid;gap:8px;">
+    <div>
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">⏰ Turno (clique p/ filtrar)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">
+        ${turnosDisponiveis.map(t => chipFiltro('turno', t.k, t.l, '#3B82F6')).join('')}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">🗺️ Zona</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">
+        ${zonasDisponiveis.map(z => chipFiltro('zona', z.k, z.l, '#7C3AED')).join('')}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">🎯 Prioridade</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">
+        ${prioridadesDisponiveis.map(p => chipFiltro('prioridade', p.k, p.l, p.cor)).join('')}
+      </div>
+    </div>
+    ${bairrosDisponiveis.length ? `
+    <div>
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">📍 Bairro (${bairrosDisponiveis.length} disponíveis)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;max-height:80px;overflow-y:auto;padding:4px;background:#fff;border-radius:6px;">
+        ${bairrosDisponiveis.map(b => chipFiltro('bairro', b, b, '#059669')).join('')}
+      </div>
+    </div>
+    ` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px dashed #FECDD3;">
+      <button class="btn btn-ghost btn-xs" id="btn-chao-fil-clear" style="font-size:11px;color:#DC2626;">✕ Limpar filtros</button>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-ghost btn-xs" id="btn-chao-sel-all" style="font-size:11px;">☑️ Selecionar todas mostradas</button>
+        <button class="btn btn-ghost btn-xs" id="btn-chao-sel-none" style="font-size:11px;">☐ Limpar seleção</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1901,23 +2015,32 @@ function renderChaoComandas(pedidos) {
 ${ordenados.length === 0 ? `
 <div class="card" style="text-align:center;padding:40px;color:var(--muted);">
   <div style="font-size:48px;margin-bottom:12px;">📭</div>
-  <p>Nenhum pedido no período selecionado.</p>
+  <p>Nenhum pedido com esses filtros.</p>
 </div>
 ` : `
 <div class="card">
-  ${Object.entries(grupos).map(([gk, lista]) => `
+  ${Object.entries(grupos).map(([gk, lista]) => {
+    const idsGrupo = lista.map(o => String(o._id));
+    const selecGrupo = idsGrupo.filter(id => selecionados.has(id)).length;
+    const todasSelecGrupo = selecGrupo === idsGrupo.length;
+    return `
     <div style="margin-bottom:14px;">
       <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#FAFAFA;border-radius:8px;margin-bottom:6px;border-left:4px solid var(--rose);">
+        <input type="checkbox" data-chao-sel-grupo="${esc(idsGrupo.join(','))}" ${todasSelecGrupo?'checked':''}
+          style="width:16px;height:16px;cursor:pointer;accent-color:var(--rose);" title="Selecionar/desmarcar grupo"/>
         <span style="font-weight:800;color:var(--ink);font-size:13px;">${gk}</span>
         <span style="background:var(--rose);color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">${lista.length} entrega(s)</span>
+        ${selecGrupo>0 ? `<span style="background:#15803D;color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">✓ ${selecGrupo} selec.</span>` : ''}
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead><tr style="background:#fff;border-bottom:1px solid var(--border);">
+          <th style="padding:6px 8px;text-align:center;width:36px;"></th>
           <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;width:90px;">Pedido</th>
           <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;">Cliente / Destinatário</th>
           <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;">Bairro</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748B;text-transform:uppercase;width:90px;">Prior.</th>
           <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748B;text-transform:uppercase;width:90px;">Hora</th>
-          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748B;text-transform:uppercase;width:100px;">Imprimir</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748B;text-transform:uppercase;width:60px;">Imp.</th>
         </tr></thead>
         <tbody>
           ${lista.map(o => {
@@ -1926,24 +2049,34 @@ ${ordenados.length === 0 ? `
             const dst = o.recipient && o.recipient !== cli ? ` → ${o.recipient}` : '';
             const bairro = o.deliveryNeighborhood || o.deliveryZone || '—';
             const hora = (o.scheduledTime && o.scheduledTime!=='00:00') ? o.scheduledTime : (o.scheduledPeriod || '—');
-            return `<tr style="border-bottom:1px solid #F1F5F9;">
+            const prio = _prioridadePedido(o);
+            const selecionado = selecionados.has(String(o._id));
+            return `<tr style="border-bottom:1px solid #F1F5F9;${selecionado?'background:#DCFCE7;':''}">
+              <td style="padding:6px 8px;text-align:center;">
+                <input type="checkbox" data-chao-sel="${o._id}" ${selecionado?'checked':''}
+                  style="width:16px;height:16px;cursor:pointer;accent-color:#15803D;"/>
+              </td>
               <td style="padding:6px 8px;color:#7C3AED;font-weight:700;font-family:Monaco,monospace;">#${num||'—'}</td>
               <td style="padding:6px 8px;font-weight:600;">${cli}<span style="color:#059669;font-weight:500;font-size:11px;">${dst}</span></td>
               <td style="padding:6px 8px;color:#475569;">${bairro}</td>
+              <td style="padding:6px 8px;text-align:center;">
+                <span style="background:${prio.cor}22;color:${prio.cor};border:1px solid ${prio.cor}44;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:700;">${prio.label}</span>
+              </td>
               <td style="padding:6px 8px;text-align:center;font-weight:700;color:#1E40AF;">${hora}</td>
               <td style="padding:6px 8px;text-align:center;">
-                <button class="btn btn-ghost btn-xs" data-chao-print="${o._id}" title="Imprimir esta comanda">🖨️</button>
+                <button class="btn btn-ghost btn-xs" data-chao-print="${o._id}" title="Imprimir esta">🖨️</button>
               </td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
-    </div>
-  `).join('')}
+    </div>`;
+  }).join('')}
 </div>
 
 <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px;margin-top:10px;font-size:12px;color:#1E40AF;">
-  💡 Use <strong>🖨️ Imprimir TODAS na ordem</strong> para enviar todas as comandas para a impressora seguindo a organização escolhida (turno / zona / bairro).
+  💡 Use os <strong>chips</strong> acima para filtrar por turno/zona/prioridade/bairro e os <strong>checkboxes</strong> para selecionar comandas específicas.
+  Sem seleção = imprime todas filtradas. Com seleção = imprime só as marcadas. <strong>1 grupo = 1 click</strong> seleciona/desmarca tudo.
 </div>
 `}`;
 }
