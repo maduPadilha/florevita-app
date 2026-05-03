@@ -532,6 +532,7 @@ function renderVales() {
     <select class="fi" id="vale-filtro-tipo" style="width:auto;font-size:12px;">
       <option value="todos">Todos tipos</option>
       <option value="vale"   ${filtroTipo==='vale'?'selected':''}>💵 Vale (dinheiro)</option>
+      <option value="pix"    ${filtroTipo==='pix'?'selected':''}>📱 PIX</option>
       <option value="compra" ${filtroTipo==='compra'?'selected':''}>🛒 Compra/Retirada</option>
     </select>
     <span style="font-size:11px;color:var(--muted);margin-left:auto;">${lista.length} registro(s)</span>
@@ -560,7 +561,15 @@ function renderVales() {
             <td style="padding:8px;font-size:11px;color:var(--muted);">${data}</td>
             <td style="padding:8px;font-weight:600;">${esc(v.colabNome||'—')}</td>
             <td style="padding:8px;">
-              <span style="background:${v.tipo==='compra'?'#FEF3C7':'#DBEAFE'};color:${v.tipo==='compra'?'#92400E':'#1E40AF'};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">${v.tipo==='compra'?'🛒 Compra':'💵 Vale'}</span>
+              ${(() => {
+                const map = {
+                  compra: { bg:'#FEF3C7', fg:'#92400E', l:'🛒 Compra' },
+                  pix:    { bg:'#DCFCE7', fg:'#15803D', l:'📱 PIX' },
+                  vale:   { bg:'#DBEAFE', fg:'#1E40AF', l:'💵 Vale' },
+                };
+                const t = map[v.tipo] || map.vale;
+                return `<span style="background:${t.bg};color:${t.fg};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">${t.l}</span>`;
+              })()}
             </td>
             <td style="padding:8px;">
               <div style="font-size:12px;">${esc(v.descricao||'')}</div>
@@ -606,6 +615,7 @@ export function showValeModal(){
       <div class="fg"><label class="fl">Tipo *</label>
         <select class="fi" id="vm-tipo">
           <option value="vale">💵 Vale (dinheiro)</option>
+          <option value="pix">📱 PIX</option>
           <option value="compra">🛒 Compra/Retirada de produto</option>
         </select>
       </div>
@@ -725,7 +735,8 @@ export function showValeModal(){
       const list = JSON.parse(localStorage.getItem('fv_vales')||'[]');
       list.push(v);
       localStorage.setItem('fv_vales', JSON.stringify(list));
-      toast(`✅ ${tipo==='compra'?'Compra':'Vale'} registrada(o)`);
+      const lblTipo = { compra:'Compra', pix:'PIX', vale:'Vale' }[tipo] || 'Vale';
+      toast(`✅ ${lblTipo} registrada(o)`);
       document.getElementById('mo').remove();
       S._modal = null;
       render();
