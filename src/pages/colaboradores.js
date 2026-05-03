@@ -96,23 +96,25 @@ export function metaBar(atual, meta, label, unit=''){
 
 // ── MODULO COLABORADORES ──────────────────────────────────────
 const MODULOS_COLABS = [
-  {k:'dashboard',  l:'📊 Dashboard',        grupo:'Visao'},
-  {k:'pdv',        l:'🛒 PDV (Vendas)',      grupo:'Vendas'},
-  {k:'orders',     l:'📋 Pedidos',           grupo:'Vendas'},
-  {k:'caixa',      l:'💵 Caixa',             grupo:'Vendas'},
-  {k:'clients',    l:'👥 Clientes',          grupo:'Cadastros'},
-  {k:'products',   l:'🌹 Produtos',          grupo:'Cadastros'},
-  {k:'stock',      l:'📦 Estoque',           grupo:'Cadastros'},
-  {k:'production', l:'🌿 Producao',          grupo:'Operacao'},
-  {k:'delivery',   l:'📤 Expedicao/Entrega', grupo:'Operacao'},
-  {k:'financial',  l:'💰 Financeiro',        grupo:'Financeiro'},
-  {k:'reports',    l:'📈 Relatorios',        grupo:'Financeiro'},
-  {k:'ponto',      l:'🕐 Ponto',             grupo:'RH'},
-  {k:'whatsapp',   l:'💬 WhatsApp',          grupo:'Config'},
-  {k:'backup',     l:'💾 Backup',            grupo:'Config'},
+  {k:'dashboard',    l:'📊 Dashboard',        grupo:'Visao'},
+  {k:'pdv',          l:'🛒 PDV (Vendas)',      grupo:'Vendas'},
+  {k:'orders',       l:'📋 Pedidos',           grupo:'Vendas'},
+  {k:'caixa',        l:'💵 Caixa',             grupo:'Vendas'},
+  {k:'clients',      l:'👥 Clientes',          grupo:'Cadastros'},
+  {k:'products',     l:'🌹 Produtos',          grupo:'Cadastros'},
+  {k:'stock',        l:'📦 Estoque',           grupo:'Cadastros'},
+  {k:'production',   l:'🌿 Producao',          grupo:'Operacao'},
+  {k:'delivery',     l:'📤 Expedicao/Entrega', grupo:'Operacao'},
+  {k:'financial',    l:'💰 Financeiro',        grupo:'Financeiro'},
+  {k:'reports',      l:'📈 Relatorios',        grupo:'Financeiro'},
+  {k:'notasFiscais', l:'🧾 Notas Fiscais',     grupo:'Financeiro'},
+  {k:'ponto',        l:'🕐 Ponto',             grupo:'RH'},
+  {k:'rh',           l:'🧑‍💼 RH',              grupo:'RH'},
+  {k:'whatsapp',     l:'💬 WhatsApp',          grupo:'Config'},
+  {k:'backup',       l:'💾 Backup',            grupo:'Config'},
 ];
 
-const CARGOS_COLABS=['Gerente','Atendimento','Producao','Expedicao','Financeiro','Entregador'];
+const CARGOS_COLABS=['Gerente','Atendimento','Producao','Expedicao','Financeiro','Entregador','Contador'];
 const UNIDADES_COLABS=['Loja Novo Aleixo','Loja Allegro Mall','CDLE','Todas'];
 
 // ── Fetch collaborators from API with localStorage fallback ───
@@ -298,7 +300,12 @@ export async function showColabModal(colabId=null, overrideCargo=null){
   const colab = colabId ? getColabs().find(c=>c.id===colabId) : null;
   const edit  = !!colab;
   const cargo = overrideCargo || colab?.cargo || 'Atendimento';
-  const mods  = colab?.modulos||{};
+  // Defaults POR CARGO quando criando novo colab (sem modulos definidos):
+  // Contador → so RH + Notas Fiscais; outros → vazio (ADM marca o que quer)
+  let mods = colab?.modulos || {};
+  if (!edit && Object.keys(mods).length === 0) {
+    if (cargo === 'Contador') mods = { rh: true, notasFiscais: true };
+  }
 
   // Agrupa modulos por grupo
   const grupos={};

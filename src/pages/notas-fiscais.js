@@ -522,8 +522,40 @@ export function renderNotasFiscais() {
   }
   const notas = S._notasFiscais || [];
 
+  // ── FILTRO DE PERIODO (Dia / Semana / Mes / Datas custom) ──
+  const periodo = S._nfePeriodo || 'todos';
+  const d1 = S._nfeDate1 || '';
+  const d2 = S._nfeDate2 || '';
+  const _agora = new Date();
+  let _ini = null, _fim = null;
+  if (periodo === 'dia') {
+    _ini = new Date(_agora); _ini.setHours(0,0,0,0);
+    _fim = new Date(_agora); _fim.setHours(23,59,59,999);
+  } else if (periodo === 'semana') {
+    _ini = new Date(_agora); _ini.setDate(_agora.getDate() - _agora.getDay()); _ini.setHours(0,0,0,0);
+    _fim = new Date(_ini); _fim.setDate(_ini.getDate() + 6); _fim.setHours(23,59,59,999);
+  } else if (periodo === 'mes') {
+    _ini = new Date(_agora.getFullYear(), _agora.getMonth(), 1);
+    _fim = new Date(_agora.getFullYear(), _agora.getMonth()+1, 0, 23,59,59,999);
+  } else if (periodo === 'mes_ant') {
+    _ini = new Date(_agora.getFullYear(), _agora.getMonth()-1, 1);
+    _fim = new Date(_agora.getFullYear(), _agora.getMonth(), 0, 23,59,59,999);
+  } else if (periodo === 'custom') {
+    if (d1) _ini = new Date(d1+'T00:00:00');
+    if (d2) _fim = new Date(d2+'T23:59:59');
+  }
+  const noPeriodo = (n) => {
+    if (!_ini && !_fim) return true;
+    const dRaw = n.emitidaEm || n.createdAt; if (!dRaw) return false;
+    const d = new Date(dRaw);
+    if (_ini && d < _ini) return false;
+    if (_fim && d > _fim) return false;
+    return true;
+  };
+
   const filter = S._nfeFilter || 'all';
   const filtered = notas.filter(n => {
+    if (!noPeriodo(n)) return false;
     if (filter === 'all') return true;
     if (filter === 'autorizadas') return n.status === 'Autorizada';
     if (filter === 'pendentes') return ['Processando', 'Pendente'].includes(n.status);
@@ -534,15 +566,18 @@ export function renderNotasFiscais() {
     return true;
   });
 
-  const total = notas.length;
-  const autorizadas = notas.filter(n => n.status === 'Autorizada').length;
-  const pendentes = notas.filter(n => ['Processando', 'Pendente'].includes(n.status)).length;
-  const rejeitadas = notas.filter(n => ['Rejeitada', 'Denegada'].includes(n.status)).length;
-  const valorAutorizado = notas
+  // KPIs sempre dentro do periodo (para batem com a lista exibida)
+  const notasPeriodo = notas.filter(noPeriodo);
+  const total = notasPeriodo.length;
+  const autorizadas = notasPeriodo.filter(n => n.status === 'Autorizada').length;
+  const pendentes = notasPeriodo.filter(n => ['Processando', 'Pendente'].includes(n.status)).length;
+  const canceladas = notasPeriodo.filter(n => n.status === 'Cancelada').length;
+  const valorAutorizado = notasPeriodo
     .filter(n => n.status === 'Autorizada')
     .reduce((s, n) => s + (n.valorTotal || 0), 0);
 
   const tabBtn = (k, l) => `<button type="button" class="btn ${filter === k ? 'btn-primary' : 'btn-ghost'} btn-sm" data-nfe-filter="${k}">${l}</button>`;
+  const perBtn = (k, l) => `<button type="button" class="btn ${periodo === k ? 'btn-primary' : 'btn-ghost'} btn-sm" data-nfe-periodo="${k}">${l}</button>`;
 
   return `
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
@@ -556,11 +591,38 @@ export function renderNotasFiscais() {
   </div>
 </div>
 
+<!-- FILTROS DE PERIODO (Consulta Contador) -->
+<div class="card" style="margin-bottom:14px;padding:12px;background:linear-gradient(135deg,#FAE8E6,#FFF7F5);border:1px solid #FECDD3;">
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+    <div style="font-size:11px;font-weight:800;color:#9F1239;text-transform:uppercase;letter-spacing:.5px;">📅 Período:</div>
+    ${perBtn('todos',   'Todos')}
+    ${perBtn('dia',     'Hoje')}
+    ${perBtn('semana',  'Semana')}
+    ${perBtn('mes',     'Este Mês')}
+    ${perBtn('mes_ant', 'Mês Anterior')}
+    ${perBtn('custom',  '📅 Datas')}
+    ${periodo !== 'todos' ? `<span style="margin-left:8px;font-size:11px;color:#9F1239;font-weight:600;">${total} nota(s) no período</span>` : ''}
+  </div>
+  ${periodo === 'custom' ? `
+  <div style="display:flex;gap:10px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid #FECDD3;">
+    <span style="font-size:11px;font-weight:700;color:#9F1239;">📅 Custom:</span>
+    <div class="fg" style="margin:0;"><label class="fl" style="font-size:10px;">Data início</label>
+      <input type="date" class="fi" id="nfe-date1" value="${d1}" style="width:auto;"/></div>
+    <div class="fg" style="margin:0;"><label class="fl" style="font-size:10px;">Data fim</label>
+      <input type="date" class="fi" id="nfe-date2" value="${d2}" style="width:auto;"/></div>
+  </div>` : ''}
+</div>
+
 <div class="g4" style="margin-bottom:14px;">
-  <div class="mc rose"><div class="mc-label">Total emitidas</div><div class="mc-val">${total}</div></div>
+  <div class="mc rose"><div class="mc-label">Total no período</div><div class="mc-val">${total}</div></div>
   <div class="mc leaf"><div class="mc-label">Autorizadas</div><div class="mc-val">${autorizadas}</div></div>
   <div class="mc gold"><div class="mc-label">Pendentes</div><div class="mc-val">${pendentes}</div></div>
-  <div class="mc purple"><div class="mc-label">Valor Autorizado</div><div class="mc-val" style="font-size:16px;">${$c(valorAutorizado)}</div></div>
+  <div class="mc purple"><div class="mc-label">Canceladas</div><div class="mc-val">${canceladas}</div></div>
+</div>
+
+<div style="background:#DCFCE7;border:1px solid #86EFAC;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+  <span style="font-size:12px;color:#15803D;font-weight:700;">💰 Valor Autorizado no período</span>
+  <span style="font-size:20px;font-weight:900;color:#15803D;">${$c(valorAutorizado)}</span>
 </div>
 
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
@@ -618,6 +680,22 @@ ${filtered.length === 0 ? `
 
 // ── BIND events da página ─────────────────────────────────────
 export function bindNotasFiscaisEvents() {
+  // Filtros de PERIODO
+  document.querySelectorAll('[data-nfe-periodo]').forEach(b => {
+    b.addEventListener('click', () => {
+      S._nfePeriodo = b.dataset.nfePeriodo;
+      import('../main.js').then(m => m.render()).catch(()=>{});
+    });
+  });
+  document.getElementById('nfe-date1')?.addEventListener('change', e => {
+    S._nfeDate1 = e.target.value;
+    import('../main.js').then(m => m.render()).catch(()=>{});
+  });
+  document.getElementById('nfe-date2')?.addEventListener('change', e => {
+    S._nfeDate2 = e.target.value;
+    import('../main.js').then(m => m.render()).catch(()=>{});
+  });
+
   document.querySelectorAll('[data-nfe-filter]').forEach(b => {
     b.addEventListener('click', () => {
       S._nfeFilter = b.dataset.nfeFilter;

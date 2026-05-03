@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-31';
+const APP_VERSION = '20260503-32';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -1314,7 +1314,7 @@ function renderApp(){
     {k:'notasFiscais',l:'Notas Fiscais',i:'🧾',m:'notasFiscais',s:'Financeiro'},
     {k:'relatorios',l:'Relatórios',i:'📈',m:'reports',s:'Financeiro'},
     {k:'metas',l:'Metas',i:'🎯',m:'reports',s:'Financeiro', adminOnly:true},
-    {k:'rh',l:'RH (Recursos Humanos)',i:'🧑‍💼',m:'users',s:'Config', adminOnly:true},
+    {k:'rh',l:'RH (Recursos Humanos)',i:'🧑‍💼',m:'rh',s:'Config'},
     {k:'alertas',l:'Alertas',i:'🔔',m:'alertas',s:'Sistema'},
     {k:'whatsapp',l:'WhatsApp',i:'💬',m:'whatsapp',s:'Sistema'},
     {k:'usuarios',l:'Usuários',i:'👤',m:'users',s:'Config'},
@@ -1339,7 +1339,7 @@ function renderApp(){
     dashboard:'dashboard', pdv:'pdv', caixa:'caixa', pedidos:'orders',
     clientes:'clients', produtos:'products', categorias:'products',
     estoque:'stock', producao:'production', expedicao:'delivery',
-    ponto:'ponto', financeiro:'financial', relatorios:'reports', metas:'reports', rh:'users',
+    ponto:'ponto', financeiro:'financial', relatorios:'reports', metas:'reports', rh:'rh',
     alertas:'alertas', whatsapp:'whatsapp', usuarios:'users',
     colaboradores:'users', impressao:'impressao', backup:'backup',
     config:'config', ecommerce:'ecommerce', orcamento:'orcamentos',

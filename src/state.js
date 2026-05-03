@@ -153,5 +153,7 @@ export const PERMS_DEFAULT = {
   Expedicao:     ['orders','delivery','production','stock','ponto'],
   Financeiro:    ['financial','reports','orders','commission','ponto','caixa'],
   Entregador:    ['delivery','ponto'],
+  // Contador: acesso somente a RH e Notas Fiscais (auditoria fiscal)
+  Contador:      ['rh','notasFiscais','ponto'],
 };
 export const PERMS = PERMS_DEFAULT;
