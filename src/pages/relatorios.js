@@ -1,5 +1,5 @@
 import { S } from '../state.js';
-import { $c, $d, sc, rolec, ini, segc } from '../utils/formatters.js';
+import { $c, $d, sc, rolec, ini, segc, esc } from '../utils/formatters.js';
 import { GET, PUT } from '../services/api.js';
 import { toast, searchOrders, renderOrderSearchBar } from '../utils/helpers.js';
 import { can, findColab, getColabs } from '../services/auth.js';
