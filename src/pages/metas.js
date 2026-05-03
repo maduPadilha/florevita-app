@@ -407,6 +407,24 @@ function renderMetasList() {
   </div>`;
 }
 
+// Captura os dados do bloco PACOTE (3 sub-metas) em S._metaPacoteDraft.
+function _capturarPacoteDraft() {
+  const tipos = ['vendas','producao','expedicao'];
+  const draft = S._metaPacoteDraft || {};
+  for (const t of tipos) {
+    const ativoEl = document.querySelector(`[data-pacote-ativo="${t}"]`);
+    const valorEl = document.querySelector(`[data-pacote-valor="${t}"]`);
+    const bonusEl = document.querySelector(`[data-pacote-bonus="${t}"]`);
+    if (!ativoEl && !valorEl && !bonusEl) continue;
+    draft[t] = {
+      ativo:      ativoEl ? !!ativoEl.checked : (draft[t]?.ativo !== false),
+      valorMeta:  Number(valorEl?.value) || 0,
+      bonusValor: Number(bonusEl?.value) || 0,
+    };
+  }
+  S._metaPacoteDraft = draft;
+}
+
 // Captura todos os campos do form atual em S._metaDraft (preserva
 // dados ao re-renderizar por mudanca de tipo/escopo/etc).
 function _capturarFormDraft() {
@@ -445,8 +463,12 @@ function renderMetasNova() {
   const tipo = meta.tipo || S._metaTipoDraft || 'vendas';
   const escopo = meta.escopo || S._metaEscopoDraft || 'colab';
   const colabsDoTipo = colabsPorTipoMeta(tipo);
+  // Modo PACOTE — so disponivel para colab + criando (nao edicao):
+  // ADM define vendas + producao + expedicao numa unica vez.
+  const modoPacote = !isEdit && escopo === 'colab' && (S._metaModoPacote === true);
 
   const escopoBtn = (k, label, icon) => `<button type="button" class="btn btn-sm ${escopo===k?'btn-primary':'btn-ghost'}" data-meta-escopo="${k}" style="flex:1;">${icon} ${label}</button>`;
+  const modoBtn = (val, label) => `<button type="button" class="btn btn-sm ${(modoPacote===val)?'btn-primary':'btn-ghost'}" data-meta-modo-pacote="${val}" style="flex:1;">${label}</button>`;
 
   return `<div class="card">
     <div class="card-title">${isEdit ? '✏️ Editar Meta' : '➕ Nova Meta'}</div>
@@ -460,6 +482,20 @@ function renderMetasNova() {
       </div>
     </div>
 
+    ${escopo === 'colab' && !isEdit ? `
+    <!-- Toggle: meta unica vs pacote (3 metas de uma vez) -->
+    <div style="margin-bottom:14px;background:linear-gradient(135deg,#FAE8E6,#FAF7F5);border:1px solid #FECDD3;border-radius:10px;padding:10px 12px;">
+      <div style="font-size:11px;font-weight:700;color:#9F1239;text-transform:uppercase;margin-bottom:6px;">📋 Modo de cadastro</div>
+      <div style="display:flex;gap:6px;">
+        ${modoBtn(false, '🎯 Meta única (1 tipo)')}
+        ${modoBtn(true,  '📦 Pacote (Vendas + Produção + Expedição)')}
+      </div>
+      <div style="font-size:10px;color:#9F1239;margin-top:6px;font-style:italic;">${modoPacote
+        ? '💡 Pacote: você define meta+bônus para Vendas, Produção e Expedição. Salvar criará 1 meta para cada tipo marcado.'
+        : '💡 Meta única: só 1 tipo (vendas, produção, expedição ou produto específico).'}</div>
+    </div>
+    ` : ''}
+
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
 
       <div class="fg" style="grid-column:span 2;">
@@ -467,6 +503,7 @@ function renderMetasNova() {
         <input type="text" class="fi" id="meta-nome" value="${escHtml(meta.nome||'')}" placeholder="${escopo==='unidade'?'Ex: Meta CDLE Mai/2026':'Ex: Meta Vendas Jessica Mai/2026'}"/>
       </div>
 
+      ${!modoPacote ? `
       <div class="fg">
         <label class="fl">📊 Tipo de meta</label>
         <select class="fi" id="meta-tipo">
@@ -476,6 +513,7 @@ function renderMetasNova() {
           <option value="produto"   ${tipo==='produto'  ?'selected':''}>📦 Produto Específico (qtd vendida)</option>
         </select>
       </div>
+      ` : ''}
 
       ${escopo === 'colab' ? `
       <div class="fg">
@@ -516,7 +554,7 @@ function renderMetasNova() {
         <input type="date" class="fi" id="meta-data-fim" value="${meta.dataFim||''}"/>
       </div>
 
-      ${tipo === 'produto' ? `
+      ${tipo === 'produto' && !modoPacote ? `
       <div class="fg" style="grid-column:span 2;">
         <label class="fl">📦 Produto-alvo <span style="color:var(--red)">*</span></label>
         <select class="fi" id="meta-produto">
@@ -531,6 +569,7 @@ function renderMetasNova() {
       </div>
       ` : ''}
 
+      ${!modoPacote ? `
       <div class="fg" style="grid-column:span 2;">
         <label class="fl">🎯 Valor da meta <span style="color:var(--muted);font-size:11px;">(${
           tipo==='vendas'    ? 'R$' :
@@ -543,6 +582,7 @@ function renderMetasNova() {
           tipo==='expedicao' ? 'Ex: 100'   :
           tipo==='produto'   ? 'Ex: 50 (vender 50 unidades)' : 'Ex: 100'}"/>
       </div>
+      ` : ''}
 
       <div class="fg">
         <label class="fl">💎 Modo do bônus</label>
@@ -552,10 +592,44 @@ function renderMetasNova() {
         </select>
       </div>
 
+      ${!modoPacote ? `
       <div class="fg">
         <label class="fl">💰 Valor do bônus (R$)</label>
         <input type="number" class="fi" id="meta-bonus-valor" min="0" step="0.01" value="${meta.bonusValor||''}" placeholder="Ex: 500"/>
       </div>
+      ` : ''}
+
+      ${modoPacote ? `
+      <!-- PACOTE: 3 sub-metas (Vendas + Producao + Expedicao) -->
+      <div style="grid-column:span 2;background:#FAFAFA;border:1px solid var(--border);border-radius:10px;padding:12px;">
+        <div style="font-size:12px;font-weight:800;color:#1E293B;margin-bottom:10px;text-transform:uppercase;">🎯 Defina meta + bônus para cada tipo</div>
+        ${[
+          { k:'vendas',    label:'💰 Vendas',    unit:'R$', step:'0.01', placeMeta:'30000', placeBonus:'500' },
+          { k:'producao',  label:'🌹 Produção',  unit:'qtd', step:'1',    placeMeta:'200',   placeBonus:'300' },
+          { k:'expedicao', label:'🚚 Expedição', unit:'qtd', step:'1',    placeMeta:'100',   placeBonus:'200' },
+        ].map(t => {
+          const draft = (S._metaPacoteDraft && S._metaPacoteDraft[t.k]) || {};
+          const ativo = draft.ativo !== false; // default: marcado
+          return `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;">
+              <input type="checkbox" data-pacote-ativo="${t.k}" ${ativo?'checked':''} style="width:18px;height:18px;cursor:pointer;accent-color:var(--rose);"/>
+              <span style="font-size:13px;font-weight:700;color:#1E293B;">${t.label}</span>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div>
+                <label style="font-size:10px;color:var(--muted);font-weight:700;">Meta (${t.unit})</label>
+                <input type="number" class="fi" data-pacote-valor="${t.k}" min="0" step="${t.step}" value="${draft.valorMeta||''}" placeholder="Ex: ${t.placeMeta}"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--muted);font-weight:700;">💰 Bônus (R$)</label>
+                <input type="number" class="fi" data-pacote-bonus="${t.k}" min="0" step="0.01" value="${draft.bonusValor||''}" placeholder="Ex: ${t.placeBonus}"/>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+        <div style="font-size:10px;color:var(--muted);font-style:italic;margin-top:6px;">⚠️ Apenas tipos com meta &gt; 0 e checkbox marcada serão criados. O nome ganha sufixo automático (ex: 'Meta Jessica · 💰 Vendas').</div>
+      </div>
+      ` : ''}
 
       <div class="fg" style="grid-column:span 2;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;">
@@ -775,6 +849,8 @@ export function bindMetasEvents() {
         S._metaDraft = null;
         S._metaTipoDraft = null;
         S._metaEscopoDraft = null;
+        S._metaPacoteDraft = null;
+        S._metaModoPacote = false;
       }
       render();
     });
@@ -794,8 +870,25 @@ export function bindMetasEvents() {
       _capturarFormDraft();
       S._metaEscopoDraft = b.dataset.metaEscopo;
       if (S._metaDraft) S._metaDraft.escopo = b.dataset.metaEscopo;
+      // Modo pacote so vale para colab
+      if (b.dataset.metaEscopo !== 'colab') S._metaModoPacote = false;
       render();
     });
+  });
+
+  // Toggle modo pacote (colab apenas) — captura dados antes de re-render
+  document.querySelectorAll('[data-meta-modo-pacote]').forEach(b => {
+    b.addEventListener('click', () => {
+      _capturarFormDraft();
+      _capturarPacoteDraft();
+      S._metaModoPacote = (b.dataset.metaModoPacote === 'true');
+      render();
+    });
+  });
+
+  // Captura inputs do pacote em mudancas
+  document.querySelectorAll('[data-pacote-ativo],[data-pacote-valor],[data-pacote-bonus]').forEach(el => {
+    el.addEventListener('change', _capturarPacoteDraft);
   });
 
   // Captura draft ao digitar/blur em qualquer campo do form (defensivo)
@@ -809,55 +902,96 @@ export function bindMetasEvents() {
 
   document.getElementById('btn-meta-save')?.addEventListener('click', () => {
     const escopo      = S._metaEscopoDraft || 'colab';
+    const editId      = S._metasEditId;
+    const isPacote    = !editId && escopo === 'colab' && S._metaModoPacote === true;
     const nome        = document.getElementById('meta-nome')?.value.trim();
-    const tipo        = document.getElementById('meta-tipo')?.value;
     const colabId     = escopo === 'colab'   ? document.getElementById('meta-colab')?.value    : '';
     const unidade     = escopo === 'unidade' ? document.getElementById('meta-unidade')?.value  : '';
     const periodoTipo = document.getElementById('meta-periodo-tipo')?.value;
     const dataInicio  = document.getElementById('meta-data-inicio')?.value;
     const dataFim     = document.getElementById('meta-data-fim')?.value;
-    const valorMeta   = Number(document.getElementById('meta-valor')?.value) || 0;
     const bonusModo   = document.getElementById('meta-bonus-modo')?.value;
-    const bonusValor  = Number(document.getElementById('meta-bonus-valor')?.value) || 0;
     const visivel     = !!document.getElementById('meta-visivel')?.checked;
-    // Produto-alvo (so se tipo === 'produto')
-    const prodRaw = document.getElementById('meta-produto')?.value || '';
-    const [produtoId, produtoCode, produtoNome] = prodRaw.split('|');
 
+    // Validacoes comuns
     if (!nome)       { toast('Informe o nome da meta', true); return; }
     if (escopo === 'colab'   && !colabId)  { toast('Selecione uma colaboradora', true); return; }
     if (escopo === 'unidade' && !unidade)  { toast('Selecione uma unidade', true); return; }
-    if (tipo === 'produto'   && !produtoId && !produtoCode && !produtoNome) { toast('Selecione um produto-alvo', true); return; }
     if (!dataInicio || !dataFim) { toast('Defina período (datas início e fim)', true); return; }
     if (dataInicio > dataFim) { toast('Data inicial maior que final', true); return; }
-    if (!valorMeta || valorMeta <= 0) { toast('Valor da meta deve ser > 0', true); return; }
-    if (bonusValor < 0) { toast('Valor do bônus inválido', true); return; }
 
     const metas = getMetas();
-    const editId = S._metasEditId;
-    const payload = { nome, escopo, tipo, colabId, unidade,
-      produtoId: produtoId||'', produtoCode: produtoCode||'', produtoNome: produtoNome||'',
-      periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor, visivel };
-    if (editId) {
-      const idx = metas.findIndex(m => m.id === editId);
-      if (idx >= 0) {
-        metas[idx] = { ...metas[idx], ...payload };
-        setMetas(metas);
-        toast('✅ Meta atualizada');
+    const baseId = () => 'mt_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+
+    if (isPacote) {
+      // ── MODO PACOTE: cria 1 meta por tipo ativo ───────────────
+      _capturarPacoteDraft();
+      const tipos = ['vendas','producao','expedicao'];
+      const tipoLabels = { vendas:'💰 Vendas', producao:'🌹 Produção', expedicao:'🚚 Expedição' };
+      const ativos = tipos.filter(t => {
+        const d = S._metaPacoteDraft?.[t];
+        return d && d.ativo !== false && (Number(d.valorMeta)||0) > 0;
+      });
+      if (!ativos.length) { toast('Marque ao menos 1 tipo com valor > 0', true); return; }
+      let criadas = 0;
+      for (const t of ativos) {
+        const d = S._metaPacoteDraft[t];
+        const bonusValor = Number(d.bonusValor) || 0;
+        if (bonusValor < 0) continue;
+        metas.push({
+          id: baseId(),
+          nome: `${nome} · ${tipoLabels[t]}`,
+          escopo: 'colab', tipo: t, colabId,
+          unidade: '', produtoId:'', produtoCode:'', produtoNome:'',
+          periodoTipo, dataInicio, dataFim,
+          valorMeta: Number(d.valorMeta)||0,
+          bonusModo, bonusValor, visivel,
+          createdAt: Date.now(),
+        });
+        criadas++;
       }
-    } else {
-      metas.push({ id:'mt_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), ...payload, createdAt:Date.now() });
       setMetas(metas);
-      toast('✅ Meta criada');
+      toast(`✅ ${criadas} meta(s) criada(s) em pacote`);
+    } else {
+      // ── MODO META UNICA (ou edicao) ───────────────────────────
+      const tipo       = document.getElementById('meta-tipo')?.value;
+      const valorMeta  = Number(document.getElementById('meta-valor')?.value) || 0;
+      const bonusValor = Number(document.getElementById('meta-bonus-valor')?.value) || 0;
+      const prodRaw = document.getElementById('meta-produto')?.value || '';
+      const [produtoId, produtoCode, produtoNome] = prodRaw.split('|');
+
+      if (tipo === 'produto' && !produtoId && !produtoCode && !produtoNome) { toast('Selecione um produto-alvo', true); return; }
+      if (!valorMeta || valorMeta <= 0) { toast('Valor da meta deve ser > 0', true); return; }
+      if (bonusValor < 0) { toast('Valor do bônus inválido', true); return; }
+
+      const payload = { nome, escopo, tipo, colabId, unidade,
+        produtoId: produtoId||'', produtoCode: produtoCode||'', produtoNome: produtoNome||'',
+        periodoTipo, dataInicio, dataFim, valorMeta, bonusModo, bonusValor, visivel };
+
+      if (editId) {
+        const idx = metas.findIndex(m => m.id === editId);
+        if (idx >= 0) {
+          metas[idx] = { ...metas[idx], ...payload };
+          setMetas(metas);
+          toast('✅ Meta atualizada');
+        }
+      } else {
+        metas.push({ id: baseId(), ...payload, createdAt: Date.now() });
+        setMetas(metas);
+        toast('✅ Meta criada');
+      }
     }
+
     S._metasEditId = null; S._metasSub = 'list';
-    S._metaTipoDraft = null; S._metaEscopoDraft = null; S._metaDraft = null;
+    S._metaTipoDraft = null; S._metaEscopoDraft = null;
+    S._metaDraft = null; S._metaPacoteDraft = null; S._metaModoPacote = false;
     render();
   });
 
   document.getElementById('btn-meta-cancel')?.addEventListener('click', () => {
     S._metasEditId = null; S._metasSub = 'list';
-    S._metaTipoDraft = null; S._metaEscopoDraft = null; S._metaDraft = null;
+    S._metaTipoDraft = null; S._metaEscopoDraft = null;
+    S._metaDraft = null; S._metaPacoteDraft = null; S._metaModoPacote = false;
     render();
   });
 
