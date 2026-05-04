@@ -15,13 +15,39 @@ import { S } from '../state.js';
 import { $c } from '../utils/formatters.js';
 import { toast } from '../utils/helpers.js';
 import { getColabs } from '../services/auth.js';
+import { GET, PUT } from '../services/api.js';
 
 // ── STORAGE ──────────────────────────────────────────────────
 const LS_DADOS  = 'fv_rh_dados';
 const LS_FOLHAS = 'fv_rh_folhas';
 
 export function getRHDados()    { try { return JSON.parse(localStorage.getItem(LS_DADOS) || '{}'); } catch { return {}; } }
-export function setRHDados(obj) { localStorage.setItem(LS_DADOS, JSON.stringify(obj || {})); }
+export function setRHDados(obj) {
+  localStorage.setItem(LS_DADOS, JSON.stringify(obj || {}));
+  // Persiste TAMBÉM no backend (best-effort, não bloqueia)
+  // Sobrevive a logout/login, sync entre dispositivos.
+  try { PUT('/settings/rh-dados', { value: obj || {} }).catch(()=>{}); } catch(_){}
+}
+
+// Recupera do backend e mescla com localStorage. Disparado uma vez por
+// sessao quando o modulo RH-Folha eh aberto.
+let _rhDadosFetched = false;
+export async function syncRHDadosFromBackend() {
+  if (_rhDadosFetched) return;
+  _rhDadosFetched = true;
+  try {
+    const r = await GET('/settings/rh-dados').catch(() => null);
+    const beDados = r?.value || {};
+    if (beDados && typeof beDados === 'object' && Object.keys(beDados).length) {
+      // Mescla: backend tem prioridade quando ha conflito (mais recente)
+      const local = getRHDados();
+      const merged = { ...local, ...beDados };
+      localStorage.setItem(LS_DADOS, JSON.stringify(merged));
+      // Re-render para refletir
+      try { import('../main.js').then(m => m.render && m.render()).catch(()=>{}); } catch(_){}
+    }
+  } catch(_){}
+}
 
 // Lookup TOLERANTE: tenta a chave primaria (do _colabKey), depois
 // fallback por email, id, backendId e name. Resolve casos onde o backend
@@ -85,7 +111,31 @@ export function saveDadosColab(colabKey, dados) {
 }
 
 export function getFolhas()    { try { return JSON.parse(localStorage.getItem(LS_FOLHAS) || '[]'); } catch { return []; } }
-export function setFolhas(arr) { localStorage.setItem(LS_FOLHAS, JSON.stringify(arr || [])); }
+export function setFolhas(arr) {
+  localStorage.setItem(LS_FOLHAS, JSON.stringify(arr || []));
+  // Persiste no backend tambem (best-effort)
+  try { PUT('/settings/rh-folhas', { value: arr || [] }).catch(()=>{}); } catch(_){}
+}
+
+let _rhFolhasFetched = false;
+async function syncRHFolhasFromBackend() {
+  if (_rhFolhasFetched) return;
+  _rhFolhasFetched = true;
+  try {
+    const r = await GET('/settings/rh-folhas').catch(() => null);
+    const beFolhas = r?.value || [];
+    if (Array.isArray(beFolhas) && beFolhas.length) {
+      const local = getFolhas();
+      // Mescla por ID (backend prioritario)
+      const map = new Map();
+      local.forEach(f => map.set(String(f.id), f));
+      beFolhas.forEach(f => map.set(String(f.id), f));
+      const merged = [...map.values()];
+      localStorage.setItem(LS_FOLHAS, JSON.stringify(merged));
+      try { import('../main.js').then(m => m.render && m.render()).catch(()=>{}); } catch(_){}
+    }
+  } catch(_){}
+}
 
 // ── CALCULO INSS 2026 (faixa progressiva oficial) ────────────
 // Tabela atualizada conforme regulamentacao 2026:
@@ -165,6 +215,11 @@ function getEmpresa() {
 //                          RENDER
 // ─────────────────────────────────────────────────────────────
 export function renderRHFolha() {
+  // 1x por sessao: tenta puxar dados RH do backend e mesclar com local.
+  // Sobrevive a logout/login (LS pode ficar orfao quando colab._id muda).
+  syncRHDadosFromBackend();
+  syncRHFolhasFromBackend();
+
   const sub = S._rhFolhaSub || 'list'; // list | dados | gerar | historico
   const subBtn = (k, label) => `<button type="button" class="tab ${sub===k?'active':''}" data-rhfolha-sub="${k}" style="font-size:12px;">${label}</button>`;
 

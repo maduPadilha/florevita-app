@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-1';
+const APP_VERSION = '20260504-2';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3145,9 +3145,23 @@ function bindPageActions(){
     document.querySelectorAll('[data-stock-add]').forEach(b=>{b.onclick=()=>showStockModal(b.dataset.stockAdd,b.dataset.stockName,'Entrada');});
     document.querySelectorAll('[data-stock-rem]').forEach(b=>{b.onclick=()=>showStockModal(b.dataset.stockRem,b.dataset.stockName,'Saída');});
 
-    // Filtros de busca
+    // Filtros de busca — debounce 400ms + preserva foco/cursor apos render
     {const _el=document.getElementById('stock-search');if(_el){
-      _el.addEventListener('input', e=>{ S._stockSearch = e.target.value; clearTimeout(window._stockSearchT); window._stockSearchT=setTimeout(render,250); });
+      // Restaura foco + cursor se o user estava digitando (sobrevive ao render)
+      if (S._stockSearchFocused) {
+        _el.focus();
+        const pos = S._stockSearchCursor != null ? S._stockSearchCursor : _el.value.length;
+        try { _el.setSelectionRange(pos, pos); } catch(_){}
+        S._stockSearchFocused = false;
+      }
+      _el.addEventListener('input', e => {
+        S._stockSearch = e.target.value;
+        S._stockSearchFocused = true;
+        S._stockSearchCursor = e.target.selectionStart;
+        clearTimeout(window._stockSearchT);
+        window._stockSearchT = setTimeout(render, 400);
+      });
+      _el.addEventListener('blur', () => { S._stockSearchFocused = false; });
     }}
     {const _el=document.getElementById('stock-filter-cat');if(_el)_el.addEventListener('change', e=>{ S._stockCat = e.target.value; render(); });}
     {const _el=document.getElementById('stock-sort');if(_el)_el.addEventListener('change', e=>{ S._stockSort = e.target.value; render(); });}
