@@ -22,10 +22,65 @@ const LS_FOLHAS = 'fv_rh_folhas';
 
 export function getRHDados()    { try { return JSON.parse(localStorage.getItem(LS_DADOS) || '{}'); } catch { return {}; } }
 export function setRHDados(obj) { localStorage.setItem(LS_DADOS, JSON.stringify(obj || {})); }
-export function getDadosColab(colabKey) { return (getRHDados()[String(colabKey)] || {}); }
+
+// Lookup TOLERANTE: tenta a chave primaria (do _colabKey), depois
+// fallback por email, id, backendId e name. Resolve casos onde o backend
+// devolve _id diferente em sessoes distintas (perda dos dados ao recarregar).
+export function getDadosColab(colabKey) {
+  const all = getRHDados();
+  // 1) chave direta (mais comum)
+  if (all[String(colabKey)]) return all[String(colabKey)];
+  // 2) Procura o colab no cadastro pelo colabKey informado e tenta
+  //    seus IDs alternativos
+  try {
+    const colabs = JSON.parse(localStorage.getItem('fv_colabs')||'[]');
+    const c = colabs.find(x =>
+      String(x._id||'') === String(colabKey) ||
+      String(x.id||'')  === String(colabKey) ||
+      String(x.backendId||'') === String(colabKey) ||
+      String(x.email||'').toLowerCase() === String(colabKey).toLowerCase() ||
+      String(x.name||'').toLowerCase() === String(colabKey).toLowerCase()
+    );
+    if (c) {
+      const candidatos = [c._id, c.id, c.backendId, c.email, c.name].filter(Boolean).map(String);
+      for (const k of candidatos) {
+        if (all[k]) return all[k];
+        // tambem tenta lowercase para email/nome
+        const kl = k.toLowerCase();
+        if (all[kl]) return all[kl];
+      }
+    }
+  } catch(_){}
+  return {};
+}
+
+// Salva sob TODAS as chaves possiveis do colab (email + ids + nome)
+// para que getDadosColab encontre em qualquer sessao subsequente.
 export function saveDadosColab(colabKey, dados) {
   const all = getRHDados();
-  all[String(colabKey)] = { ...(all[String(colabKey)]||{}), ...dados, updatedAt: Date.now() };
+  // Encontra o colab no cadastro para obter todas as chaves alternativas
+  let chaves = [String(colabKey)];
+  try {
+    const colabs = JSON.parse(localStorage.getItem('fv_colabs')||'[]');
+    const c = colabs.find(x =>
+      String(x._id||'') === String(colabKey) ||
+      String(x.id||'')  === String(colabKey) ||
+      String(x.backendId||'') === String(colabKey) ||
+      String(x.email||'').toLowerCase() === String(colabKey).toLowerCase() ||
+      String(x.name||'').toLowerCase() === String(colabKey).toLowerCase()
+    );
+    if (c) {
+      [c._id, c.id, c.backendId, c.email, c.name].filter(Boolean).forEach(k => {
+        chaves.push(String(k));
+        if (typeof k === 'string' && /[A-Z@]/.test(k)) chaves.push(String(k).toLowerCase());
+      });
+      chaves = [...new Set(chaves)];
+    }
+  } catch(_){}
+  // Mescla preservando dados anteriores (qualquer chave) + grava em todas
+  const dadosExistentes = chaves.map(k => all[k]).find(Boolean) || {};
+  const dadosFinais = { ...dadosExistentes, ...dados, updatedAt: Date.now() };
+  for (const k of chaves) all[k] = dadosFinais;
   setRHDados(all);
 }
 
