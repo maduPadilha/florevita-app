@@ -754,7 +754,11 @@ ${tab==='geral'?`
 </div>`:''}
 
 <!-- TAB: POR USUARIO / COLABORADORES -->
-${tab==='usuarios'?`
+${tab==='usuarios'?(()=>{
+  const subTab = S._relUsuariosSub || 'resumo'; // resumo | detalhe
+  const subBtn = (k, label) => `<button type="button" class="tab ${subTab===k?'active':''}" data-rel-usuarios-sub="${k}" style="font-size:12px;">${label}</button>`;
+
+  return `
 <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
   <select class="fi" id="rel-colab-filter" style="width:auto;min-width:220px;">
     <option value="">Todos os colaboradores</option>
@@ -762,6 +766,13 @@ ${tab==='usuarios'?`
   </select>
   <div style="font-size:12px;color:var(--muted)">${periodLabel} · ${byUser.length} colaborador(es)</div>
 </div>
+
+<div class="tabs" style="margin-bottom:14px;gap:5px;">
+  ${subBtn('resumo',  '📊 Resumo (todos)')}
+  ${subBtn('detalhe', '📋 Detalhe Individual (dia a dia)')}
+</div>
+
+${subTab === 'resumo' ? `
 <div class="card">
   <div class="card-title">👩‍💼 Comissões & Desempenho — ${periodLabel}</div>
   ${byUser.length===0?`<div class="empty"><div class="empty-icon">👩‍💼</div><p>Sem colaboradores ou atividades no período</p></div>`:`
@@ -806,7 +817,10 @@ ${tab==='usuarios'?`
       </tr>
     </tfoot>
   </table></div>`}
-</div>`:''}
+</div>
+` : renderUsuarioDetalhe(byUser, selColab, colabsAll, inPeriod, periodLabel)}
+`;
+})():''}
 
 <!-- TAB: ENTREGADORES -->
 ${tab==='entregadores'?`
@@ -1440,6 +1454,199 @@ ${tab==='custom'?renderCustomReports():''}
 // o lookup posterior.
 function _colabKey(c) {
   return String(c?._id || c?.id || c?.backendId || c?.email || c?.name || '');
+}
+
+// ── DETALHE DIA A DIA do Por Usuario ────────────────────────
+// Para a colab selecionada (ou para CADA colab quando 'todos'),
+// agrupa atividades por DIA mostrando:
+//   - Vendas: data + nº pedido + cliente + valor + comissão
+//   - Montagens: data + nº pedido + qtd produtos + comissão
+//   - Expedições: data + nº pedido + comissão
+// + Totais por dia + total geral.
+function renderUsuarioDetalhe(byUser, selColab, colabsAll, inPeriod, periodLabel) {
+  // Quando "todos": pede para selecionar uma colab (detalhe vira pesado e
+  // confuso com 8+ pessoas). Quando selecionado: mostra so essa.
+  if (!selColab) {
+    return `<div class="card" style="text-align:center;padding:40px;background:linear-gradient(135deg,#FAE8E6,#FFF7F5);border:1px solid #FECDD3;">
+      <div style="font-size:40px;margin-bottom:10px;">👤</div>
+      <p style="color:#9F1239;font-weight:700;margin-bottom:4px;">Selecione uma colaboradora</p>
+      <p style="color:var(--muted);font-size:12px;">Escolha um nome no filtro acima para ver o detalhe dia a dia (vendas, montagens e expedições com totais).</p>
+    </div>`;
+  }
+
+  // Encontra a colab e seu byUser correspondente
+  const colab = colabsAll.find(c => (c.id||c.backendId||c.email) === selColab);
+  if (!colab) return `<div class="card" style="text-align:center;padding:30px;color:var(--muted);">Colaborador não encontrado.</div>`;
+  const u = byUser.find(x => x.colab && (x.colab.id||x.colab.backendId||x.colab.email) === selColab);
+
+  // Comissoes do cadastro
+  const mt = colab.metas || {};
+  const pctV = Number(mt.comissaoVenda ?? mt.vendaPct ?? 0) || 0;
+  const valM = Number(mt.comissaoMontagem ?? 0) || 0;
+  const valE = Number(mt.comissaoExpedicao ?? 0) || 0;
+
+  // Helper: este pedido eh DELA (vendas/montagem/expedicao)?
+  const orders = Array.isArray(S.orders) ? S.orders : [];
+  const APROVADOS = new Set(['Aprovado','Pago','aprovado','pago','Pago na Entrega','Recebido']);
+  const me = (vals) => _isMine(colab, ...vals);
+
+  // Coleta atividades por dia
+  const dias = {}; // 'YYYY-MM-DD' -> { vendas:[], montagens:[], expedicoes:[] }
+  const ensure = d => { if (!dias[d]) dias[d] = { vendas:[], montagens:[], expedicoes:[] }; return dias[d]; };
+
+  for (const o of orders) {
+    const dataRef = (o.createdAt || o.scheduledDate || '').slice(0,10);
+    if (!dataRef || !inPeriod(o.createdAt || o.scheduledDate)) continue;
+    const itQty = (o.items||[]).reduce((s,i)=>s+(Number(i.qty)||1), 0) || 1;
+    const num = (o.orderNumber||o.numero||'').toString().replace(/^PED-?/i,'');
+    const cli = o.client?.name || o.clientName || '—';
+    const total = Number(o.total) || 0;
+
+    // VENDAS — pedidos APROVADOS dela
+    if (APROVADOS.has(String(o.paymentStatus||''))) {
+      const ehMinha = me([o.vendedorId, o.vendedorEmail]) ||
+        (!o.vendedorId && me([o.createdByColabId, o.createdByEmail, o.criadoPor, o.createdBy, o.createdByName]));
+      if (ehMinha) ensure(dataRef).vendas.push({ num, cli, total, comissao: total*(pctV/100) });
+    }
+
+    // MONTAGENS — status >= Pronto + ela e a montadora
+    const st = String(o.status||'').toLowerCase();
+    if (['pronto','saiu p/ entrega','entregue'].some(x => st.includes(x))) {
+      if (me([o.montadorId, o.montadorEmail, o.montadorNome])) {
+        const dDay = (o.montadoEm || o.createdAt || dataRef).slice(0,10);
+        ensure(dDay).montagens.push({ num, cli, qtd: itQty, comissao: valM * itQty });
+      }
+    }
+
+    // EXPEDICOES — status Entregue + ela e expedidora
+    if (st.includes('entregue')) {
+      if (me([o.expedidorId, o.expedidorEmail, o.driverColabId, o.driverName])) {
+        const dDay = (o.expedidoEm || o.updatedAt || dataRef).slice(0,10);
+        ensure(dDay).expedicoes.push({ num, cli, comissao: valE });
+      }
+    }
+  }
+
+  const diasOrd = Object.keys(dias).sort((a,b) => b.localeCompare(a)); // mais recentes primeiro
+  if (!diasOrd.length) {
+    return `<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+      <div style="font-size:40px;margin-bottom:10px;">📭</div>
+      <p style="font-weight:700;">${esc(colab.name||'')}</p>
+      <p style="font-size:12px;">Nenhuma atividade no período <strong>${esc(periodLabel)}</strong>.</p>
+    </div>`;
+  }
+
+  // Totais gerais
+  const totVendas    = diasOrd.reduce((s,d) => s + dias[d].vendas.length, 0);
+  const totFatVendas = diasOrd.reduce((s,d) => s + dias[d].vendas.reduce((x,v) => x+v.total, 0), 0);
+  const totComV      = diasOrd.reduce((s,d) => s + dias[d].vendas.reduce((x,v) => x+v.comissao, 0), 0);
+  const totMontQtd   = diasOrd.reduce((s,d) => s + dias[d].montagens.reduce((x,m) => x+m.qtd, 0), 0);
+  const totComM      = diasOrd.reduce((s,d) => s + dias[d].montagens.reduce((x,m) => x+m.comissao, 0), 0);
+  const totExpQtd    = diasOrd.reduce((s,d) => s + dias[d].expedicoes.length, 0);
+  const totComE      = diasOrd.reduce((s,d) => s + dias[d].expedicoes.reduce((x,e) => x+e.comissao, 0), 0);
+  const totComissao  = totComV + totComM + totComE;
+
+  const fmtData = (yyyymmdd) => { const [y,m,d] = yyyymmdd.split('-'); return `${d}/${m}/${y}`; };
+
+  return `
+<!-- Header com totais -->
+<div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#FAE8E6,#FFF7F5);border:1px solid #FECDD3;">
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+    <div style="width:54px;height:54px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;">${(colab.name||'?').charAt(0).toUpperCase()}</div>
+    <div style="flex:1;min-width:150px;">
+      <div style="font-family:'Playfair Display',serif;font-size:20px;color:#9F1239;">${esc(colab.name||'')}</div>
+      <div style="font-size:11px;color:var(--muted);">${esc(colab.cargo||'—')} · ${esc(periodLabel)} · ${diasOrd.length} dia(s) com atividade</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-top:14px;">
+    <div style="background:#fff;border-radius:8px;padding:10px;">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">💰 Vendas</div>
+      <div style="font-size:18px;font-weight:900;color:var(--rose);">${totVendas}</div>
+      <div style="font-size:10px;color:#15803D;font-weight:700;">${$c(totFatVendas)} faturado</div>
+      <div style="font-size:10px;color:var(--muted);">→ Comissão: <strong style="color:#15803D;">${$c(totComV)}</strong></div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:10px;">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">🌹 Montagens</div>
+      <div style="font-size:18px;font-weight:900;color:#92400E;">${totMontQtd} <span style="font-size:11px;font-weight:500;">produtos</span></div>
+      <div style="font-size:10px;color:var(--muted);">${valM?'R$ '+valM.toFixed(2)+'/produto':'sem valor cadastrado'}</div>
+      <div style="font-size:10px;color:var(--muted);">→ Comissão: <strong style="color:#92400E;">${$c(totComM)}</strong></div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:10px;">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">🚚 Expedições</div>
+      <div style="font-size:18px;font-weight:900;color:#1E40AF;">${totExpQtd} <span style="font-size:11px;font-weight:500;">entregas</span></div>
+      <div style="font-size:10px;color:var(--muted);">${valE?'R$ '+valE.toFixed(2)+'/entrega':'sem valor cadastrado'}</div>
+      <div style="font-size:10px;color:var(--muted);">→ Comissão: <strong style="color:#1E40AF;">${$c(totComE)}</strong></div>
+    </div>
+    <div style="background:linear-gradient(135deg,#15803D,#22C55E);border-radius:8px;padding:10px;color:#fff;">
+      <div style="font-size:10px;text-transform:uppercase;font-weight:700;opacity:.9;">💚 TOTAL Comissão</div>
+      <div style="font-size:24px;font-weight:900;">${$c(totComissao)}</div>
+      <div style="font-size:10px;opacity:.85;">no período</div>
+    </div>
+  </div>
+</div>
+
+<!-- Detalhe por DIA -->
+<div style="display:grid;gap:10px;">
+${diasOrd.map(d => {
+  const day = dias[d];
+  const dayVendasTot = day.vendas.reduce((s,v)=>s+v.total,0);
+  const dayComV = day.vendas.reduce((s,v)=>s+v.comissao,0);
+  const dayMontQtd = day.montagens.reduce((s,m)=>s+m.qtd,0);
+  const dayComM = day.montagens.reduce((s,m)=>s+m.comissao,0);
+  const dayComE = day.expedicoes.reduce((s,e)=>s+e.comissao,0);
+  const dayTotal = dayComV + dayComM + dayComE;
+  return `<div class="card" style="padding:0;overflow:hidden;">
+    <div style="background:linear-gradient(90deg,#FAE8E6,transparent);padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-weight:800;font-size:14px;color:#9F1239;">📅 ${fmtData(d)}</div>
+        <div style="font-size:11px;color:var(--muted);">${day.vendas.length} venda(s) · ${day.montagens.length} montagem(ns) · ${day.expedicoes.length} expedição(ões)</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">Comissão do dia</div>
+        <div style="font-size:18px;font-weight:900;color:#15803D;">${$c(dayTotal)}</div>
+      </div>
+    </div>
+    <div style="padding:10px 14px;display:grid;gap:10px;">
+      ${day.vendas.length ? `
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--rose);margin-bottom:4px;">💰 Vendas (${day.vendas.length}) — Faturado: ${$c(dayVendasTot)} · Comissão: ${$c(dayComV)}</div>
+        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+          ${day.vendas.map(v => `<tr style="border-bottom:1px solid #F1F5F9;">
+            <td style="padding:4px 8px;color:#7C3AED;font-weight:700;font-family:Monaco,monospace;width:70px;">#${v.num}</td>
+            <td style="padding:4px 8px;">${esc(v.cli)}</td>
+            <td style="padding:4px 8px;text-align:right;color:#1E293B;font-weight:600;">${$c(v.total)}</td>
+            <td style="padding:4px 8px;text-align:right;color:#15803D;font-weight:700;width:90px;">${$c(v.comissao)}</td>
+          </tr>`).join('')}
+        </table>
+      </div>` : ''}
+      ${day.montagens.length ? `
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:4px;">🌹 Montagens (${day.montagens.length}) — ${dayMontQtd} produtos · Comissão: ${$c(dayComM)}</div>
+        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+          ${day.montagens.map(m => `<tr style="border-bottom:1px solid #F1F5F9;">
+            <td style="padding:4px 8px;color:#7C3AED;font-weight:700;font-family:Monaco,monospace;width:70px;">#${m.num}</td>
+            <td style="padding:4px 8px;">${esc(m.cli)}</td>
+            <td style="padding:4px 8px;text-align:right;color:#92400E;font-weight:600;">${m.qtd} produto(s)</td>
+            <td style="padding:4px 8px;text-align:right;color:#92400E;font-weight:700;width:90px;">${$c(m.comissao)}</td>
+          </tr>`).join('')}
+        </table>
+      </div>` : ''}
+      ${day.expedicoes.length ? `
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#1E40AF;margin-bottom:4px;">🚚 Expedições (${day.expedicoes.length}) — Comissão: ${$c(dayComE)}</div>
+        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+          ${day.expedicoes.map(e => `<tr style="border-bottom:1px solid #F1F5F9;">
+            <td style="padding:4px 8px;color:#7C3AED;font-weight:700;font-family:Monaco,monospace;width:70px;">#${e.num}</td>
+            <td style="padding:4px 8px;">${esc(e.cli)}</td>
+            <td style="padding:4px 8px;text-align:right;color:#1E40AF;font-weight:700;" colspan="2">${$c(e.comissao)}</td>
+          </tr>`).join('')}
+        </table>
+      </div>` : ''}
+    </div>
+  </div>`;
+}).join('')}
+</div>
+`;
 }
 
 function renderPorColaborador(orders, period, periodLabel) {

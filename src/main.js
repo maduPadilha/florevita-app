@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-5';
+const APP_VERSION = '20260504-6';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2177,6 +2177,7 @@ function bindPageActions(){
     document.getElementById('rel-date-clear')?.addEventListener('click',()=>{ S._relDate1=''; S._relDate2=''; render(); });
     document.getElementById('rel-driver-filter')?.addEventListener('change',e=>{S._relDriver=e.target.value;render();});
     document.getElementById('rel-colab-filter')?.addEventListener('change',e=>{S._relColab=e.target.value;render();});
+    document.querySelectorAll('[data-rel-usuarios-sub]').forEach(b=>{b.onclick=()=>{S._relUsuariosSub=b.dataset.relUsuariosSub;render();};});
 
     // ── Relatório por Colaborador ────────────────────────────
     document.getElementById('rel-colab-id')?.addEventListener('change', e => { S._relColabId = e.target.value; render(); });
