@@ -223,6 +223,7 @@ ${renderCentralFinanceira(contas)}
       ${contasPagar.slice(0,8).map(c=>{
         const vencida = c.status==='Pendente'&&c.dueDate&&new Date(c.dueDate)<new Date();
         const badgePessoal = c.pessoal ? `<span style="background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:4px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:6px;">🔒 PESSOAL</span>` : '';
+        const idCol = c._id || c.id;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);${c.pessoal?'background:#FEF2F2;border-left:3px solid #DC2626;padding-left:8px;':''}">
           <div>
             <div style="font-size:12px;font-weight:500">${c.description}${badgePessoal}</div>
@@ -231,7 +232,11 @@ ${renderCentralFinanceira(contas)}
           <div style="text-align:right;">
             <div style="font-size:13px;font-weight:600;color:${vencida?'var(--red)':'var(--ink)'}">${$c(c.value)}</div>
             <span class="tag ${vencida?'t-red':c.status==='Pago'?'t-green':'t-gold'}">${vencida?'Vencida':c.status}</span>
-            ${c.status==='Pendente'?`<button class="btn btn-green btn-xs" data-pay-bill="${c._id}" style="margin-top:3px">Pagar</button>`:''}
+            <div style="margin-top:3px;display:flex;gap:3px;justify-content:flex-end;">
+              ${c.status==='Pendente'?`<button class="btn btn-green btn-xs" data-pay-bill="${idCol}" title="Pagar">💸</button>`:''}
+              <button class="btn btn-ghost btn-xs" data-fin-edit="${idCol}" title="Editar" style="color:#1E40AF;">✏️</button>
+              <button class="btn btn-ghost btn-xs" data-fin-del="${idCol}"  title="Excluir" style="color:#DC2626;">🗑️</button>
+            </div>
           </div>
         </div>`;
       }).join('')}`}
@@ -456,9 +461,10 @@ function renderCentralFinanceira(contas) {
             </td>
             <td style="padding:6px 8px;text-align:center;font-size:10px;color:var(--muted);">${esc(c.createdBy||c.user||'—')}</td>
             <td style="padding:6px 8px;text-align:center;white-space:nowrap;">
-              ${!pago && _isDespesa(c) ? `<button class="btn btn-green btn-xs" data-pay-bill="${c._id||c.id}">Pagar</button>` : ''}
-              ${!pago && eRec ? `<button class="btn btn-green btn-xs" data-receive-bill="${c._id||c.id}">Receber</button>` : ''}
-              <button class="btn btn-ghost btn-xs" data-fin-del="${c._id||c.id}" style="color:var(--red);">🗑️</button>
+              ${!pago && _isDespesa(c) ? `<button class="btn btn-green btn-xs" data-pay-bill="${c._id||c.id}" title="Pagar">💸</button>` : ''}
+              ${!pago && eRec ? `<button class="btn btn-green btn-xs" data-receive-bill="${c._id||c.id}" title="Receber">✅</button>` : ''}
+              <button class="btn btn-ghost btn-xs" data-fin-edit="${c._id||c.id}" title="Editar" style="color:#1E40AF;">✏️</button>
+              <button class="btn btn-ghost btn-xs" data-fin-del="${c._id||c.id}" style="color:var(--red);" title="Excluir">🗑️</button>
             </td>
           </tr>`;
         }).join('')}
@@ -1152,50 +1158,58 @@ export function showValeModal(){
 }
 
 // -- MODAL FINANCEIRO --
-export async function showFinModal(type){
+export async function showFinModal(type, editEntry = null){
+  // editEntry: se fornecido, pre-popula campos e UPDATE em vez de CREATE
+  const isEdit = !!editEntry;
   const cats = type==='Despesa'
     ? ['Insumos','Fixo','Variável','Salário','Fornecedor','Marketing','Manutenção','Outros']
     : ['Vendas','Pré-venda','Outros'];
+  // Valores pre-populados (edicao)
+  const v = (k1, k2='') => esc(editEntry?.[k1] ?? editEntry?.[k2] ?? '');
+  const escAttr = (s) => esc(s||'');
+  const dateVal = isEdit ? (editEntry.date || editEntry.dueDate || '').slice(0,10) : '';
+  const valorVal = isEdit ? (editEntry.value ?? editEntry.valor ?? '') : '';
+  const catVal = editEntry?.category || editEntry?.categoria || '';
+  const unitVal = editEntry?.unit || 'Todas';
   S._modal=`<div class="mo" id="mo"><div class="mo-box" onclick="event.stopPropagation()">
-  <div class="mo-title">${type==='Receita'?'💰 Nova Receita':'💸 Nova Conta a Pagar'}</div>
-  <div class="fg"><label class="fl">Descrição *</label><input class="fi" id="fm-desc" placeholder="${type==='Despesa'?'Ex: Fornecedor de rosas':'Ex: Venda balcão'}"/></div>
+  <div class="mo-title">${isEdit?'✏️ Editar ':''}${type==='Receita'?'💰 Receita':'💸 Conta a Pagar'}</div>
+  <div class="fg"><label class="fl">Descrição *</label><input class="fi" id="fm-desc" value="${v('description','descricao')}" placeholder="${type==='Despesa'?'Ex: Fornecedor de rosas':'Ex: Venda balcão'}"/></div>
   <div class="fr2">
-    <div class="fg"><label class="fl">Valor (R$) *</label><input class="fi" type="number" id="fm-value" step="0.01" placeholder="0,00"/></div>
-    <div class="fg"><label class="fl">Data de ${type==='Despesa'?'Vencimento':'Recebimento'}</label><input class="fi" type="date" id="fm-date"/></div>
+    <div class="fg"><label class="fl">Valor (R$) *</label><input class="fi" type="number" id="fm-value" step="0.01" value="${valorVal}" placeholder="0,00"/></div>
+    <div class="fg"><label class="fl">Data de ${type==='Despesa'?'Vencimento':'Recebimento'}</label><input class="fi" type="date" id="fm-date" value="${escAttr(dateVal)}"/></div>
   </div>
   <div class="fr2">
     <div class="fg"><label class="fl">Categoria</label>
       <select class="fi" id="fm-cat">
-        ${cats.map(c=>`<option>${c}</option>`).join('')}
+        ${cats.map(c=>`<option ${c===catVal?'selected':''}>${c}</option>`).join('')}
       </select>
     </div>
     <div class="fg"><label class="fl">Unidade</label>
       <select class="fi" id="fm-unit">
-        <option value="Todas">Todas</option>
-        <option value="Loja Novo Aleixo">Loja Novo Aleixo</option>
-        <option value="Loja Allegro Mall">Loja Allegro Mall</option>
-        <option value="CDLE">CDLE</option>
+        <option value="Todas"             ${unitVal==='Todas'?'selected':''}>Todas</option>
+        <option value="Loja Novo Aleixo"  ${unitVal==='Loja Novo Aleixo'?'selected':''}>Loja Novo Aleixo</option>
+        <option value="Loja Allegro Mall" ${unitVal==='Loja Allegro Mall'?'selected':''}>Loja Allegro Mall</option>
+        <option value="CDLE"              ${unitVal==='CDLE'?'selected':''}>CDLE</option>
       </select>
     </div>
   </div>
-  ${type==='Despesa'?`<div class="fg"><label class="fl">Fornecedor / Beneficiário</label><input class="fi" id="fm-supplier" placeholder="Nome do fornecedor"/></div>`:''}
-  <div class="fg"><label class="fl">Observações</label><textarea class="fi" id="fm-notes" rows="2"></textarea></div>
+  ${type==='Despesa'?`<div class="fg"><label class="fl">Fornecedor / Beneficiário</label><input class="fi" id="fm-supplier" value="${v('supplier')}" placeholder="Nome do fornecedor"/></div>`:''}
+  <div class="fg"><label class="fl">Observações</label><textarea class="fi" id="fm-notes" rows="2">${v('notes')}</textarea></div>
   ${(() => {
     // Conta Pessoal: APENAS o ADM pode marcar/cadastrar.
-    // Gerente/Financeiro/Contador NAO veem o checkbox — toda conta
-    // que cadastrarem fica visivel para a empresa toda.
     const ehAdm = S.user?.role==='Administrador' || S.user?.cargo==='admin' || String(S.user?.cargo||'').toLowerCase()==='administrador';
     if (!ehAdm) return '';
+    const checked = isEdit && editEntry.pessoal ? 'checked' : '';
     return `<div class="fg">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#FEE2E2;border:2px solid #FCA5A5;border-radius:8px;padding:10px 12px;">
-        <input type="checkbox" id="fm-pessoal" style="width:18px;height:18px;cursor:pointer;accent-color:#DC2626;"/>
+        <input type="checkbox" id="fm-pessoal" ${checked} style="width:18px;height:18px;cursor:pointer;accent-color:#DC2626;"/>
         <span style="font-size:13px;font-weight:700;color:#991B1B;">🔒 Conta Pessoal</span>
         <span style="font-size:11px;color:#991B1B;opacity:.85;margin-left:auto;">Visível apenas para o ADM</span>
       </label>
     </div>`;
   })()}
   <div class="mo-foot">
-    <button class="btn ${type==='Receita'?'btn-green':'btn-red'}" id="btn-sv-fin">Salvar ${type}</button>
+    <button class="btn ${type==='Receita'?'btn-green':'btn-red'}" id="btn-sv-fin">${isEdit?'💾 Salvar alterações':'Salvar '+type}</button>
     <button class="btn btn-ghost" id="btn-mo-close">Cancelar</button>
   </div>
   </div></div>`;
@@ -1206,68 +1220,68 @@ export async function showFinModal(type){
     const value=parseFloat(document.getElementById('fm-value')?.value||0);
     if(!desc) return toast('❌ Descrição obrigatória');
     if(!value||value<=0) return toast('❌ Informe o valor');
-    // Backend FinancialEntry exige type ∈ ['receita','despesa'] (lowercase).
-    // Frontend usa label capitalizado ('Receita'/'Despesa') na UI.
     const typeLower = String(type).toLowerCase() === 'receita' ? 'receita' : 'despesa';
     const data = document.getElementById('fm-date')?.value || '';
-    const entry={
+    const updates = {
       type: typeLower,
-      description: desc,
-      descricao: desc,
-      value: value,
-      valor: value,
-      // Schema usa 'date' (string YYYY-MM-DD); preserva tambem dueDate para
-      // compat com listagens antigas que filtram por dueDate.
-      date: data,
-      dueDate: data || null,
+      description: desc, descricao: desc,
+      value: value, valor: value,
+      date: data, dueDate: data || null,
       category: document.getElementById('fm-cat')?.value || 'Outros',
       categoria: document.getElementById('fm-cat')?.value || 'Outros',
       unit: document.getElementById('fm-unit')?.value || 'Todas',
       supplier: document.getElementById('fm-supplier')?.value || '',
       notes: document.getElementById('fm-notes')?.value || '',
-      status: 'Pendente',
-      createdBy: S.user?.name || 'Sistema',
-      user: S.user?.name || 'Sistema',
-      // Conta Pessoal: marcacao para esconder de nao-admin
       pessoal: !!document.getElementById('fm-pessoal')?.checked,
+      updatedAt: new Date().toISOString(),
     };
-
-    // UX: feedback imediato + bloqueia clique duplo
     const btn = document.getElementById('btn-sv-fin');
     if (btn) { btn.disabled = true; btn.textContent = '💾 Salvando...'; }
 
-    // Garante ID local ANTES do POST (caso backend caia, o registro
-    // ainda existe localmente e identificavel)
-    if (!entry._id && !entry.id) {
-      entry.id = 'fin_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    if (isEdit) {
+      // ── EDIT ─────────────────────────────────────────────────
+      const id = editEntry._id || editEntry.id;
+      const merged = { ...editEntry, ...updates };
+      let savedOk = false;
+      try {
+        await import('../services/api.js').then(({ PUT }) => PUT('/financial/entries/' + id, merged));
+        savedOk = true;
+      } catch (e) {
+        console.error('PUT falhou, salvando local:', e);
+      }
+      // Atualiza memoria + localStorage
+      const _matches = e => (e._id||e.id) === id;
+      S.financialEntries = (S.financialEntries||[]).map(e => _matches(e) ? merged : e);
+      try {
+        const arr = JSON.parse(localStorage.getItem('fv_financial')||'[]')
+          .map(e => _matches(e) ? merged : e);
+        localStorage.setItem('fv_financial', JSON.stringify(arr));
+      } catch(_){}
+      S._modal = ''; render();
+      toast(savedOk ? '✅ Lançamento atualizado!' : '⚠️ Atualizado localmente (servidor offline)');
+    } else {
+      // ── CREATE ───────────────────────────────────────────────
+      const entry = { ...updates, status:'Pendente',
+        createdBy: S.user?.name || 'Sistema', user: S.user?.name || 'Sistema' };
+      if (!entry._id && !entry.id) {
+        entry.id = 'fin_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+      }
+      let savedOk = false;
+      try {
+        const saved = await POST('/financial/entries', entry);
+        if (saved && saved._id) entry._id = saved._id;
+        savedOk = true;
+      } catch(e){ console.error('POST falhou, salvando local:', e); }
+      if (!S.financialEntries) S.financialEntries = [];
+      S.financialEntries.unshift(entry);
+      try {
+        const arr = JSON.parse(localStorage.getItem('fv_financial')||'[]');
+        arr.unshift(entry);
+        localStorage.setItem('fv_financial', JSON.stringify(arr));
+      } catch(_){}
+      S._modal = ''; render();
+      toast(savedOk ? `✅ ${type} cadastrada!` : `⚠️ ${type} salva localmente (offline)`);
     }
-
-    let savedOk = false;
-    try {
-      const saved = await POST('/financial/entries', entry);
-      if (saved && saved._id) entry._id = saved._id;
-      savedOk = true;
-    } catch(e){
-      console.error('Erro POST /financial/entries — salvando em localStorage:', e);
-      // NAO bloqueia: persiste localmente. POST falhou mas usuario ja
-      // digitou — perder o dado e pior que continuar offline.
-    }
-
-    if (!S.financialEntries) S.financialEntries = [];
-    S.financialEntries.unshift(entry);
-
-    // CRITICO: persiste em localStorage para SOBREVIVER ao polling.
-    // O polling (services/polling.js) le 'fv_financial' a cada ~30s e
-    // sobrescreve S.financialEntries — se nao salvarmos aqui, as
-    // entradas que vieram so via POST somem da memoria.
-    try {
-      const arr = JSON.parse(localStorage.getItem('fv_financial')||'[]');
-      arr.unshift(entry);
-      localStorage.setItem('fv_financial', JSON.stringify(arr));
-    } catch(_){}
-
-    S._modal = ''; render();
-    toast(savedOk ? `✅ ${type} cadastrada com sucesso!` : `⚠️ ${type} salva localmente (servidor offline — vai sincronizar depois)`);
   });
 }
 

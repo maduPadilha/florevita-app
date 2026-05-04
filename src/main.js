@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260503-50';
+const APP_VERSION = '20260504-1';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3244,15 +3244,28 @@ function bindPageActions(){
       S.financialEntries = (S.financialEntries||[]).map(e=>_match(e)?{...e,status:'Recebido',paidAt:new Date().toISOString()}:e);
       render(); toast('✅ Receita marcada como recebida!');
     };});
-    // Excluir entrada financeira
-    document.querySelectorAll('[data-fin-del]').forEach(b=>{b.onclick=()=>{
+    // Excluir entrada financeira (tambem deleta no backend best-effort)
+    document.querySelectorAll('[data-fin-del]').forEach(b=>{b.onclick=async()=>{
       if (!confirm('Excluir este lançamento financeiro?')) return;
       const id = b.dataset.finDel;
       const _match = e => (e._id||e.id) === id;
+      // Backend (best effort)
+      if (id && /^[a-f0-9]{24}$/.test(id)) {
+        try { await DELETE('/financial/entries/' + id); } catch(_){}
+      }
       const entries = JSON.parse(localStorage.getItem('fv_financial')||'[]').filter(e=>!_match(e));
       localStorage.setItem('fv_financial',JSON.stringify(entries));
       S.financialEntries = (S.financialEntries||[]).filter(e=>!_match(e));
       render(); toast('🗑️ Lançamento excluído');
+    };});
+
+    // Editar entrada financeira — abre modal pre-populado
+    document.querySelectorAll('[data-fin-edit]').forEach(b=>{b.onclick=()=>{
+      const id = b.dataset.finEdit;
+      const entry = (S.financialEntries||[]).find(e => (e._id||e.id) === id);
+      if (!entry) { toast('Lançamento não encontrado', true); return; }
+      const tipo = String(entry.type||'').toLowerCase() === 'receita' ? 'Receita' : 'Despesa';
+      import('./pages/financeiro.js').then(m => m.showFinModal && m.showFinModal(tipo, entry));
     };});
 
     // Filtros da Central Financeira
