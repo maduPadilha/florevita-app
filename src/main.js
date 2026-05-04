@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-2';
+const APP_VERSION = '20260504-3';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3336,6 +3336,116 @@ function bindPageActions(){
       S._rhFolhaTipo  = tipo === 'salario' ? 'contracheque' : 'adiantamento';
       setPage('rh');
     }));
+
+    // ── SELECAO em lote da Folha a Pagar ──
+    document.querySelectorAll('[data-folha-sel]').forEach(cb => cb.addEventListener('change', () => {
+      const k = cb.dataset.folhaSel;
+      const arr = S._folhaSelecionadas || [];
+      const i = arr.indexOf(k);
+      if (cb.checked && i < 0) arr.push(k);
+      else if (!cb.checked && i >= 0) arr.splice(i, 1);
+      S._folhaSelecionadas = [...arr];
+      render();
+    }));
+    document.getElementById('folha-sel-todos')?.addEventListener('change', e => {
+      // Coleta as chaves de todas as linhas pendentes mostradas
+      const pendentes = [...document.querySelectorAll('[data-folha-sel]')].map(c => c.dataset.folhaSel);
+      S._folhaSelecionadas = e.target.checked ? pendentes : [];
+      render();
+    });
+
+    // ── PAGAR EM LOTE — marca como pago + pergunta sobre impressao ──
+    document.getElementById('btn-folha-pagar-lote')?.addEventListener('click', async () => {
+      const chaves = S._folhaSelecionadas || [];
+      if (!chaves.length) { toast('Selecione pelo menos uma conta', true); return; }
+      if (!confirm(`Marcar ${chaves.length} conta(s) como paga(s)?`)) return;
+      const querImprimir = confirm('🖨️ Quer também imprimir o RECIBO de cada uma agora?\n\nOK = Sim, imprimir os recibos\nCancelar = Não, só marcar como pago');
+
+      // Helpers do rh-folha
+      const RHF = await import('./pages/rh-folha.js');
+      const folhasExistentes = RHF.getFolhas ? RHF.getFolhas() : [];
+      const hojeISO = new Date().toISOString().slice(0,10);
+      const novasFolhas = [...folhasExistentes];
+      const idsParaImprimir = [];
+      let okCount = 0, dupCount = 0;
+
+      for (const ch of chaves) {
+        const [colabKey, tipo, mesAno] = ch.split('|');
+        // Verifica duplicata
+        const ja = folhasExistentes.find(f => f.colabKey === colabKey && f.tipo === (tipo==='salario'?'contracheque':'adiantamento') && f.mesAno === mesAno);
+        if (ja) {
+          dupCount++;
+          if (querImprimir) idsParaImprimir.push(ja.id);
+          continue;
+        }
+        // Calcula valor estimado (mesmo do bloco renderizado)
+        const dadosAll = JSON.parse(localStorage.getItem('fv_rh_dados')||'{}');
+        const dados = dadosAll[String(colabKey)] || {};
+        const colabs = JSON.parse(localStorage.getItem('fv_colabs')||'[]');
+        const colab = colabs.find(c => String(c._id||c.id||c.email) === String(colabKey)) || {};
+        const sal = Number(dados.salarioBase)||0;
+        // INSS calc (mesma tabela 2026)
+        const F = [{ate:1621,a:0.075},{ate:2902.84,a:0.09},{ate:4354.27,a:0.12},{ate:8475.55,a:0.14}];
+        let inssV = 0, ant = 0;
+        const teto = F[F.length-1].ate;
+        const baseI = Math.min(sal, teto);
+        for (const f of F) {
+          if (baseI <= ant) break;
+          const trib = Math.min(baseI, f.ate) - ant;
+          if (trib > 0) inssV += trib * f.a;
+          ant = f.ate;
+          if (baseI <= f.ate) break;
+        }
+        inssV = Math.round(inssV*100)/100;
+        const vt = Number(dados.valeTransporte)||0;
+        const vales = JSON.parse(localStorage.getItem('fv_vales')||'[]');
+        const valeAberto = vales.filter(v => v.colabKey === colabKey && v.status === 'Aberto').reduce((s,v)=>s+(v.valor||0),0);
+        const valeMes = sal * 0.5;
+        let valor = 0;
+        if (tipo === 'salario') {
+          valor = sal - inssV - vt - valeMes - valeAberto;
+        } else {
+          valor = valeMes;
+        }
+        const tipoFinal = tipo === 'salario' ? 'contracheque' : 'adiantamento';
+        const folha = {
+          id: 'fl_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+          colabKey, colabNome: colab?.name||'',
+          tipo: tipoFinal, mesAno, createdAt: Date.now(),
+          dataPagamento: (() => { const [y,m] = mesAno.split('-').map(Number); const dt = tipo==='salario' ? new Date(y, m, 5) : new Date(y, m-1, 20); return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`; })(),
+          totalVencimentos: tipo==='salario' ? sal : valor,
+          totalDescontos:   tipo==='salario' ? (inssV+vt+valeMes+valeAberto) : 0,
+          valorLiquido:     valor,
+          ...(tipo==='salario' ? { contracheque: {
+            salarioBase: sal, diasTrab:31, horaExtra:0, horaExtraQtd:0, dsr:0, adicVT:0, outroVenc:0,
+            inss: inssV, inssAliq: sal?(inssV/sal)*100:0,
+            baseINSS: sal, fgts: Math.round(sal*0.08*100)/100, baseFGTS: sal, baseIRRF: sal-inssV,
+            adiantamento: valeMes, descVT: vt, outroDesc: valeAberto,
+          }} : { valorAdiantamento: valor }),
+          marcadoEmLote: true,
+        };
+        novasFolhas.unshift(folha);
+        idsParaImprimir.push(folha.id);
+        okCount++;
+      }
+
+      // Salva
+      if (RHF.setFolhas) RHF.setFolhas(novasFolhas);
+      else localStorage.setItem('fv_rh_folhas', JSON.stringify(novasFolhas));
+
+      // Limpa selecao
+      S._folhaSelecionadas = [];
+      toast(`✅ ${okCount} criada(s) · ${dupCount} já existiam(m)`);
+      render();
+
+      // Imprime se foi pedido
+      if (querImprimir && idsParaImprimir.length && RHF.imprimirFolha) {
+        for (const id of idsParaImprimir) {
+          try { RHF.imprimirFolha(id); } catch(_){}
+          await new Promise(r => setTimeout(r, 1800));
+        }
+      }
+    });
   }
 
   // ── Delivery / Entregador ─────────────────────────────────────

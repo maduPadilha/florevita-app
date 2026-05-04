@@ -604,6 +604,13 @@ function renderFolhaAPagar() {
   const totalAtrasado = linhas.filter(l => !l.pago && l.dataVenc < hoje).reduce((s,l) => s+(l.valor||0), 0);
   const qtdAtrasados = linhas.filter(l => !l.pago && l.dataVenc < hoje).length;
 
+  // Selecionados (em memoria) — chave = colabKey|tipo|mesAno
+  const selecChaves = new Set(S._folhaSelecionadas || []);
+  const linhaChave = l => `${l.colabKey}|${l.tipo}|${l.mesAno}`;
+  const pendentesLinhas = linhas.filter(l => !l.pago);
+  const linhasSelecionadas = pendentesLinhas.filter(l => selecChaves.has(linhaChave(l)));
+  const valorSelec = linhasSelecionadas.reduce((s,l) => s+(l.valor||0), 0);
+
   return `
 <div class="card" style="margin-top:14px;">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
@@ -613,6 +620,12 @@ function renderFolhaAPagar() {
         💵 Adiantamento: dia <strong>20</strong> · 💼 Salário: <strong>5º dia útil</strong> do mês seguinte · ${colabsComSalario.length} colaborador(es) com salário cadastrado
       </div>
     </div>
+    ${linhasSelecionadas.length > 0 ? `
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:12px;color:#15803D;font-weight:700;">✓ ${linhasSelecionadas.length} selec. · ${$c(valorSelec)}</span>
+      <button class="btn btn-green btn-sm" id="btn-folha-pagar-lote">💸 Marcar como pago(s)</button>
+    </div>
+    ` : ''}
   </div>
 
   <!-- KPIs -->
@@ -636,6 +649,12 @@ function renderFolhaAPagar() {
   <div style="overflow-x:auto;">
     <table style="width:100%;font-size:12px;border-collapse:collapse;">
       <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
+        <th style="padding:8px;text-align:center;width:36px;">
+          <input type="checkbox" id="folha-sel-todos"
+            ${pendentesLinhas.length>0 && pendentesLinhas.every(l => selecChaves.has(linhaChave(l))) ? 'checked' : ''}
+            ${pendentesLinhas.length===0?'disabled':''}
+            style="width:15px;height:15px;cursor:pointer;accent-color:#15803D;" title="Selecionar todos pendentes"/>
+        </th>
         <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Vencimento</th>
         <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Colab</th>
         <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Tipo</th>
@@ -648,6 +667,8 @@ function renderFolhaAPagar() {
         ${linhas.map(l => {
           const atrasado = !l.pago && l.dataVenc < hoje;
           const dataStr = `${String(l.dataVenc.getDate()).padStart(2,'0')}/${String(l.dataVenc.getMonth()+1).padStart(2,'0')}/${l.dataVenc.getFullYear()}`;
+          const chave = linhaChave(l);
+          const selecionada = selecChaves.has(chave);
           const tipoBadge = l.tipo === 'adiantamento'
             ? `<span style="background:#FEF3C7;color:#92400E;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">💵 Adiantamento</span>`
             : `<span style="background:#DBEAFE;color:#1E40AF;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">💼 Salário</span>`;
@@ -656,7 +677,13 @@ function renderFolhaAPagar() {
             : atrasado
               ? `<span style="background:#FEE2E2;color:#991B1B;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">⚠️ Atrasado</span>`
               : `<span style="background:#FEF3C7;color:#92400E;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">⏳ A pagar</span>`;
-          return `<tr style="border-bottom:1px solid #F1F5F9;${l.pago?'opacity:.6;':''}${atrasado?'background:#FEF2F2;':''}">
+          return `<tr style="border-bottom:1px solid #F1F5F9;${l.pago?'opacity:.6;':''}${atrasado?'background:#FEF2F2;':''}${selecionada?'background:#DCFCE7;':''}">
+            <td style="padding:8px;text-align:center;">
+              ${l.pago
+                ? '<span style="color:#15803D;">✅</span>'
+                : `<input type="checkbox" data-folha-sel="${esc(chave)}" ${selecionada?'checked':''}
+                    style="width:15px;height:15px;cursor:pointer;accent-color:#15803D;"/>`}
+            </td>
             <td style="padding:8px;font-weight:700;color:${atrasado?'#991B1B':'#1E293B'};">${dataStr}</td>
             <td style="padding:8px;font-weight:600;">${esc(l.colab.name||'')}</td>
             <td style="padding:8px;">${tipoBadge}</td>
@@ -666,7 +693,7 @@ function renderFolhaAPagar() {
             <td style="padding:8px;text-align:center;">
               ${l.pago
                 ? `<button class="btn btn-ghost btn-xs" data-folha-print="${l.folhaId}" title="Imprimir recibo">🖨️</button>`
-                : `<button class="btn btn-primary btn-xs" data-folha-gerar="${l.colabKey}|${l.tipo}|${l.mesAno}" title="Gerar e pagar agora">💸 Pagar</button>`}
+                : `<button class="btn btn-primary btn-xs" data-folha-gerar="${l.colabKey}|${l.tipo}|${l.mesAno}" title="Gerar (com formulario detalhado)">💸 Pagar</button>`}
             </td>
           </tr>`;
         }).join('')}
@@ -675,7 +702,7 @@ function renderFolhaAPagar() {
   </div>
 
   <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;color:#1E40AF;">
-    💡 Os compromissos aparecem automaticamente para todo colaborador com <strong>salário cadastrado em RH</strong>. O botão <strong>💸 Pagar</strong> leva direto à geração do contracheque/recibo no módulo RH.
+    💡 <strong>Selecione</strong> os compromissos com os checkboxes e clique em <strong>💸 Marcar como pago(s)</strong> para baixar em lote — o sistema pergunta se quer imprimir os recibos. O botão <strong>💸 Pagar</strong> individual abre o formulário detalhado do RH.
   </div>
 </div>
 `;
