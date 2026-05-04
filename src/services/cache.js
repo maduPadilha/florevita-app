@@ -165,15 +165,39 @@ export async function loadData(){
   S.loading = !temCacheLocal;
 
   // ── FASE CRÍTICA: orders + clients + users ────────────────────
-  // Antes: ate 8 tentativas com 10s entre = 80s. Render Starter ja
-  // nao hiberna mais — se falhar mesmo, e melhor desistir e usar cache.
   let orders=null, clients=null, users=null;
   let carregouCritico = false;
 
-  // Cache do main.js para evitar re-import a cada iteracao
   let mainModule;
   try { mainModule = await import('../main.js'); } catch(_){ mainModule = null; }
   const reRender = () => { try { mainModule?.render?.(); } catch(_){} };
+
+  // ENTREGADOR: load otimizado — so pedidos relevantes + produtos.
+  // Sem clients, sem users, sem stock, sem activities (nao usa).
+  const cargoLow = String(S.user?.cargo||'').toLowerCase();
+  const ehEntregador = cargoLow === 'entregador' || cargoLow.includes('entregador');
+
+  if (ehEntregador) {
+    if (!temCacheLocal) { S._loginMsg = '🚚 Carregando suas entregas...'; reRender(); }
+    // Apenas 100 pedidos mais recentes — driver so precisa dos seus
+    const ords = await GET('/orders?limit=100').catch(()=>null);
+    if (Array.isArray(ords)) {
+      S.orders = mergeDriverAssignments(ords);
+      carregouCritico = true;
+    }
+    S._loginMsg = null;
+    S.loading = _was;
+    reRender();
+    if (!carregouCritico) {
+      toast('⚠️ Sem resposta do servidor. Tente atualizar.', true);
+      return false;
+    }
+    // Background: products (para imagens nas comandas) — opcional
+    GET('/products?limit=500').catch(()=>null).then(p => {
+      if (Array.isArray(p) && p.length > 0) { S.products = p; reRender(); }
+    });
+    return true;
+  }
 
   // /users e admin-only — para colaboradora nao-admin, nao tenta
   const isAdminUser = S.user && (
@@ -184,7 +208,7 @@ export async function loadData(){
     S.user.unit === 'Todas'
   );
 
-  // Maximo 3 tentativas com 2s entre cada (em vez de 8x10s = 80s)
+  // Maximo 3 tentativas com 2s entre cada
   for(let n=1; n<=3; n++){
     if (!temCacheLocal) {
       S._loginMsg = n===1 ? '🌸 Carregando dados...' : `⏳ Aguardando servidor... (${n}/3)`;
@@ -231,7 +255,6 @@ export async function loadData(){
   }
 
   // ── FASE NÃO-CRÍTICA: products + stock + categories + collabs + activities ──
-  // Roda em background, NÃO bloqueia o retorno
   Promise.all([
     GET('/products?limit=1000').catch(()=>null),
     GET('/stock/moves?limit=500').catch(()=>null),

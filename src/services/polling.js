@@ -13,6 +13,25 @@ const POLL_PAGES = ['producao','expedicao','entregador','rota','pedidos','dashbo
 export async function pollData(){
   if(!S.user||!S.token||S.loading||S._modal||S._iaLoading) return;
   _pollCount++;
+
+  // ENTREGADOR: poll otimizado — so pedidos, sem activities/products/etc.
+  const cargoLow = String(S.user?.cargo||'').toLowerCase();
+  if (cargoLow === 'entregador' || cargoLow.includes('entregador')) {
+    try {
+      const ords = await GET('/orders?limit=100').catch(() => null);
+      if (Array.isArray(ords)) {
+        const merged = mergeDriverAssignments(ords);
+        const curSig = merged.map(o => (o._id||o.id)+':'+(o.updatedAt||'')+':'+(o.status||'')).join('|');
+        if (S._ordersSig !== curSig) {
+          S.orders = merged;
+          S._ordersSig = curSig;
+          import('../main.js').then(m => m.render && m.render()).catch(()=>{});
+        }
+      }
+    } catch(_){}
+    return;
+  }
+
   try{
     // A cada ciclo: atualiza pedidos e atividades (sincroniza entre dispositivos)
     const [orders, activities] = await Promise.all([
