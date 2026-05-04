@@ -196,14 +196,44 @@ ${vencidas.length>0?`<div class="alert al-err">⚠️ <strong>${vencidas.length}
   <div class="mc purple"><div class="mc-label">Ticket Médio</div><div class="mc-val">${$c(filteredOrders.length?(receitas+pendente)/filteredOrders.length:0)}</div></div>
 </div>
 
-${renderCentralFinanceira(contas)}
+${(() => {
+  // ── ABAS DO MODULO FINANCEIRO ────────────────────────────
+  const aba = S._finAba || 'pedidos';
+  const tabBtn = (k, label, badge='') => `<button type="button" class="tab ${aba===k?'active':''}" data-fin-aba="${k}" style="font-size:12px;">${label}${badge}</button>`;
+  // Pessoais: aba so para admin
+  const pendentesQtd = contasPagar.filter(c => c.status==='Pendente').length;
+  const pessoaisQtd = (S.financialEntries||[]).filter(c => c.pessoal===true).length;
 
-<div class="g2">
-  <div class="card">
-    <div class="card-title">💳 Pedidos — Status Financeiro</div>
-    ${filteredOrders.length===0?`<div class="empty"><div class="empty-icon">💰</div><p>Sem pedidos</p></div>`:`
-    <div class="tw"><table><thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Pgto</th><th>Status Pgto</th><th>Data</th><th></th></tr></thead>
-    <tbody>${filteredOrders.slice(0,15).map(o=>`<tr>
+  return `
+<div class="tabs" style="margin-bottom:14px;gap:5px;flex-wrap:wrap;">
+  ${tabBtn('pedidos',   '💳 Pedidos')}
+  ${tabBtn('receber',   '⏳ A Receber')}
+  ${tabBtn('pagar',     '💸 A Pagar', pendentesQtd?` <span style="background:#DC2626;color:#fff;border-radius:10px;padding:0 6px;font-size:10px;margin-left:4px;">${pendentesQtd}</span>`:'')}
+  ${tabBtn('pagas',     '✅ Pagas')}
+  ${tabBtn('salarios',  '👥 Salários, Vales e Retiradas')}
+  ${_ehAdmin && pessoaisQtd > 0 ? tabBtn('pessoais', '🔒 Contas Pessoais', ` <span style="background:#991B1B;color:#fff;border-radius:10px;padding:0 6px;font-size:10px;margin-left:4px;">${pessoaisQtd}</span>`) : ''}
+  ${_ehAdmin && pessoaisQtd === 0 ? tabBtn('pessoais', '🔒 Contas Pessoais') : ''}
+</div>
+
+${aba === 'pedidos'  ? renderAbaPedidos(filteredOrders) : ''}
+${aba === 'receber'  ? renderAbaContas(contas, 'receber',  _ehAdmin) : ''}
+${aba === 'pagar'    ? renderAbaContas(contas, 'pagar',    _ehAdmin) : ''}
+${aba === 'pagas'    ? renderAbaContas(contas, 'pagas',    _ehAdmin) : ''}
+${aba === 'salarios' ? renderAbaSalarios() : ''}
+${aba === 'pessoais' && _ehAdmin ? renderAbaPessoais() : ''}
+`;
+})()}`;
+}
+
+// ── RENDER ABA PEDIDOS — Status Financeiro ─────────────────
+function renderAbaPedidos(filteredOrders) {
+  return `
+<div class="card">
+  <div class="card-title">💳 Pedidos — Status Financeiro</div>
+  ${filteredOrders.length===0 ? `<div class="empty"><div class="empty-icon">💰</div><p>Sem pedidos</p></div>` : `
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Pgto</th><th>Status Pgto</th><th>Data</th><th></th></tr></thead>
+    <tbody>${filteredOrders.slice(0,50).map(o=>`<tr>
       <td style="color:var(--rose);font-weight:600">${o.orderNumber||'—'}</td>
       <td>${o.client?.name||o.clientName||'—'}</td>
       <td style="font-weight:600">${$c(o.total)}</td>
@@ -211,57 +241,235 @@ ${renderCentralFinanceira(contas)}
       <td>${paymentStatusBadge(o.paymentStatus||'Ag. Pagamento')}</td>
       <td style="color:var(--muted);font-size:11px">${$d(o.createdAt)}</td>
       <td>${o.paymentStatus!=='Pago'?`<button class="btn btn-green btn-xs" data-mark-paid="${o._id}">✅ Pago</button>`:''}</td>
-    </tr>`).join('')}</tbody></table></div>`}
+    </tr>`).join('')}</tbody>
+  </table></div>
+  ${filteredOrders.length > 50 ? `<div style="text-align:center;color:var(--muted);font-size:11px;margin-top:8px;">Mostrando 50 de ${filteredOrders.length} pedidos</div>` : ''}
+  `}
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="card-title">📊 Resumo por Forma de Pagamento</div>
+  ${['Pix','Link','Cartão','Dinheiro','Pagar na Entrega','Bemol','Giuliana','iFood'].map(p=>{
+    const tot = filteredOrders.filter(o=>o.payment===p).reduce((s,o)=>s+(o.total||0),0);
+    const qty = filteredOrders.filter(o=>o.payment===p).length;
+    if(!qty) return '';
+    return `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">
+      <span>${p} <span style="color:var(--muted)">(${qty} pedidos)</span></span>
+      <span style="font-weight:600">${$c(tot)}</span>
+    </div>`;
+  }).join('')}
+</div>
+`;
+}
+
+// ── RENDER ABA CONTAS (a receber / a pagar / pagas) ────────
+function renderAbaContas(contas, modo, ehAdmin) {
+  // Filtros de periodo
+  const periodo = S._finAbaPeriodo || 'todos';
+  const d1 = S._finAbaD1 || '';
+  const d2 = S._finAbaD2 || '';
+  const hoje = new Date();
+  let ini = null, fim = null;
+  if (periodo === 'dia')    { ini = new Date(hoje); ini.setHours(0,0,0,0); fim = new Date(hoje); fim.setHours(23,59,59,999); }
+  else if (periodo === 'semana') { ini = new Date(hoje); ini.setDate(hoje.getDate()-hoje.getDay()); ini.setHours(0,0,0,0); fim = new Date(ini); fim.setDate(ini.getDate()+6); fim.setHours(23,59,59,999); }
+  else if (periodo === 'mes')    { ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1); fim = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0, 23,59,59,999); }
+  else if (periodo === 'mes_ant'){ ini = new Date(hoje.getFullYear(), hoje.getMonth()-1, 1); fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0, 23,59,59,999); }
+  else if (periodo === 'ano')    { ini = new Date(hoje.getFullYear(), 0, 1); fim = new Date(hoje.getFullYear(), 11, 31, 23,59,59,999); }
+  else if (periodo === 'custom') { if (d1) ini = new Date(d1+'T00:00:00'); if (d2) fim = new Date(d2+'T23:59:59'); }
+
+  const _isDespesa = c => String(c.type||'').toLowerCase() === 'despesa';
+  const _isReceita = c => String(c.type||'').toLowerCase() === 'receita';
+  const _isPago    = c => String(c.status||'').toLowerCase() === 'pago' || String(c.status||'').toLowerCase() === 'recebido';
+  const _dataRef   = c => c.dueDate || c.date || c.createdAt;
+  const _noPeriodo = c => {
+    if (!ini && !fim) return true;
+    const dr = _dataRef(c); if (!dr) return false;
+    const d = new Date(dr);
+    if (ini && d < ini) return false;
+    if (fim && d > fim) return false;
+    return true;
+  };
+
+  // Filtra (excluindo pessoais quando nao for admin — ja foi feito antes mas reforço)
+  let lista = contas.filter(_noPeriodo);
+  if (modo === 'receber')  lista = lista.filter(c => _isReceita(c) && !_isPago(c));
+  else if (modo === 'pagar') lista = lista.filter(c => _isDespesa(c) && !_isPago(c));
+  else if (modo === 'pagas') lista = lista.filter(c => _isPago(c));
+
+  const totalGeral = lista.reduce((s,c) => s+(Number(c.value||c.valor)||0), 0);
+  const titulo = { receber:'⏳ Contas a Receber', pagar:'💸 Contas a Pagar', pagas:'✅ Contas Pagas' }[modo] || '';
+  const corBase = modo==='receber' ? '#F59E0B' : modo==='pagar' ? '#DC2626' : '#15803D';
+
+  const perBtn = (k, l) => `<button type="button" class="btn btn-sm ${periodo===k?'btn-primary':'btn-ghost'}" data-fin-aba-periodo="${k}">${l}</button>`;
+  const fmtData = (iso) => { if (!iso) return '—'; const d = new Date(iso); if (isNaN(d)) return iso; return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; };
+
+  return `
+<!-- Filtros de periodo -->
+<div class="card" style="margin-bottom:14px;padding:12px;background:linear-gradient(135deg,#FAE8E6,#FFF7F5);border:1px solid #FECDD3;">
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+    <span style="font-size:11px;font-weight:800;color:#9F1239;text-transform:uppercase;">📅 Período:</span>
+    ${perBtn('todos',  'Todos')}
+    ${perBtn('dia',    'Hoje')}
+    ${perBtn('semana', 'Semana')}
+    ${perBtn('mes',    'Mês')}
+    ${perBtn('mes_ant','Mês Ant.')}
+    ${perBtn('ano',    'Ano')}
+    ${perBtn('custom', '📅 Datas')}
+    <span style="margin-left:auto;font-size:11px;color:#9F1239;font-weight:700;">${lista.length} registro(s) · ${$c(totalGeral)}</span>
   </div>
+  ${periodo === 'custom' ? `
+  <div style="display:flex;gap:10px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px dashed #FECDD3;">
+    <input type="date" class="fi" id="fin-aba-d1" value="${d1}" style="width:auto;font-size:12px;"/>
+    <span style="font-size:11px;color:var(--muted);">a</span>
+    <input type="date" class="fi" id="fin-aba-d2" value="${d2}" style="width:auto;font-size:12px;"/>
+  </div>
+  ` : ''}
+</div>
 
-  <div>
-    <div class="card" style="margin-bottom:14px;">
-      <div class="card-title">📋 Contas a Pagar
-        <span class="tag t-red">${contasPagar.filter(c=>c.status==='Pendente').length} pendentes</span>
+<div class="card">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <span>${titulo}</span>
+    <span style="font-size:13px;font-weight:900;color:${corBase};">${$c(totalGeral)}</span>
+  </div>
+  ${lista.length === 0 ? `<div class="empty"><p>Nenhum registro neste período/filtro.</p></div>` : `
+  <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">${modo==='pagas'?'Data Pgto':'Vencimento'}</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Descrição</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Categoria</th>
+        <th style="padding:8px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Unidade</th>
+        <th style="padding:8px;text-align:right;font-size:10px;color:#94A3B8;text-transform:uppercase;">Valor</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Status</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Quem</th>
+        <th style="padding:8px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;">Ações</th>
+      </tr></thead>
+      <tbody>
+        ${lista.sort((a,b) => new Date(_dataRef(b)) - new Date(_dataRef(a))).map(c => {
+          const valor = Number(c.value||c.valor)||0;
+          const eRec = _isReceita(c);
+          const pago = _isPago(c);
+          const venc = !pago && _isDespesa(c) && c.dueDate && new Date(c.dueDate) < hoje;
+          const badgePessoal = c.pessoal ? `<span style="background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;margin-left:4px;">🔒</span>` : '';
+          const id = c._id||c.id;
+          return `<tr style="border-bottom:1px solid #F1F5F9;${c.pessoal?'background:#FEF2F2;':''}${venc?'background:#FFE4E6;':''}">
+            <td style="padding:6px 8px;font-size:11px;color:var(--muted);">${fmtData(_dataRef(c))}</td>
+            <td style="padding:6px 8px;font-weight:600;">${esc(c.description||c.descricao||'—')}${badgePessoal}${c.supplier?`<div style="font-size:10px;color:var(--muted);">${esc(c.supplier)}</div>`:''}</td>
+            <td style="padding:6px 8px;font-size:11px;">${esc(c.category||c.categoria||'—')}</td>
+            <td style="padding:6px 8px;font-size:11px;color:var(--muted);">${esc(c.unit||'Todas')}</td>
+            <td style="padding:6px 8px;text-align:right;font-weight:800;color:${eRec?'#15803D':'#991B1B'};">${$c(valor)}</td>
+            <td style="padding:6px 8px;text-align:center;">
+              <span style="background:${pago?'#DCFCE7':venc?'#FEE2E2':'#FEF3C7'};color:${pago?'#15803D':venc?'#991B1B':'#92400E'};border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;">${pago?'✅ '+(c.status||'Pago'):venc?'⚠️ Vencida':'⏳ '+(c.status||'Pendente')}</span>
+            </td>
+            <td style="padding:6px 8px;text-align:center;font-size:10px;color:var(--muted);">${esc(c.createdBy||c.user||'—')}</td>
+            <td style="padding:6px 8px;text-align:center;white-space:nowrap;">
+              ${!pago && _isDespesa(c) ? `<button class="btn btn-green btn-xs" data-pay-bill="${id}" title="Pagar">💸</button>` : ''}
+              ${!pago && eRec ? `<button class="btn btn-green btn-xs" data-receive-bill="${id}" title="Receber">✅</button>` : ''}
+              <button class="btn btn-ghost btn-xs" data-fin-edit="${id}" title="Editar" style="color:#1E40AF;">✏️</button>
+              <button class="btn btn-ghost btn-xs" data-fin-del="${id}" style="color:var(--red);" title="Excluir">🗑️</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+  `}
+</div>
+`;
+}
+
+// ── RENDER ABA SALARIOS, VALES E RETIRADAS ────────────────
+function renderAbaSalarios() {
+  return renderFolhaAPagar() + renderVales() + renderComissoesMetas();
+}
+
+// ── RENDER ABA CONTAS PESSOAIS (admin only) ───────────────
+function renderAbaPessoais() {
+  const hoje = new Date();
+  const _isDespesa = c => String(c.type||'').toLowerCase() === 'despesa';
+  const _isReceita = c => String(c.type||'').toLowerCase() === 'receita';
+  const _isPago    = c => String(c.status||'').toLowerCase() === 'pago' || String(c.status||'').toLowerCase() === 'recebido';
+  const _dataRef   = c => c.dueDate || c.date || c.createdAt;
+
+  // Apenas pessoais
+  const pessoais = (S.financialEntries||[]).filter(c => c.pessoal === true);
+  const receberPess = pessoais.filter(c => _isReceita(c) && !_isPago(c));
+  const pagarPess   = pessoais.filter(c => _isDespesa(c) && !_isPago(c));
+  const pagasPess   = pessoais.filter(c => _isPago(c));
+
+  const totReceber = receberPess.reduce((s,c) => s+(Number(c.value||c.valor)||0), 0);
+  const totPagar   = pagarPess.reduce((s,c) => s+(Number(c.value||c.valor)||0), 0);
+  const totPagas   = pagasPess.reduce((s,c) => s+(Number(c.value||c.valor)||0), 0);
+  const fmtData = (iso) => { if (!iso) return '—'; const d = new Date(iso); if (isNaN(d)) return iso; return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; };
+
+  if (!pessoais.length) {
+    return `<div class="card" style="background:linear-gradient(135deg,#FEE2E2,#FEF2F2);border:1px solid #FCA5A5;text-align:center;padding:40px;">
+      <div style="font-size:48px;">🔒</div>
+      <p style="margin:10px 0;color:#991B1B;font-weight:700;">Você ainda não cadastrou nenhuma Conta Pessoal.</p>
+      <p style="font-size:12px;color:#991B1B;opacity:.85;">Clique em <strong>+ Receita</strong> ou <strong>+ Despesa</strong> e marque o checkbox 🔒 Conta Pessoal. Apenas você (ADM) verá aqui.</p>
+    </div>`;
+  }
+
+  const renderCard = (lista, titulo, cor, corBg) => `
+    <div class="card" style="margin-bottom:14px;border-left:4px solid ${cor};">
+      <div class="card-title" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <span>${titulo}</span>
+        <span style="color:${cor};font-weight:900;">${$c(lista.reduce((s,c)=>s+(Number(c.value||c.valor)||0),0))}</span>
       </div>
-      ${contasPagar.length===0?`<div class="empty"><div class="empty-icon">📋</div><p>Nenhuma conta cadastrada</p><button class="btn btn-primary btn-sm" id="btn-new-despesa2" style="margin-top:8px">+ Adicionar conta</button></div>`:`
-      ${contasPagar.slice(0,8).map(c=>{
-        const vencida = c.status==='Pendente'&&c.dueDate&&new Date(c.dueDate)<new Date();
-        const badgePessoal = c.pessoal ? `<span style="background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:4px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:6px;">🔒 PESSOAL</span>` : '';
-        const idCol = c._id || c.id;
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);${c.pessoal?'background:#FEF2F2;border-left:3px solid #DC2626;padding-left:8px;':''}">
-          <div>
-            <div style="font-size:12px;font-weight:500">${c.description}${badgePessoal}</div>
-            <div style="font-size:10px;color:var(--muted)">${c.category||'—'} · Vence: ${c.dueDate?$d(c.dueDate):'—'}</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:13px;font-weight:600;color:${vencida?'var(--red)':'var(--ink)'}">${$c(c.value)}</div>
-            <span class="tag ${vencida?'t-red':c.status==='Pago'?'t-green':'t-gold'}">${vencida?'Vencida':c.status}</span>
-            <div style="margin-top:3px;display:flex;gap:3px;justify-content:flex-end;">
-              ${c.status==='Pendente'?`<button class="btn btn-green btn-xs" data-pay-bill="${idCol}" title="Pagar">💸</button>`:''}
-              <button class="btn btn-ghost btn-xs" data-fin-edit="${idCol}" title="Editar" style="color:#1E40AF;">✏️</button>
-              <button class="btn btn-ghost btn-xs" data-fin-del="${idCol}"  title="Excluir" style="color:#DC2626;">🗑️</button>
-            </div>
-          </div>
-        </div>`;
-      }).join('')}`}
-    </div>
+      ${lista.length === 0 ? `<div style="text-align:center;padding:14px;color:var(--muted);font-size:12px;">Nenhuma</div>` : `
+      <div style="overflow-x:auto;">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          <thead><tr style="background:${corBg};">
+            <th style="padding:6px 8px;text-align:left;font-size:10px;color:${cor};text-transform:uppercase;">Data</th>
+            <th style="padding:6px 8px;text-align:left;font-size:10px;color:${cor};text-transform:uppercase;">Descrição</th>
+            <th style="padding:6px 8px;text-align:left;font-size:10px;color:${cor};text-transform:uppercase;">Categoria</th>
+            <th style="padding:6px 8px;text-align:right;font-size:10px;color:${cor};text-transform:uppercase;">Valor</th>
+            <th style="padding:6px 8px;text-align:center;font-size:10px;color:${cor};text-transform:uppercase;">Ações</th>
+          </tr></thead>
+          <tbody>
+            ${lista.sort((a,b) => new Date(_dataRef(b)) - new Date(_dataRef(a))).map(c => {
+              const valor = Number(c.value||c.valor)||0;
+              const id = c._id||c.id;
+              const eRec = _isReceita(c);
+              const pago = _isPago(c);
+              return `<tr style="border-bottom:1px solid #F1F5F9;">
+                <td style="padding:6px 8px;font-size:11px;color:var(--muted);">${fmtData(_dataRef(c))}</td>
+                <td style="padding:6px 8px;font-weight:600;">${esc(c.description||c.descricao||'—')}${c.supplier?`<div style="font-size:10px;color:var(--muted);">${esc(c.supplier)}</div>`:''}</td>
+                <td style="padding:6px 8px;font-size:11px;">${esc(c.category||c.categoria||'—')}</td>
+                <td style="padding:6px 8px;text-align:right;font-weight:800;color:${cor};">${$c(valor)}</td>
+                <td style="padding:6px 8px;text-align:center;white-space:nowrap;">
+                  ${!pago && eRec ? `<button class="btn btn-green btn-xs" data-receive-bill="${id}" title="Receber">✅</button>` : ''}
+                  ${!pago && _isDespesa(c) ? `<button class="btn btn-green btn-xs" data-pay-bill="${id}" title="Pagar">💸</button>` : ''}
+                  <button class="btn btn-ghost btn-xs" data-fin-edit="${id}" title="Editar" style="color:#1E40AF;">✏️</button>
+                  <button class="btn btn-ghost btn-xs" data-fin-del="${id}" style="color:var(--red);" title="Excluir">🗑️</button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      `}
+    </div>`;
 
-    <div class="card">
-      <div class="card-title">📊 Resumo por Forma de Pagamento</div>
-      ${['Pix','Link','Cartão','Dinheiro','Pagar na Entrega','Bemol','Giuliana','iFood'].map(p=>{
-        const tot = filteredOrders.filter(o=>o.payment===p).reduce((s,o)=>s+(o.total||0),0);
-        const qty = filteredOrders.filter(o=>o.payment===p).length;
-        if(!qty) return '';
-        return `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">
-          <span>${p} <span style="color:var(--muted)">(${qty} pedidos)</span></span>
-          <span style="font-weight:600">${$c(tot)}</span>
-        </div>`;
-      }).join('')}
+  return `
+<div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#FEE2E2,#FEF2F2);border:2px solid #FCA5A5;">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:32px;">🔒</span>
+    <div>
+      <div style="font-family:'Playfair Display',serif;font-size:18px;color:#991B1B;">Contas Pessoais</div>
+      <div style="font-size:12px;color:#991B1B;opacity:.85;">Apenas você (ADM) vê estas contas. Não aparecem em relatórios da empresa.</div>
+    </div>
+    <div style="margin-left:auto;text-align:right;">
+      <div style="font-size:10px;color:#991B1B;text-transform:uppercase;font-weight:700;">Saldo (Receber − Pagar)</div>
+      <div style="font-size:20px;font-weight:900;color:${(totReceber-totPagar)>=0?'#15803D':'#991B1B'};">${$c(totReceber - totPagar)}</div>
     </div>
   </div>
 </div>
 
-${renderFolhaAPagar()}
-
-${renderVales()}
-
-${renderComissoesMetas()}`;
+${renderCard(receberPess, '⏳ Pessoais a Receber', '#F59E0B', '#FEF3C7')}
+${renderCard(pagarPess,   '💸 Pessoais a Pagar',   '#DC2626', '#FEE2E2')}
+${renderCard(pagasPess,   '✅ Pessoais Pagas',     '#15803D', '#DCFCE7')}
+`;
 }
 
 // ── CENTRAL FINANCEIRA — listagem com tabs + filtros + grafico ──
@@ -599,6 +807,27 @@ function renderFolhaAPagar() {
   // Ordena por data de vencimento crescente (proximas primeiro)
   linhas.sort((a,b) => a.dataVenc - b.dataVenc);
 
+  // FILTROS de periodo da Folha
+  const folhaPer = S._folhaPeriodo || 'todos';
+  const fd1 = S._folhaD1 || '';
+  const fd2 = S._folhaD2 || '';
+  let fIni = null, fFim = null;
+  if (folhaPer === 'dia')    { fIni = new Date(hoje); fIni.setHours(0,0,0,0); fFim = new Date(hoje); fFim.setHours(23,59,59,999); }
+  else if (folhaPer === 'semana') { fIni = new Date(hoje); fIni.setDate(hoje.getDate()-hoje.getDay()); fIni.setHours(0,0,0,0); fFim = new Date(fIni); fFim.setDate(fIni.getDate()+6); fFim.setHours(23,59,59,999); }
+  else if (folhaPer === 'mes')    { fIni = new Date(hoje.getFullYear(), hoje.getMonth(), 1); fFim = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0, 23,59,59,999); }
+  else if (folhaPer === 'mes_ant'){ fIni = new Date(hoje.getFullYear(), hoje.getMonth()-1, 1); fFim = new Date(hoje.getFullYear(), hoje.getMonth(), 0, 23,59,59,999); }
+  else if (folhaPer === 'custom') { if (fd1) fIni = new Date(fd1+'T00:00:00'); if (fd2) fFim = new Date(fd2+'T23:59:59'); }
+  if (fIni || fFim) {
+    const filtradas = linhas.filter(l => {
+      if (fIni && l.dataVenc < fIni) return false;
+      if (fFim && l.dataVenc > fFim) return false;
+      return true;
+    });
+    // Reatribui ao array original (linhas e const) — limpa e reinsere
+    linhas.length = 0;
+    linhas.push(...filtradas);
+  }
+
   // KPIs do bloco
   const totalPendente = linhas.filter(l => !l.pago).reduce((s,l) => s+(l.valor||0), 0);
   const totalAtrasado = linhas.filter(l => !l.pago && l.dataVenc < hoje).reduce((s,l) => s+(l.valor||0), 0);
@@ -610,6 +839,8 @@ function renderFolhaAPagar() {
   const pendentesLinhas = linhas.filter(l => !l.pago);
   const linhasSelecionadas = pendentesLinhas.filter(l => selecChaves.has(linhaChave(l)));
   const valorSelec = linhasSelecionadas.reduce((s,l) => s+(l.valor||0), 0);
+
+  const folhaPerBtn = (k, l) => `<button type="button" class="btn btn-xs ${folhaPer===k?'btn-primary':'btn-ghost'}" data-folha-per="${k}">${l}</button>`;
 
   return `
 <div class="card" style="margin-top:14px;">
@@ -626,6 +857,23 @@ function renderFolhaAPagar() {
       <button class="btn btn-green btn-sm" id="btn-folha-pagar-lote">💸 Marcar como pago(s)</button>
     </div>
     ` : ''}
+  </div>
+
+  <!-- Filtros de período da folha -->
+  <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:8px 10px;background:#FAFAFA;border-radius:8px;">
+    <span style="font-size:11px;font-weight:700;color:var(--muted);">📅 Filtrar:</span>
+    ${folhaPerBtn('todos',   'Todos')}
+    ${folhaPerBtn('dia',     'Hoje')}
+    ${folhaPerBtn('semana',  'Semana')}
+    ${folhaPerBtn('mes',     'Mês')}
+    ${folhaPerBtn('mes_ant', 'Mês Ant.')}
+    ${folhaPerBtn('custom',  '📅 Datas')}
+    ${folhaPer === 'custom' ? `
+      <input type="date" class="fi" id="folha-d1" value="${fd1}" style="width:auto;font-size:11px;margin-left:6px;"/>
+      <span style="font-size:11px;color:var(--muted);">a</span>
+      <input type="date" class="fi" id="folha-d2" value="${fd2}" style="width:auto;font-size:11px;"/>
+    ` : ''}
+    <span style="margin-left:auto;font-size:11px;color:var(--muted);">${linhas.length} compromisso(s)</span>
   </div>
 
   <!-- KPIs -->

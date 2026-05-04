@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-3';
+const APP_VERSION = '20260504-4';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3282,12 +3282,26 @@ function bindPageActions(){
       import('./pages/financeiro.js').then(m => m.showFinModal && m.showFinModal(tipo, entry));
     };});
 
-    // Filtros da Central Financeira
+    // Filtros da Central Financeira (legado)
     document.querySelectorAll('[data-fin-tab]').forEach(b=>{b.onclick=()=>{S._finTab=b.dataset.finTab;render();};});
     document.querySelectorAll('[data-fin-periodo]').forEach(b=>{b.onclick=()=>{S._finPeriodo=b.dataset.finPeriodo;render();};});
     document.getElementById('fin-categoria')?.addEventListener('change',e=>{S._finCategoria=e.target.value;render();});
     document.getElementById('fin-cd1')?.addEventListener('change',e=>{S._finCD1=e.target.value;render();});
     document.getElementById('fin-cd2')?.addEventListener('change',e=>{S._finCD2=e.target.value;render();});
+
+    // Sistema de abas do novo Financeiro
+    document.querySelectorAll('[data-fin-aba]').forEach(b=>{b.onclick=()=>{
+      S._finAba = b.dataset.finAba;
+      // Reset filtros de periodo ao trocar aba
+      S._finAbaPeriodo = S._finAbaPeriodo || 'todos';
+      render();
+    };});
+    document.querySelectorAll('[data-fin-aba-periodo]').forEach(b=>{b.onclick=()=>{
+      S._finAbaPeriodo = b.dataset.finAbaPeriodo;
+      render();
+    };});
+    document.getElementById('fin-aba-d1')?.addEventListener('change',e=>{S._finAbaD1=e.target.value;render();});
+    document.getElementById('fin-aba-d2')?.addEventListener('change',e=>{S._finAbaD2=e.target.value;render();});
 
     // ── VALES (financeiro) ──────────────────────────────────────
     document.getElementById('vale-filtro-colab')?.addEventListener('change',e=>{S._valeFiltroColab=e.target.value;render();});
@@ -3336,6 +3350,13 @@ function bindPageActions(){
       S._rhFolhaTipo  = tipo === 'salario' ? 'contracheque' : 'adiantamento';
       setPage('rh');
     }));
+
+    // ── FILTROS de periodo da Folha a Pagar ──
+    document.querySelectorAll('[data-folha-per]').forEach(b => b.addEventListener('click', () => {
+      S._folhaPeriodo = b.dataset.folhaPer; render();
+    }));
+    document.getElementById('folha-d1')?.addEventListener('change', e => { S._folhaD1 = e.target.value; render(); });
+    document.getElementById('folha-d2')?.addEventListener('change', e => { S._folhaD2 = e.target.value; render(); });
 
     // ── SELECAO em lote da Folha a Pagar ──
     document.querySelectorAll('[data-folha-sel]').forEach(cb => cb.addEventListener('change', () => {
