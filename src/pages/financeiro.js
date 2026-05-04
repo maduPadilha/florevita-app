@@ -133,19 +133,34 @@ async function _recuperarLancamentosBackend() {
     const merged = [...mapa.values()];
     localStorage.setItem('fv_financial', JSON.stringify(merged));
     S.financialEntries = merged;
-    // Re-render para refletir
     import('../main.js').then(m => m.render && m.render()).catch(()=>{});
   } catch(_) {}
 }
 
+// Sync RH dados do backend (sobrevive a logout/login). Importante p/
+// a aba 'Salarios, Vales e Retiradas' onde a Folha a Pagar precisa
+// dos salarios cadastrados para gerar os compromissos automaticos.
+let _rhDadosFetchedFin = false;
+async function _syncRHDadosFin() {
+  if (_rhDadosFetchedFin) return;
+  _rhDadosFetchedFin = true;
+  try {
+    const r = await GET('/settings/rh-dados').catch(() => null);
+    const beDados = r?.value || {};
+    if (beDados && typeof beDados === 'object' && Object.keys(beDados).length) {
+      const local = JSON.parse(localStorage.getItem('fv_rh_dados') || '{}');
+      const merged = { ...local, ...beDados };
+      localStorage.setItem('fv_rh_dados', JSON.stringify(merged));
+      import('../main.js').then(m => m.render && m.render()).catch(()=>{});
+    }
+  } catch(_) {}
+}
+
 export function renderFinanceiro(){
-  // RECUPERA do backend ao abrir Financeiro (alem do polling)
-  // Evita situacoes onde lancamentos POSTaram com sucesso mas a memoria
-  // local foi sobrescrita por algum motivo (ex: outro dispositivo).
-  if (!_financialEntriesFetched) {
-    _financialEntriesFetched = true;
-    _recuperarLancamentosBackend();
-  }
+  if (!_financialEntriesFetched) { _financialEntriesFetched = true; _recuperarLancamentosBackend(); }
+  // Tambem dispara sync RH (para a aba Salarios funcionar com os dados
+  // cadastrados em qualquer dispositivo)
+  _syncRHDadosFin();
 
   const unit = ( S.user?.role==='Administrador'||S.user?.cargo==='admin')?S._finUnit||'':S.user.unit;
   const filteredOrders = unit
@@ -746,7 +761,32 @@ function renderFolhaAPagar() {
     return Number(d.salarioBase) > 0;
   });
 
-  if (!colabsComSalario.length) return '';
+  if (!colabsComSalario.length) {
+    // Mostra bloco com mensagem ao inves de retornar vazio — assim o
+    // usuario entende por que os salarios nao aparecem e como resolver.
+    return `
+<div class="card" style="margin-top:14px;background:linear-gradient(135deg,#FEF3C7,#FFFBEB);border:1px solid #FCD34D;">
+  <div style="display:flex;align-items:flex-start;gap:14px;">
+    <div style="font-size:36px;">🗓️</div>
+    <div style="flex:1;">
+      <div style="font-weight:800;color:#92400E;font-size:16px;">Folha a Pagar (Automático) — Sem dados</div>
+      <p style="font-size:13px;color:#92400E;margin:6px 0;">
+        Nenhum colaborador tem <strong>salário base cadastrado</strong> no módulo RH ainda.
+        Por isso os compromissos de salário e adiantamento de Maio (e qualquer outro mês) não aparecem aqui.
+      </p>
+      <p style="font-size:11px;color:#92400E;opacity:.85;margin-bottom:10px;">
+        Quando você cadastrar o salário base de pelo menos 1 colaboradora em
+        <strong>RH → Folha de Pagamento → Dados RH</strong>, os compromissos vão aparecer automaticamente:
+      </p>
+      <ul style="font-size:11px;color:#92400E;margin:6px 0 12px 18px;line-height:1.6;">
+        <li>💵 <strong>Adiantamento</strong> — vence dia <strong>20</strong> de cada mês (50% do salário base)</li>
+        <li>💼 <strong>Salário</strong> — vence dia <strong>5</strong> do mês seguinte</li>
+      </ul>
+      <button class="btn btn-primary btn-sm" onclick="window.S._rhSub='folha';window.S._rhFolhaSub='list';window.setPage('rh');">📄 Ir para Cadastro RH</button>
+    </div>
+  </div>
+</div>`;
+  }
 
   // Gera meses: anterior, corrente, proximo
   const hoje = new Date();
