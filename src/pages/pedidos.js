@@ -139,17 +139,21 @@ if(typeof window !== 'undefined'){
   window.showEditOrderModal = showEditOrderModal;
   window.setPage = window.setPage || function(pg){ setPage(pg); };
 
-  // Senha de alteracao de pedido. Senha pode ser configurada via env
-  // ou por settings — por enquanto fixa em '2233' conforme operacao.
+  // Senha de alteracao de pedido (fallback para outros cargos)
   const PWD_ALTERAR_PEDIDO = '2233';
 
-  // Tenta editar um pedido. Admin/Gerente nao precisa de senha.
-  // Demais usuarios sao desafiados com senha 4 digitos.
+  // Tenta editar um pedido. ADMIN, GERENTE e ATENDIMENTO editam DIRETO
+  // (sem senha). Demais cargos (Producao/Expedicao/Financeiro/Entregador/
+  // Contador) sao desafiados com senha 4 digitos.
   window._tryEditOrder = (orderId) => {
     const u = S.user || {};
-    const isAdmin = u.role === 'Administrador' || u.cargo === 'admin' || u.cargo === 'Administrador';
-    const isGerente = u.role === 'Gerente' || u.cargo === 'Gerente';
-    if (isAdmin || isGerente) {
+    const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const role = norm(u.role);
+    const cargo = norm(u.cargo);
+    const ehAdmin     = role === 'administrador' || cargo === 'admin' || cargo === 'administrador';
+    const ehGerente   = role === 'gerente' || cargo === 'gerente';
+    const ehAtendente = cargo.includes('atend') || role.includes('atend');
+    if (ehAdmin || ehGerente || ehAtendente) {
       S._modal = '';
       showEditOrderModal(orderId);
       return;
