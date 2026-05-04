@@ -203,78 +203,94 @@ export function renderAppEntregador(){
       const risk=getDeliveryRisk(o);
       const isUrg=risk==='late'||risk==='critical';
       const addr=encodeURIComponent(o.deliveryAddress||'');
+      // Helper: tudo em MAIUSCULAS (regra do user)
+      const UC = (s) => String(s||'').toUpperCase();
+      const bairro = UC(o.deliveryNeighborhood||o.deliveryZone||'BAIRRO NÃO INFORMADO');
+      const recipient = UC(o.recipient||o.clientName||'—');
+      const data = o.scheduledDate ? UC($d(o.scheduledDate)) : '';
+      const turno = UC(o.scheduledPeriod||'');
+      const hora = (o.scheduledTime && o.scheduledTime!=='00:00') ? UC(o.scheduledTime) : '';
+      const enderecoCompleto = UC([o.deliveryAddress, o.condName, o.block?'BL '+o.block:'', o.apt?'AP '+o.apt:'', o.reference?'REF: '+o.reference:''].filter(Boolean).join(' · '));
       return `<div style="background:#fff;border-radius:14px;margin-bottom:14px;overflow:hidden;border:2px solid ${isUrg?'#EF4444':'#EDE0DC'};box-shadow:0 2px 12px rgba(0,0,0,.15);">
   <div style="background:${isUrg?'#FEF2F2':'#FDF8F6'};padding:12px 14px;border-bottom:1px solid ${isUrg?'#FECACA':'#EDE0DC'};display:flex;align-items:center;justify-content:space-between;">
     <div style="display:flex;align-items:center;gap:10px;">
       <div style="background:${isUrg?'#EF4444':'#C8736A'};color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${idx+1}</div>
       <div>
-        <div style="font-weight:800;font-size:15px;color:${isUrg?'#991B1B':'#C8736A'}">${fmtOrderNum(o)}</div>
-        <div style="font-size:10px;color:#9E8070">${o.scheduledPeriod||''} ${o.scheduledDate?'· '+$d(o.scheduledDate):''}</div>
+        <div style="font-weight:800;font-size:15px;color:${isUrg?'#991B1B':'#C8736A'}">${UC(fmtOrderNum(o))}</div>
+        <div style="font-size:10px;color:#9E8070;font-weight:700;">${[turno, data].filter(Boolean).join(' · ')}</div>
       </div>
     </div>
     ${isUrg?`<span style="background:#EF4444;color:#fff;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;">${risk==='late'?'🚨 ATRASADO':'⚠️ URGENTE'}</span>`:'<span style="font-size:18px">🌸</span>'}
   </div>
   <div style="padding:14px;">
-    ${(o.items||[]).map(i=>{const p=S.products.find(pr=>pr.name===i.name||pr._id===i.product);return`<div style="display:flex;align-items:center;gap:10px;padding:8px;background:#FDF8F6;border-radius:8px;margin-bottom:6px;">${p?.images?.[0]?`<img src="${p.images[0]}" style="width:44px;height:44px;border-radius:8px;object-fit:contain;background:#fff;flex-shrink:0;">` :`<div style="width:44px;height:44px;border-radius:8px;background:#FAE8E6;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🌸</div>`}<div style="font-weight:700;font-size:13px">${i.qty}x ${i.name}</div></div>`;}).join('')}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;">
-      <div style="background:#FDF8F6;border-radius:10px;padding:10px;">
-        <div style="font-size:9px;font-weight:700;color:#9E8070;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">Para</div>
-        <div style="font-size:14px;font-weight:700">${o.recipient||o.clientName||'—'}</div>
-      </div>
-      <div style="background:#FDF8F6;border-radius:10px;padding:10px;">
-        <div style="font-size:9px;font-weight:700;color:#9E8070;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">Horario</div>
-        <div style="font-size:14px;font-weight:700">${o.scheduledTime||o.scheduledPeriod||'—'}</div>
+
+    <!-- 📅 DATA / TURNO / HORÁRIO (DESTAQUE) -->
+    <div style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border:2px solid #F59E0B;border-radius:10px;padding:10px 12px;margin-bottom:12px;text-align:center;">
+      <div style="font-size:9px;font-weight:800;color:#92400E;text-transform:uppercase;letter-spacing:1.5px;">📅 ENTREGA</div>
+      <div style="font-size:16px;font-weight:900;color:#92400E;margin-top:3px;letter-spacing:.5px;">
+        ${data} ${turno?'· '+turno:''} ${hora?'· '+hora:''}
       </div>
     </div>
+
+    <!-- 🏘️ BAIRRO EM DESTAQUE (regra do user) -->
+    <div style="background:linear-gradient(135deg,#1E40AF,#3B82F6);color:#fff;border-radius:12px;padding:14px;margin-bottom:12px;text-align:center;box-shadow:0 4px 12px rgba(59,130,246,.35);">
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:2px;opacity:.9;">🏘️ BAIRRO</div>
+      <div style="font-size:22px;font-weight:900;margin-top:4px;letter-spacing:1px;text-transform:uppercase;">${bairro}</div>
+    </div>
+
+    <!-- 🌹 PRODUTOS -->
+    <div style="background:#FDF8F6;border-radius:10px;padding:10px;margin-bottom:12px;">
+      <div style="font-size:9px;font-weight:800;color:#9E8070;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">🌹 PRODUTOS</div>
+      ${(o.items||[]).map(i=>{
+        const p=S.products.find(pr=>pr.name===i.name||pr._id===i.product);
+        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 4px;border-bottom:1px solid #EDE0DC;">
+          ${p?.images?.[0]?`<img src="${p.images[0]}" style="width:44px;height:44px;border-radius:8px;object-fit:contain;background:#fff;flex-shrink:0;">` :`<div style="width:44px;height:44px;border-radius:8px;background:#FAE8E6;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🌸</div>`}
+          <div style="font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.3px;">${i.qty}× ${UC(i.name)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- 👤 DESTINATÁRIO -->
+    <div style="background:#FDF8F6;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+      <div style="font-size:9px;font-weight:800;color:#9E8070;text-transform:uppercase;letter-spacing:1.5px;">👤 PARA</div>
+      <div style="font-size:15px;font-weight:800;color:#1E293B;margin-top:2px;text-transform:uppercase;">${recipient}</div>
+    </div>
+
+    <!-- 📍 ENDEREÇO COMPLETO -->
+    <div style="background:#EEF2FF;border-radius:10px;padding:12px;margin-bottom:12px;border:2px solid #C7D2FE;">
+      <div style="font-size:9px;font-weight:800;color:#4338CA;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px;">📍 ENDEREÇO COMPLETO</div>
+      <div style="font-size:14px;font-weight:700;color:#1E1B4B;line-height:1.4;text-transform:uppercase;letter-spacing:.3px;">${enderecoCompleto || 'NÃO INFORMADO'}</div>
+      <a href="https://www.google.com/maps/dir/?api=1&origin=-3.0379889,-59.9516336&destination=${addr}" target="_blank"
+        style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;background:#4F46E5;color:#fff;padding:11px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">
+        🗺️ INICIAR ROTA
+      </a>
+    </div>
+
+    <!-- 📱 CONTATO (mantido — util para o entregador ligar) -->
     ${(()=>{
       const rawPhone = (o.clientPhone || o.client?.phone || o.client?.telefone || '').replace(/\D/g,'');
       if(!rawPhone) return '';
       const last6 = rawPhone.slice(-6);
-      return `<div style="background:#EEF2FF;border:1.5px dashed #6366F1;border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <div>
-          <div style="font-size:9px;font-weight:700;color:#4338CA;text-transform:uppercase;letter-spacing:.5px;">📱 Contato do comprador</div>
-          <div style="font-size:14px;font-weight:800;color:#1E1B4B;margin-top:2px;">Final: <span style="font-family:monospace;letter-spacing:1px;">${last6}</span></div>
-          <div style="font-size:10px;color:#6366F1;margin-top:2px;">Use ao pedir ajuda ou para conferência</div>
-        </div>
+      return `<div style="background:#EEF2FF;border:1.5px dashed #6366F1;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+        <div style="font-size:9px;font-weight:800;color:#4338CA;text-transform:uppercase;letter-spacing:1px;">📱 CONTATO DO COMPRADOR</div>
+        <div style="font-size:14px;font-weight:800;color:#1E1B4B;margin-top:2px;text-transform:uppercase;">FINAL: <span style="font-family:monospace;letter-spacing:1px;">${last6}</span></div>
       </div>`;
     })()}
-    <div style="background:#EEF2FF;border-radius:10px;padding:12px;margin-bottom:12px;border:1px solid #C7D2FE;">
-      <div style="font-size:9px;font-weight:700;color:#4338CA;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">📍 Endereco</div>
-      <div style="font-size:13px;font-weight:600;color:#1E1B4B;margin-bottom:3px;">${o.deliveryAddress||'Nao informado'}</div>
-      ${o.condName?`<div style="font-size:11px;color:#4338CA;">🏢 ${o.condName}${o.block?` Bl.${o.block}`:''}${o.apt?` Ap.${o.apt}`:''}</div>`:''}
-      ${o.reference?`<div style="font-size:11px;color:#6366F1;">Ref: ${o.reference}</div>`:''}
-      <a href="https://www.google.com/maps/dir/?api=1&origin=-3.0379889,-59.9516336&destination=${addr}" target="_blank"
-        style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;background:#4F46E5;color:#fff;padding:10px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">
-        🗺️ Iniciar Rota
-      </a>
-    </div>
-    ${(()=>{
-      const msg = o.cardMessage || o.mensagemCartao || o.cartao || o.cardMsg || '';
-      const anonimo = o.identifyClient === false;
-      const remetente = (!anonimo) ? (o.client?.name || o.clientName || '') : '';
-      if(!msg && !remetente) return '';
-      return `<div style="background:#FDF4F0;border:2px solid #C8736A;border-radius:10px;padding:12px;margin-bottom:12px;">
-        <div style="font-size:10px;font-weight:800;color:#C8736A;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">💌 Cartão da entrega</div>
-        ${msg?`<div style="font-size:13px;font-style:italic;color:#4A2018;line-height:1.4;margin-bottom:6px;">"${msg}"</div>`:'<div style="font-size:11px;color:#9E8070;font-style:italic;margin-bottom:6px;">(sem mensagem)</div>'}
-        <div style="font-size:11px;color:#7C2D12;font-weight:700;border-top:1px dashed #E8C5B8;padding-top:6px;">
-          ${anonimo ? '👤 Anônimo — <em>não dizer quem enviou</em>' : (remetente ? `De: <strong>${remetente}</strong>` : '')}
-        </div>
-      </div>`;
-    })()}
-    ${o.payment==='Pagar na Entrega'?`<div style="background:#FFFBEB;border:2px solid #F59E0B;border-radius:10px;padding:12px;margin-bottom:12px;"><div style="font-size:11px;font-weight:700;color:#92400E;">💰 COBRAR NA ENTREGA</div><div style="font-size:22px;font-weight:800;color:#D97706;margin:4px 0">${$c(o.total)}</div><div style="font-size:12px;color:#78350F">${o.paymentOnDelivery==='Dinheiro'?'💵 Dinheiro':o.paymentOnDelivery==='Levar Maquineta'?'💳 Maquineta':'⚠️ Verificar'}</div></div>`:''}
+
+    ${o.payment==='Pagar na Entrega'?`<div style="background:#FFFBEB;border:2px solid #F59E0B;border-radius:10px;padding:12px;margin-bottom:12px;"><div style="font-size:11px;font-weight:800;color:#92400E;text-transform:uppercase;letter-spacing:1px;">💰 COBRAR NA ENTREGA</div><div style="font-size:22px;font-weight:900;color:#D97706;margin:4px 0">${$c(o.total)}</div><div style="font-size:12px;color:#78350F;font-weight:700;text-transform:uppercase;">${o.paymentOnDelivery==='Dinheiro'?'💵 DINHEIRO':o.paymentOnDelivery==='Levar Maquineta'?'💳 MAQUINETA':'⚠️ VERIFICAR'}</div></div>`:''}
     <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:8px;">
       <button class="btn btn-blue" data-rota="${o._id}"
-        style="flex:1;background:#1E40AF;color:#fff;padding:12px 14px;border:none;border-radius:12px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;min-height:48px;">
-        🗺️ Rotas
+        style="flex:1;background:#1E40AF;color:#fff;padding:12px 14px;border:none;border-radius:12px;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;min-height:48px;text-transform:uppercase;letter-spacing:.5px;">
+        🗺️ ROTAS
       </button>
       <button type="button" onclick="showConfirmDeliveryModal('${o._id}')"
-        style="flex:1.4;background:#3A7D44;color:#fff;border:none;border-radius:12px;padding:12px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:48px;">
-        ✅ Confirmar Entrega
+        style="flex:1.4;background:#3A7D44;color:#fff;border:none;border-radius:12px;padding:12px 14px;font-size:14px;font-weight:800;cursor:pointer;min-height:48px;text-transform:uppercase;letter-spacing:.5px;">
+        ✅ CONFIRMAR ENTREGA
       </button>
     </div>
     <button type="button" data-help="${o._id}"
-      style="width:100%;background:#FEF3C7;border:1.5px solid #F59E0B;color:#92400E;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
-      🆘 Preciso de ajuda nesta entrega
+      style="width:100%;background:#FEF3C7;border:1.5px solid #F59E0B;color:#92400E;border-radius:10px;padding:10px;font-size:12px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;text-transform:uppercase;letter-spacing:.5px;">
+      🆘 PRECISO DE AJUDA
     </button>
   </div>
 </div>`;

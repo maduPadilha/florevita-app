@@ -239,10 +239,11 @@ export function startPolling(ms=3000){
   stopPolling();
   _pollCount=0;
   // Render Starter: servidor sempre warm, pode acelerar polling.
-  // Entregador: 2.5s (agressivo — ve designacoes instantaneas)
+  // Entregador: 2s (tempo real — designacoes E entregas confirmadas
+  // somem rapido; payload e leve com loadData otimizado)
   // Outros: 3s (antes 5s)
   const isDriver = S.user?.role === 'Entregador' || S.user?.cargo === 'entregador';
-  const interval = isDriver ? 2500 : ms;
+  const interval = isDriver ? 2000 : ms;
   _pollTimer = setInterval(pollData, interval);
   pollData();
 }
