@@ -262,39 +262,52 @@ export function setBulkSearch(val){
   });
 }
 
-function _getBulkVisibleIds(){
-  const catName = S._catDetail;
-  const q = (S._catBulkSearch || '').toLowerCase();
-  return S.products.filter(p => {
-    // Exclui os que já estão na categoria
-    const has = (p.category === catName) ||
-      (Array.isArray(p.categories) && p.categories.includes(catName));
-    if(has) return false;
-    if(q){
-      const hay = ((p.name||'') + ' ' + (p.category||'') + ' ' +
-        (Array.isArray(p.categories) ? p.categories.join(' ') : '')).toLowerCase();
-      if(!hay.includes(q)) return false;
-    }
+// DEDUP de S.products por _id (proteção contra duplicatas no estado)
+function _dedupProducts(){
+  const seen = new Set();
+  return (S.products || []).filter(p => {
+    const id = String(p._id || p.id || '');
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
     return true;
-  }).map(p => p._id || p.id);
+  });
 }
 
-function _renderBulkList(){
+function _filtraBulk(){
   const catName = S._catDetail;
   const q = (S._catBulkSearch || '').toLowerCase();
-  const selected = S._catBulkSelected || new Set();
-
-  const available = S.products.filter(p => {
+  const filtroCat = S._catBulkFilterCat || ''; // categoria a filtrar (vazio = todas)
+  return _dedupProducts().filter(p => {
+    // Exclui os que já estão na categoria atual
     const has = (p.category === catName) ||
       (Array.isArray(p.categories) && p.categories.includes(catName));
     if(has) return false;
+    // Filtro por categoria (se selecionada)
+    if (filtroCat) {
+      const cats = Array.isArray(p.categories) ? p.categories : (p.category ? [p.category] : []);
+      if (filtroCat === '__sem__') {
+        // 'Sem categoria' — nenhuma categoria
+        if (cats.length > 0) return false;
+      } else {
+        if (!cats.includes(filtroCat)) return false;
+      }
+    }
     if(q){
-      const hay = ((p.name||'') + ' ' + (p.category||'') + ' ' +
+      const hay = ((p.name||'') + ' ' + (p.code||'') + ' ' + (p.category||'') + ' ' +
         (Array.isArray(p.categories) ? p.categories.join(' ') : '')).toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
   });
+}
+
+function _getBulkVisibleIds(){
+  return _filtraBulk().map(p => p._id || p.id);
+}
+
+function _renderBulkList(){
+  const selected = S._catBulkSelected || new Set();
+  const available = _filtraBulk();
 
   if(available.length === 0){
     return '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">🌸 Nenhum produto disponível (ou todos já estão nesta categoria).</div>';
@@ -322,29 +335,47 @@ function _renderBulkList(){
 
 export async function applyBulkAdd(){
   const catName = S._catDetail;
-  const selected = Array.from(S._catBulkSelected || []);
+  // DEDUP de IDs (Set já garante mas reforça em caso de Array de fora)
+  const selected = [...new Set(Array.from(S._catBulkSelected || []))];
   if(selected.length === 0){ toast('❌ Selecione ao menos 1 produto', true); return; }
 
   toast(`⏳ Vinculando ${selected.length} produto(s)...`);
   let ok = 0, fail = 0;
+  // Trabalha em CÓPIAS para evitar mutar S.products durante o loop
+  const updates = new Map(); // id -> {category, categories}
   for(const id of selected){
-    const p = S.products.find(x => x._id === id || x.id === id);
+    const p = S.products.find(x => String(x._id) === String(id) || String(x.id) === String(id));
     if(!p) { fail++; continue; }
-    // Garante que categories é array; adiciona catName se não tiver
-    if(!Array.isArray(p.categories)) p.categories = p.category ? [p.category] : [];
-    if(!p.categories.includes(catName)) p.categories.push(catName);
-    // Mantém p.category compatível com registros antigos
-    if(!p.category) p.category = catName;
-    S.products = S.products.map(x => (x._id===p._id||x.id===p.id) ? p : x);
-    try{
-      await PUT('/products/' + (p._id||p.id), { category: p.category, categories: p.categories });
+    // Cria nova lista de categorias SEM duplicatas
+    const cats0 = Array.isArray(p.categories) ? [...p.categories]
+                : (p.category ? [p.category] : []);
+    const set = new Set(cats0);
+    set.add(catName);
+    const newCategories = [...set]; // unica
+    const newCategory = p.category || catName;
+    updates.set(String(p._id||p.id), { category: newCategory, categories: newCategories });
+  }
+
+  // Aplica updates de uma só vez (sem duplicar entradas em S.products)
+  S.products = S.products.map(x => {
+    const id = String(x._id||x.id);
+    const u = updates.get(id);
+    if (!u) return x;
+    return { ...x, category: u.category, categories: u.categories };
+  });
+
+  // Persiste no backend (paralelo controlado)
+  for (const [id, u] of updates) {
+    try {
+      await PUT('/products/' + id, u);
       ok++;
-    }catch(e){ fail++; }
+    } catch(e) { fail++; }
   }
 
   S._catBulkOpen = false;
   S._catBulkSelected = null;
   S._catBulkSearch = '';
+  S._catBulkFilterCat = '';
   render();
   if(fail === 0) toast(`✅ ${ok} produto(s) vinculado(s) à categoria "${catName}"!`);
   else toast(`⚠️ ${ok} vinculado(s) · ${fail} falha(s)`, true);
@@ -354,6 +385,7 @@ export function closeBulkModal(){
   S._catBulkOpen = false;
   S._catBulkSelected = null;
   S._catBulkSearch = '';
+  S._catBulkFilterCat = '';
   render();
 }
 
@@ -375,10 +407,16 @@ window.closeBulkModal = closeBulkModal;
 
 // ── RENDER: DRILL-DOWN (produtos de uma categoria) ────────────
 function renderCatDetail(catName){
-  const prods = S.products.filter(p =>
-    (Array.isArray(p.categories) && p.categories.includes(catName)) ||
-    p.category === catName
-  );
+  // DEDUP por _id (proteção contra duplicatas em S.products)
+  const seen = new Set();
+  const prods = S.products.filter(p => {
+    const id = String(p._id || p.id || '');
+    if (!id) return false;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return (Array.isArray(p.categories) && p.categories.includes(catName)) ||
+           p.category === catName;
+  });
 
   let html = '';
   // Breadcrumb + header
@@ -454,10 +492,33 @@ function renderBulkAddModal(catName){
   html += '<button type="button" onclick="closeBulkModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);">×</button>';
   html += '</div>';
 
-  // Busca
-  html += '<div style="padding:12px 20px;border-bottom:1px solid var(--border);">';
-  html += '<input type="text" id="bulk-search-input" class="fi" placeholder="🔍 Buscar produto por nome..." value="'+(S._catBulkSearch||'').replace(/"/g,'&quot;')+'" style="width:100%;"/>';
-  html += '<div id="bulk-count-label" style="font-size:11px;color:var(--muted);margin-top:6px;">'+visibleIds.length+' produto(s) encontrado(s)</div>';
+  // Busca + Filtro por categoria
+  html += '<div style="padding:12px 20px;border-bottom:1px solid var(--border);display:grid;gap:8px;">';
+  // Linha 1: busca textual
+  html += '<input type="text" id="bulk-search-input" class="fi" placeholder="🔍 Buscar produto por nome ou código..." value="'+(S._catBulkSearch||'').replace(/"/g,'&quot;')+'" style="width:100%;"/>';
+  // Linha 2: filtro categoria + selecionar todos visíveis
+  const todasCats = (function(){
+    const set = new Set();
+    _dedupProducts().forEach(p => {
+      const cats = Array.isArray(p.categories) ? p.categories : (p.category ? [p.category] : []);
+      cats.forEach(c => { if (c && c !== catName) set.add(c); });
+    });
+    return [...set].sort((a,b) => a.localeCompare(b, 'pt-BR'));
+  })();
+  const filtroCatAtual = S._catBulkFilterCat || '';
+  html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+  html += '<label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">🏷️ Categoria:</label>';
+  html += '<select id="bulk-cat-filter" class="fi" style="flex:1;min-width:160px;font-size:13px;">';
+  html += '<option value="">Todas as categorias</option>';
+  html += '<option value="__sem__"'+(filtroCatAtual==='__sem__'?' selected':'')+'>📭 Sem categoria</option>';
+  todasCats.forEach(c => {
+    html += '<option value="'+c.replace(/"/g,'&quot;')+'"'+(filtroCatAtual===c?' selected':'')+'>'+c+'</option>';
+  });
+  html += '</select>';
+  html += '<button type="button" id="bulk-select-all" class="btn btn-ghost btn-sm" style="font-size:11px;white-space:nowrap;">☑️ Selecionar todos</button>';
+  html += '<button type="button" id="bulk-clear-sel" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red);white-space:nowrap;">☐ Limpar</button>';
+  html += '</div>';
+  html += '<div id="bulk-count-label" style="font-size:11px;color:var(--muted);">'+visibleIds.length+' produto(s) encontrado(s)</div>';
   html += '</div>';
 
   // Lista

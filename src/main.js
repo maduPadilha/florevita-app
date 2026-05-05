@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-9';
+const APP_VERSION = '20260504-10';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3062,6 +3062,29 @@ function bindPageActions(){
       };
       document.querySelectorAll('[data-bulk-toggle]').forEach(cb => {
         cb.addEventListener('change', updateSel);
+      });
+
+      // Filtro por categoria — re-renderiza a lista filtrada
+      document.getElementById('bulk-cat-filter')?.addEventListener('change', e => {
+        S._catBulkFilterCat = e.target.value;
+        render();
+      });
+
+      // Selecionar todos os visíveis (atual filtro)
+      document.getElementById('bulk-select-all')?.addEventListener('click', () => {
+        import('./pages/categorias.js').then(m => {
+          if (!S._catBulkSelected) S._catBulkSelected = new Set();
+          // Coleta IDs visíveis no DOM atual
+          document.querySelectorAll('[data-bulk-toggle]').forEach(cb => {
+            S._catBulkSelected.add(cb.dataset.bulkToggle);
+          });
+          render();
+        });
+      });
+      // Limpar seleção
+      document.getElementById('bulk-clear-sel')?.addEventListener('click', () => {
+        S._catBulkSelected = new Set();
+        render();
       });
     }
   }
