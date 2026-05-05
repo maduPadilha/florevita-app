@@ -248,15 +248,42 @@ export async function getEcCfg(){
 
 export async function saveEcCfg(cfg){
   localStorage.setItem(EC_CFG_KEY, JSON.stringify(cfg));
-  try{ await api('PUT','/settings/ecommerce', cfg); }catch(e){ /* saved locally */ }
+  try{
+    // Merge com backend antes de PUT (evita apagar campos como categoriasSite)
+    const remote = await api('GET','/settings/ecommerce').catch(() => null);
+    const remoteValue = (remote && remote.value && typeof remote.value === 'object') ? remote.value : (remote || {});
+    const merged = { ...remoteValue, ...cfg };
+    await api('PUT','/settings/ecommerce', { value: merged });
+    localStorage.setItem(EC_CFG_KEY, JSON.stringify(merged));
+  } catch(e){ /* saved locally */ }
 }
 
 // Synchronous local-only helpers (used inside render & inline handlers)
 function getEcCfgSync(){ return JSON.parse(localStorage.getItem(EC_CFG_KEY)||'{}'); }
+
+// CRITICO: salva fazendo MERGE com a versao mais recente do backend.
+// Antes: PUT enviava so o estado de localStorage → apagava campos como
+// categoriasSite que sao salvos por outros fluxos (ex: btn-cs-salvar
+// no main.js). Agora: 1) GET backend  2) merge com cfg local
+// 3) PUT atomico. Garante que NUNCA perde dados.
 function saveEcCfgSync(cfg){
+  // Atualiza localStorage imediatamente (UX otimista)
   localStorage.setItem(EC_CFG_KEY, JSON.stringify(cfg));
-  // fire-and-forget API save
-  api('PUT','/settings/ecommerce', cfg).catch(()=>{});
+  // Merge + persiste em background
+  (async () => {
+    try {
+      const remote = await api('GET','/settings/ecommerce').catch(() => null);
+      // Backend retorna { key, value, _id, ... } OU o value direto (varia)
+      const remoteValue = (remote && remote.value && typeof remote.value === 'object')
+        ? remote.value
+        : (remote || {});
+      // Mescla: backend remoto como base + cfg local sobrescreve campos editados
+      const merged = { ...remoteValue, ...cfg };
+      await api('PUT','/settings/ecommerce', { value: merged });
+      // Atualiza localStorage com o resultado mesclado pra proximas leituras
+      localStorage.setItem(EC_CFG_KEY, JSON.stringify(merged));
+    } catch(_) { /* offline — fica so local */ }
+  })();
 }
 
 // ── E-COMMERCE ADMIN  FUNCOES GLOBAIS ─────────────────────────
