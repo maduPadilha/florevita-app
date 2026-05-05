@@ -27,10 +27,13 @@ function renderCategoriasSiteSection(cfg) {
       _dirty: false,
       cats: catNames.map(nome => {
         const c = map[nome] || {};
+        // Compat: aceita posicoes (array novo) OU posicao (string antigo)
+        let posicoes = Array.isArray(c.posicoes) ? c.posicoes
+                     : (c.posicao ? [c.posicao] : ['inicial']);
         return {
           nome,
           ativo: c.ativo !== false,
-          posicao: c.posicao || 'inicial',
+          posicoes, // multi-select: ['topo','inicial','final']
           ordem: typeof c.ordem === 'number' ? c.ordem : 999,
         };
       }).sort((a,b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome,'pt-BR'))
@@ -45,9 +48,11 @@ function renderCategoriasSiteSection(cfg) {
     final:   { l: '⬇️ Rodapé',   n: 'Final (Rodapé)',  cor: '#92400E', bg: '#FEF3C7' },
   };
 
-  // Agrupa para preview (apenas ativas)
+  // Agrupa para preview: cada cat aparece em TODAS as posições selecionadas
   const porPos = { topo: [], inicial: [], final: [] };
-  items.filter(it => it.ativo && porPos[it.posicao]).forEach(it => porPos[it.posicao].push(it));
+  items.filter(it => it.ativo).forEach(it => {
+    (it.posicoes||[]).forEach(p => { if (porPos[p]) porPos[p].push(it); });
+  });
 
   return `
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
@@ -77,7 +82,7 @@ ${catNames.length === 0 ? `
       <strong>Como funciona:</strong>
       <ol style="margin:6px 0 0 18px;line-height:1.6;">
         <li><strong>👁️ Mostrar/Ocultar</strong>: define se a categoria aparece no site.</li>
-        <li><strong>📍 Posição</strong>: clique para escolher onde aparece.</li>
+        <li><strong>📍 Posição</strong>: clique nos chips — pode marcar <strong>mais de uma posição</strong> (Topo + Início + Rodapé).</li>
         <li><strong>↕️ Ordem</strong>: use as setinhas para reordenar.</li>
         <li>Clique em <strong>💾 Salvar tudo</strong> no final pra publicar.</li>
       </ol>
@@ -110,16 +115,19 @@ ${catNames.length === 0 ? `
         ${it.nome}
       </div>
 
-      <!-- Chips de posição -->
-      <div style="display:flex;gap:4px;${isOcult?'opacity:.4;pointer-events:none;':''}">
-        ${Object.entries(posLabel).map(([k,v]) => `
+      <!-- Chips de posição (multi-select: pode marcar mais de um) -->
+      <div style="display:flex;gap:4px;flex-wrap:wrap;${isOcult?'opacity:.4;pointer-events:none;':''}" title="Pode marcar mais de uma posição">
+        ${Object.entries(posLabel).map(([k,v]) => {
+          const sel = (it.posicoes||[]).indexOf(k) >= 0;
+          return `
           <button type="button" class="btn btn-xs" data-cs-pos="${it.nome.replace(/"/g,'&quot;')}" data-cs-pos-val="${k}"
-            style="font-weight:700;${it.posicao===k
+            title="${sel?'Clique pra remover':'Clique pra adicionar'} ${v.n}"
+            style="font-weight:700;${sel
               ? `background:${v.cor};color:#fff;border:1px solid ${v.cor};`
-              : `background:#fff;color:${v.cor};border:1px solid ${v.cor};`}">
-            ${v.l}
-          </button>
-        `).join('')}
+              : `background:#fff;color:${v.cor};border:1.5px dashed ${v.cor};`}">
+            ${sel?'✓ ':''}${v.l}
+          </button>`;
+        }).join('')}
       </div>
 
       <!-- Setas mover -->
@@ -405,7 +413,6 @@ export function renderEcommerce(){
   ${[
     {k:'site',l:'🌐 Site (Avançado)'},
     {k:'geral',l:'⚙️ Configurações'},
-    {k:'horario',l:'🕐 Horários'},
     {k:'pagamentos',l:'💳 Pagamentos'},
     {k:'paginas',l:'📄 Páginas'},
     {k:'categorias',l:'🏷️ Categorias do Site'},
@@ -648,80 +655,6 @@ ${tab==='geral'?`
 
 <div style="text-align:center;margin-top:16px;">
   <button class="btn btn-primary" onclick="ecSaveGeral()" style="padding:12px 40px;font-size:15px;">💾 Salvar Configurações</button>
-</div>
-`:''}
-
-<!-- ══ ABA HORARIOS ══════════════════════════════════════════ -->
-${tab==='horario'?`
-<div class="card" style="background:linear-gradient(135deg,#FAE8E6,#FAF7F5);border:1px solid #FECDD3;text-align:center;padding:30px 20px;">
-  <div style="font-size:48px;margin-bottom:8px;">🕐</div>
-  <h3 style="font-weight:700;color:#9F1239;margin-bottom:6px;">Configuração movida</h3>
-  <p style="font-size:13px;color:var(--ink);margin-bottom:16px;">Turnos e horários agora ficam dentro de <strong>🌐 Site (Avançado)</strong> — junto com as outras configs do site.</p>
-  <button class="btn btn-primary" onclick="S._ecTab='site';render()">→ Ir para Site (Avançado)</button>
-</div>
-<div style="display:none;">
-<div class="g2" style="gap:16px;">
-  <div class="card">
-    <div class="card-title">🕐 Dias e Turnos de Entrega (DEPRECATED)</div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Esta seção foi movida.</p>
-
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;">📅 Dias da Semana</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:20px;">
-      ${['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'].map(d=>`
-      <label style="display:flex;align-items:center;gap:8px;padding:10px;background:${(cfg.diasEntrega||['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado']).includes(d)?'var(--primary-pale)':'var(--cream)'};border:1.5px solid ${(cfg.diasEntrega||['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado']).includes(d)?'var(--primary)':'var(--border)'};border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;">
-        <input type="checkbox" class="ec-dia-check" data-dia="${d}" ${(cfg.diasEntrega||['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado']).includes(d)?'checked':''} style="accent-color:var(--primary);width:15px;height:15px;"/>
-        ${d.split('-')[0]}
-      </label>`).join('')}
-    </div>
-
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;">⏰ Turnos Disponíveis</div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
-      ${[
-        {k:'Manhã',h:'08:00 – 12:00'},
-        {k:'Tarde',h:'12:00 – 18:00'},
-        {k:'Noite',h:'18:00 – 21:00'},
-        {k:'Horário específico',h:'Cliente informa o horário'},
-      ].map(t=>`
-      <label style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:${(cfg.turnosEntrega||['Manhã','Tarde']).includes(t.k)?'var(--primary-pale)':'var(--cream)'};border:1.5px solid ${(cfg.turnosEntrega||['Manhã','Tarde']).includes(t.k)?'var(--primary)':'var(--border)'};border-radius:8px;cursor:pointer;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <input type="checkbox" class="ec-turno-check" data-turno="${t.k}" ${(cfg.turnosEntrega||['Manhã','Tarde']).includes(t.k)?'checked':''} style="accent-color:var(--primary);width:15px;height:15px;"/>
-          <div>
-            <div style="font-weight:600;font-size:13px;">${t.k}</div>
-            <div style="font-size:11px;color:var(--muted);">${t.h}</div>
-          </div>
-        </div>
-      </label>`).join('')}
-    </div>
-
-    <div class="fr2" style="gap:10px;">
-      <div class="fg"><label class="fl">Horário de abertura</label>
-        <input class="fi" type="time" id="ec-hora-abre" value="${cfg.horaAbre||'08:00'}"/></div>
-      <div class="fg"><label class="fl">Horário de fechamento</label>
-        <input class="fi" type="time" id="ec-hora-fecha" value="${cfg.horaFecha||'20:00'}"/></div>
-    </div>
-
-    <div style="margin-top:14px;">
-      <div class="fg"><label class="fl">Mensagem de prazo de entrega</label>
-        <input class="fi" id="ec-prazo-msg" value="${cfg.prazoMsg||'Entregamos no mesmo dia para pedidos até 14h'}" placeholder="Ex: Entregamos no mesmo dia para pedidos até 14h"/></div>
-    </div>
-
-    <button class="btn btn-primary" onclick="ecSaveHorario()" style="width:100%;margin-top:16px;padding:12px;">💾 Salvar Horários</button>
-  </div>
-
-  <div class="card">
-    <div class="card-title">📋 Preview — Como o cliente verá</div>
-    <div style="background:var(--cream);border-radius:10px;padding:16px;font-size:13px;">
-      <div style="font-weight:700;margin-bottom:10px;">Dias disponíveis:</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
-        ${(cfg.diasEntrega||['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado']).map(d=>`<span style="background:var(--primary);color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;">${d.split('-')[0]}</span>`).join('')}
-      </div>
-      <div style="font-weight:700;margin-bottom:8px;">Turnos:</div>
-      ${(cfg.turnosEntrega||['Manhã','Tarde']).map(t=>`<div style="padding:8px;background:#fff;border-radius:6px;margin-bottom:6px;font-size:12px;">✅ ${t}</div>`).join('')}
-      <div style="margin-top:12px;font-size:12px;color:var(--primary);">🕐 ${cfg.horaAbre||'08:00'} – ${cfg.horaFecha||'20:00'}</div>
-      ${cfg.prazoMsg?`<div style="font-size:11px;color:var(--muted);margin-top:6px;">ℹ️ ${cfg.prazoMsg}</div>`:''}
-    </div>
-  </div>
-</div>
 </div>
 `:''}
 

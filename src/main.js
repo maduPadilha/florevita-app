@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-12';
+const APP_VERSION = '20260504-13';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3682,16 +3682,26 @@ function bindPageActions(){
           const c = _findCat(btn.dataset.csToggle);
           if (!c) return;
           c.ativo = !c.ativo;
+          // Se ativando e sem posição, default = página inicial
+          if (c.ativo && (!Array.isArray(c.posicoes) || c.posicoes.length === 0)) {
+            c.posicoes = ['inicial'];
+          }
           _markDirty();
         };
       });
 
-      // Chips de posição
+      // Chips de posição (multi-select: toggle individual por posição)
       document.querySelectorAll('[data-cs-pos]').forEach(btn => {
         btn.onclick = () => {
           const c = _findCat(btn.dataset.csPos);
           if (!c) return;
-          c.posicao = btn.dataset.csPosVal;
+          if (!Array.isArray(c.posicoes)) c.posicoes = [];
+          const v = btn.dataset.csPosVal;
+          const idx = c.posicoes.indexOf(v);
+          if (idx >= 0) c.posicoes.splice(idx, 1); // remove
+          else c.posicoes.push(v); // adiciona
+          // Garante pelo menos uma posição se estiver ativa (senão fica órfã)
+          if (c.ativo && c.posicoes.length === 0) c.posicoes = ['inicial'];
           _markDirty();
         };
       });
@@ -3753,10 +3763,17 @@ function bindPageActions(){
         try {
           // Reatribui ordem sequencial para garantir consistência
           st.cats.forEach((c, i) => { c.ordem = i; });
-          // Monta map { nome: { ativo, posicao, ordem } }
+          // Monta map { nome: { ativo, posicoes[], ordem } }
+          // Mantém também 'posicao' (string) por compatibilidade com leitores antigos do site
           const categoriasSite = {};
           st.cats.forEach(c => {
-            categoriasSite[c.nome] = { ativo: c.ativo, posicao: c.posicao, ordem: c.ordem };
+            const posicoes = Array.isArray(c.posicoes) ? c.posicoes : [];
+            categoriasSite[c.nome] = {
+              ativo: c.ativo,
+              posicoes,
+              posicao: posicoes[0] || 'inicial', // fallback compat
+              ordem: c.ordem,
+            };
           });
           // GET → merge → PUT (preserva outros campos do cfg)
           const r = await GET('/settings/ecommerce').catch(()=>null);

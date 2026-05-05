@@ -180,17 +180,24 @@ export async function deleteCat(idx){
 // Lista de categorias inúteis que vieram por engano (turnos, horários, etc)
 const CAT_INUTIL = ['horario','horarios','horário','horários','turno','turnos','manha','manhã','tarde','noite','periodo','período','hora','horas'];
 
-// Normaliza pra detectar duplicatas: minúscula, sem acento, sem plural simples
-function _normCat(s){
+// Normalização básica: minúscula, sem acento, sem espaços extras
+function _basicNorm(s){
   if(!s) return '';
-  let n = String(s).toLowerCase().trim()
-    .normalize('NFD').replace(/[̀-ͯ]/g,'') // remove acentos
+  return String(s).toLowerCase().trim()
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
     .replace(/\s+/g,' ');
-  // remove plural simples (es/s) — mas só pra comparação
-  if(n.endsWith('oes')) n = n.slice(0,-3)+'ao'; // buquês→buque, NÃO funciona, mas aproxima
-  if(n.endsWith('es') && n.length > 4) n = n.slice(0,-2);
-  else if(n.endsWith('s') && n.length > 3) n = n.slice(0,-1);
-  return n;
+}
+
+// Gera múltiplas formas (stems) pra detectar plurais variados em PT-BR.
+// Ex: "buquê" → ["buque"], "buquês" → ["buques","buque"]
+// Ex: "flor" → ["flor"], "flores" → ["flores","flore","flor"]
+function _stems(s){
+  const n = _basicNorm(s);
+  const out = new Set([n]);
+  if(n.length > 3 && n.endsWith('s')) out.add(n.slice(0,-1));   // plural simples: rosas→rosa, buques→buque
+  if(n.length > 4 && n.endsWith('es')) out.add(n.slice(0,-2));  // plural -es: flores→flor
+  if(n.length > 4 && n.endsWith('oes')) out.add(n.slice(0,-3)+'ao'); // -ões → -ão (corações→coracao)
+  return [...out];
 }
 
 export async function limparCategorias(){
@@ -201,15 +208,29 @@ export async function limparCategorias(){
 
   // 1) Remove inúteis
   var antes = nomes.length;
-  nomes = nomes.filter(function(n){ return CAT_INUTIL.indexOf(_normCat(n)) < 0; });
+  nomes = nomes.filter(function(n){ return CAT_INUTIL.indexOf(_basicNorm(n)) < 0; });
   var inuteis = antes - nomes.length;
 
-  // 2) Detecta duplicatas por forma normalizada
-  var grupos = {}; // norm → [variantes]
+  // 2) Union-Find por stems comuns: agrupa nomes com qualquer stem em comum
+  //    Ex: "Buquê" stems=[buque], "Buquês" stems=[buques,buque] → comum "buque" → grupo único
+  var parent = {};
+  var find = function(x){ return parent[x]===x ? x : (parent[x] = find(parent[x])); };
+  var union = function(a,b){ var ra=find(a), rb=find(b); if(ra!==rb) parent[ra]=rb; };
+
+  nomes.forEach(function(n){ parent[n] = n; });
+  for(var i=0; i<nomes.length; i++){
+    var sa = _stems(nomes[i]);
+    for(var j=i+1; j<nomes.length; j++){
+      var sb = _stems(nomes[j]);
+      if(sa.some(function(x){ return sb.indexOf(x) >= 0; })) union(nomes[i], nomes[j]);
+    }
+  }
+  // Agrupa por raiz
+  var grupos = {};
   nomes.forEach(function(n){
-    var k = _normCat(n);
-    if(!grupos[k]) grupos[k] = [];
-    grupos[k].push(n);
+    var r = find(n);
+    if(!grupos[r]) grupos[r] = [];
+    grupos[r].push(n);
   });
 
   // 3) Para cada grupo, escolhe canônico (o que tem MAIS produtos, ou o mais bem formatado)
@@ -431,19 +452,22 @@ function _renderBulkList(){
   return available.map(p => {
     const id = String(p._id || p.id || '');
     const isSelected = selected.has(id);
-    const img = p.images?.[0] || '';
+    // Aceita imagem em multiplos formatos (compat com produtos antigos)
+    const img = p.imagem || p.images?.[0] || p.image || p.foto || '';
+    // Preco: prioriza salePrice (campo canonico), fallback price/preco/valor
+    const preco = Number(p.salePrice || p.price || p.preco || p.valor || 0);
     const currentCats = Array.isArray(p.categories) ? p.categories.join(', ') : (p.category || '—');
     return `
     <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${isSelected?'#F0FDF4':'#fff'};transition:background .1s;">
       <input type="checkbox" data-bulk-toggle="${id}" onchange="window.toggleBulkProd('${id}')" ${isSelected?'checked':''} style="width:18px;height:18px;accent-color:#16A34A;cursor:pointer;flex-shrink:0;"/>
       ${img
-        ? `<img src="${img}" style="width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0;"/>`
-        : `<div style="width:38px;height:38px;border-radius:6px;background:#FAE8E6;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🌸</div>`}
+        ? `<img src="${img}" loading="lazy" decoding="async" style="width:42px;height:42px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid #F1F5F9;" onerror="this.outerHTML='<div style=\\'width:42px;height:42px;border-radius:6px;background:#FAE8E6;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;\\'>🌸</div>'"/>`
+        : `<div style="width:42px;height:42px;border-radius:6px;background:#FAE8E6;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🌸</div>`}
       <div style="flex:1;min-width:0;">
         <div style="font-weight:600;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name||'—'}</div>
         <div style="font-size:11px;color:var(--muted);">${currentCats}</div>
       </div>
-      <div style="font-weight:700;color:var(--rose);font-size:13px;flex-shrink:0;">R$ ${(Number(p.price)||0).toFixed(2).replace('.',',')}</div>
+      <div style="font-weight:700;color:var(--rose);font-size:13px;flex-shrink:0;white-space:nowrap;">${preco>0?`R$ ${preco.toFixed(2).replace('.',',')}`:'<span style="color:#94A3B8;">—</span>'}</div>
     </label>`;
   }).join('');
 }
@@ -519,6 +543,7 @@ window.toggleBulkProd = toggleBulkProd;
 window.setBulkSearch = setBulkSearch;
 window.applyBulkAdd = applyBulkAdd;
 window.closeBulkModal = closeBulkModal;
+window.limparCategorias = limparCategorias;
 
 // ── RENDER: DRILL-DOWN (produtos de uma categoria) ────────────
 function renderCatDetail(catName){
@@ -551,7 +576,7 @@ function renderCatDetail(catName){
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">';
     for(const p of prods){
       const id = p._id || p.id;
-      const img = p.images?.[0] || '';
+      const img = p.imagem || p.images?.[0] || p.image || p.foto || '';
       const otherCats = Array.isArray(p.categories)
         ? p.categories.filter(c => c !== catName)
         : [];
@@ -673,7 +698,10 @@ export function renderCategorias(){
   html += '<h2 style="font-family:\'Playfair Display\',serif;font-size:22px;color:var(--primary);">\ud83c\udff7\ufe0f Categorias</h2>';
   html += '<p style="font-size:13px;color:var(--muted);">Gerencie categorias \u2014 cada produto pode ter m\u00faltiplas categorias</p>';
   html += '</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  html += '<button type="button" class="btn btn-ghost" onclick="window.limparCategorias()" style="background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;">🧹 Limpar duplicadas</button>';
   html += '<button type="button" class="btn btn-primary" onclick="showCatModal()">+ Nova Categoria</button>';
+  html += '</div>';
   html += '</div>';
 
   html += '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 16px;font-size:12px;color:#1D4ED8;margin-bottom:16px;">';
