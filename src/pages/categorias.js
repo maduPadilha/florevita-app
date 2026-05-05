@@ -13,6 +13,141 @@ const CAT_KEY = 'fv_categorias';
 const CAT_CFG_KEY = 'fv_cat_cfg';
 const CAT_DEFAULT = ['Rosa','Buqu\u00ea','Orqu\u00eddea','Planta','Kit','Vaso','Flor','Coroa','Cesta','Embalagem','Adicional','Arranjo','Bouquet Premium','Decora\u00e7\u00e3o','Outro'];
 
+// Categorias in\u00fateis que vieram por engano (nunca devem aparecer no sistema)
+const CAT_INUTIL = ['horario','horarios','hor\u00e1rio','hor\u00e1rios','turno','turnos','manha','manh\u00e3','tarde','noite','periodo','per\u00edodo','hora','horas'];
+
+// \u2500\u2500 NORMALIZA\u00c7\u00c3O + DEDUP (sempre ativos, silenciosamente) \u2500\u2500\u2500\u2500
+function _basicNorm(s){
+  if(!s) return '';
+  return String(s).toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ');
+}
+
+function _stems(s){
+  const n = _basicNorm(s);
+  const out = new Set([n]);
+  if(n.length > 3 && n.endsWith('s')) out.add(n.slice(0,-1));
+  if(n.length > 4 && n.endsWith('es')) out.add(n.slice(0,-2));
+  if(n.length > 4 && n.endsWith('oes')) out.add(n.slice(0,-3)+'ao');
+  return [...out];
+}
+
+// HELPER central: limpa lista de categorias (remove in\u00fateis + dedup duplicatas).
+// SILENCIOSO. Atualiza S.products pra usar o nome can\u00f4nico (best-effort).
+function _cleanCatList(rawList, opts){
+  opts = opts || {};
+  var lista = (rawList||[]).map(function(c){
+    if(typeof c === 'string') return c;
+    return (c && c.name) ? c : null;
+  }).filter(Boolean);
+
+  // 1) Remove in\u00fateis
+  lista = lista.filter(function(c){
+    var n = _basicNorm(typeof c === 'string' ? c : c.name);
+    return CAT_INUTIL.indexOf(n) < 0;
+  });
+
+  // 2) Union-Find por stems comuns (buqu\u00ea/buqu\u00eas, flor/flores)
+  var nomes = lista.map(function(c){ return typeof c === 'string' ? c : c.name; });
+  var parent = {};
+  var find = function(x){ return parent[x]===x ? x : (parent[x] = find(parent[x])); };
+  var union = function(a,b){ var ra=find(a), rb=find(b); if(ra!==rb) parent[ra]=rb; };
+
+  nomes.forEach(function(n){ parent[n] = n; });
+  for(var i=0; i<nomes.length; i++){
+    var sa = _stems(nomes[i]);
+    for(var j=i+1; j<nomes.length; j++){
+      var sb = _stems(nomes[j]);
+      if(sa.some(function(x){ return sb.indexOf(x) >= 0; })) union(nomes[i], nomes[j]);
+    }
+  }
+  var grupos = {};
+  nomes.forEach(function(n){
+    var r = find(n);
+    if(!grupos[r]) grupos[r] = [];
+    grupos[r].push(n);
+  });
+
+  // 3) Escolhe can\u00f4nico de cada grupo
+  var canonicalMap = {};
+  var nomesfinais = [];
+  Object.keys(grupos).forEach(function(k){
+    var variantes = grupos[k];
+    if(variantes.length === 1){
+      nomesfinais.push(variantes[0]);
+      canonicalMap[variantes[0]] = variantes[0];
+      return;
+    }
+    var melhor = variantes[0];
+    var melhorScore = -1;
+    variantes.forEach(function(v){
+      var qtd = (S.products||[]).filter(function(p){
+        return Array.isArray(p.categories) ? p.categories.indexOf(v)>=0 : p.category===v;
+      }).length;
+      var temAcento = /[\u00e1\u00e9\u00ed\u00f3\u00fa\u00e2\u00ea\u00f4\u00e3\u00f5\u00e7]/i.test(v) ? 0.5 : 0;
+      var capit = (v.charAt(0) === v.charAt(0).toUpperCase()) ? 0.1 : 0;
+      var score = qtd + temAcento + capit;
+      if(score > melhorScore){ melhorScore = score; melhor = v; }
+    });
+    nomesfinais.push(melhor);
+    variantes.forEach(function(v){ canonicalMap[v] = melhor; });
+  });
+
+  // 4) Atualiza S.products in-place + persiste alterados (best-effort)
+  if(opts.updateProducts !== false && Array.isArray(S.products)){
+    var dirtyProds = [];
+    S.products = S.products.map(function(p){
+      var changed = false;
+      var np = Object.assign({}, p);
+      if(p.category && canonicalMap[p.category] && canonicalMap[p.category] !== p.category){
+        np.category = canonicalMap[p.category];
+        changed = true;
+      }
+      if(Array.isArray(p.categories)){
+        var nc = p.categories.map(function(c){ return canonicalMap[c] || c; });
+        nc = [...new Set(nc)];
+        if(JSON.stringify(nc) !== JSON.stringify(p.categories)){
+          np.categories = nc;
+          changed = true;
+        }
+      }
+      if(changed) dirtyProds.push(np);
+      return np;
+    });
+    if(dirtyProds.length > 0){
+      Promise.all(dirtyProds.map(function(p){
+        if(!p._id) return null;
+        return PUT('/products/'+p._id, p).catch(function(){});
+      })).catch(function(){});
+    }
+  }
+
+  // 5) Reconstr\u00f3i preservando o tipo (objeto vs string)
+  return nomesfinais.map(function(nome){
+    var orig = lista.find(function(c){
+      return (typeof c === 'string' ? c : c.name) === nome;
+    });
+    return orig || nome;
+  });
+}
+
+// HELPER: extrai categorias \u00fanicas referenciadas pelos produtos.
+// Garante que categorias usadas em produtos NUNCA "sumam" do m\u00f3dulo,
+// mesmo se o backend perder o registro de /categories.
+function _catsFromProducts(){
+  var encontradas = new Set();
+  (S.products||[]).forEach(function(p){
+    if(p.category) encontradas.add(String(p.category).trim());
+    if(Array.isArray(p.categories)){
+      p.categories.forEach(function(c){ if(c) encontradas.add(String(c).trim()); });
+    }
+  });
+  return [...encontradas].filter(function(n){
+    return n && CAT_INUTIL.indexOf(_basicNorm(n)) < 0;
+  });
+}
+
 // ── CRUD CATEGORIAS (API com fallback localStorage) ───────────
 export async function getCategorias(){
   try {
@@ -27,34 +162,51 @@ export async function getCategorias(){
 }
 
 // ── Sync lazy: busca no backend e faz merge com localStorage ──
+// MERGE (3 fontes): backend /categories + localStorage + categorias dos produtos
+// Isso garante que categorias usadas em produtos NUNCA sumam (bug "Dia das Mães")
+// — ainda que o backend não persista o /categories corretamente.
 export async function getCategoriasFromAPI(){
   try {
-    const data = await GET('/categories');
-    if(Array.isArray(data) && data.length > 0){
-      // Normaliza itens: backend pode devolver objetos { _id, name } ou strings
-      const apiList = data.map(function(item){
-        if(typeof item === 'string') return { name: item };
-        return item || {};
-      }).filter(function(it){ return it && it.name; });
+    const data = await GET('/categories').catch(function(){ return null; });
+    const apiList = Array.isArray(data) ? data.map(function(item){
+      if(typeof item === 'string') return { name: item };
+      return item || {};
+    }).filter(function(it){ return it && it.name; }) : [];
 
-      const local = getCategoriasSync();
-      // local pode ser array de strings (default) ou array de objetos
-      const localNorm = local.map(function(item){
-        if(typeof item === 'string') return { name: item };
-        return item || {};
-      }).filter(function(it){ return it && it.name; });
+    const local = getCategoriasSync();
+    const localNorm = local.map(function(item){
+      if(typeof item === 'string') return { name: item };
+      return item || {};
+    }).filter(function(it){ return it && it.name; });
 
-      const merged = apiList.map(function(apiCat){
-        const localCat = localNorm.find(function(l){ return l.name === apiCat.name; });
-        return Object.assign({}, apiCat, (localCat || {}), { _id: apiCat._id, name: apiCat.name });
-      });
-      // Adiciona categorias locais que não estão no backend
-      localNorm.forEach(function(lc){
-        if(!apiList.find(function(d){ return d.name === lc.name; })) merged.push(lc);
-      });
-      localStorage.setItem(CAT_KEY, JSON.stringify(merged));
-      return merged;
-    }
+    // Merge backend ⨯ local (preserva _id do backend e props locais)
+    const mergedMap = new Map();
+    apiList.forEach(function(apiCat){
+      mergedMap.set(apiCat.name, apiCat);
+    });
+    localNorm.forEach(function(lc){
+      if(mergedMap.has(lc.name)){
+        var apiCat = mergedMap.get(lc.name);
+        mergedMap.set(lc.name, Object.assign({}, apiCat, lc, { _id: apiCat._id, name: apiCat.name }));
+      } else {
+        mergedMap.set(lc.name, lc);
+      }
+    });
+
+    // ⭐ Adiciona categorias DERIVADAS DOS PRODUTOS (corrige bug "categoria some")
+    _catsFromProducts().forEach(function(nome){
+      if(!mergedMap.has(nome)) mergedMap.set(nome, { name: nome });
+    });
+
+    var merged = [...mergedMap.values()];
+
+    // Limpeza silenciosa: dedup duplicatas + remove inúteis (Buquê/Buquês, Horários)
+    merged = _cleanCatList(merged);
+
+    localStorage.setItem(CAT_KEY, JSON.stringify(merged));
+    // Re-persiste no backend pra garantir consistência (best-effort)
+    try { POST('/categories', { categories: merged }).catch(function(){}); } catch(_){}
+    return merged;
   } catch(e){ /* silent */ }
   return getCategoriasSync();
 }
@@ -70,8 +222,11 @@ function triggerCatFetch(){
 }
 
 export async function saveCategorias(list){
-  localStorage.setItem(CAT_KEY, JSON.stringify(list));
-  try { await POST('/categories', { categories: list }); } catch(e){ /* silent */ }
+  // Limpeza silenciosa antes de persistir: remove inúteis e dedupa duplicatas.
+  // Isso impede que duplicatas sejam criadas (Buquê + Buquês = Buquê).
+  var clean = _cleanCatList(list);
+  localStorage.setItem(CAT_KEY, JSON.stringify(clean));
+  try { await POST('/categories', { categories: clean }); } catch(e){ /* silent */ }
 }
 
 export async function getCatCfg(){
@@ -176,145 +331,8 @@ export async function deleteCat(idx){
   render();
 }
 
-// ── LIMPEZA: dedup + remove inúteis ──────────────────────────
-// Lista de categorias inúteis que vieram por engano (turnos, horários, etc)
-const CAT_INUTIL = ['horario','horarios','horário','horários','turno','turnos','manha','manhã','tarde','noite','periodo','período','hora','horas'];
-
-// Normalização básica: minúscula, sem acento, sem espaços extras
-function _basicNorm(s){
-  if(!s) return '';
-  return String(s).toLowerCase().trim()
-    .normalize('NFD').replace(/[̀-ͯ]/g,'')
-    .replace(/\s+/g,' ');
-}
-
-// Gera múltiplas formas (stems) pra detectar plurais variados em PT-BR.
-// Ex: "buquê" → ["buque"], "buquês" → ["buques","buque"]
-// Ex: "flor" → ["flor"], "flores" → ["flores","flore","flor"]
-function _stems(s){
-  const n = _basicNorm(s);
-  const out = new Set([n]);
-  if(n.length > 3 && n.endsWith('s')) out.add(n.slice(0,-1));   // plural simples: rosas→rosa, buques→buque
-  if(n.length > 4 && n.endsWith('es')) out.add(n.slice(0,-2));  // plural -es: flores→flor
-  if(n.length > 4 && n.endsWith('oes')) out.add(n.slice(0,-3)+'ao'); // -ões → -ão (corações→coracao)
-  return [...out];
-}
-
-export async function limparCategorias(silent){
-  if(!silent && !confirm('🧹 LIMPAR CATEGORIAS\n\nIsto vai:\n• Remover categorias inúteis (Horários, Turnos, etc)\n• Mesclar duplicatas (ex: Buquê + Buquês = Buquê)\n• Atualizar produtos pra usar o nome canônico\n\nContinuar?')) return;
-
-  var cats = getCategoriasSync();
-  var nomes = cats.map(catName).filter(Boolean);
-
-  // 1) Remove inúteis
-  var antes = nomes.length;
-  nomes = nomes.filter(function(n){ return CAT_INUTIL.indexOf(_basicNorm(n)) < 0; });
-  var inuteis = antes - nomes.length;
-
-  // 2) Union-Find por stems comuns: agrupa nomes com qualquer stem em comum
-  //    Ex: "Buquê" stems=[buque], "Buquês" stems=[buques,buque] → comum "buque" → grupo único
-  var parent = {};
-  var find = function(x){ return parent[x]===x ? x : (parent[x] = find(parent[x])); };
-  var union = function(a,b){ var ra=find(a), rb=find(b); if(ra!==rb) parent[ra]=rb; };
-
-  nomes.forEach(function(n){ parent[n] = n; });
-  for(var i=0; i<nomes.length; i++){
-    var sa = _stems(nomes[i]);
-    for(var j=i+1; j<nomes.length; j++){
-      var sb = _stems(nomes[j]);
-      if(sa.some(function(x){ return sb.indexOf(x) >= 0; })) union(nomes[i], nomes[j]);
-    }
-  }
-  // Agrupa por raiz
-  var grupos = {};
-  nomes.forEach(function(n){
-    var r = find(n);
-    if(!grupos[r]) grupos[r] = [];
-    grupos[r].push(n);
-  });
-
-  // 3) Para cada grupo, escolhe canônico (o que tem MAIS produtos, ou o mais bem formatado)
-  var canonicalMap = {}; // variante → canônico
-  var finais = [];
-  var dupsRemovidas = 0;
-
-  Object.keys(grupos).forEach(function(k){
-    var variantes = grupos[k];
-    if(variantes.length === 1){
-      finais.push(variantes[0]);
-      canonicalMap[variantes[0]] = variantes[0];
-      return;
-    }
-    // Escolhe canônico: o com mais produtos. Em empate, o que tem acento (mais "bonito")
-    var melhor = variantes[0];
-    var melhorScore = -1;
-    variantes.forEach(function(v){
-      var qtd = S.products.filter(function(p){
-        return Array.isArray(p.categories) ? p.categories.indexOf(v)>=0 : p.category===v;
-      }).length;
-      var temAcento = /[áéíóúâêôãõç]/i.test(v) ? 0.5 : 0;
-      var score = qtd + temAcento + (v.charAt(0)===v.charAt(0).toUpperCase() ? 0.1 : 0);
-      if(score > melhorScore){ melhorScore = score; melhor = v; }
-    });
-    finais.push(melhor);
-    variantes.forEach(function(v){ canonicalMap[v] = melhor; });
-    dupsRemovidas += variantes.length - 1;
-  });
-
-  // 4) Atualiza produtos: troca todas as variantes pelo canônico
-  var prodsAtualizados = 0;
-  S.products = S.products.map(function(p){
-    var changed = false;
-    var np = Object.assign({}, p);
-    if(p.category && canonicalMap[p.category] && canonicalMap[p.category] !== p.category){
-      np.category = canonicalMap[p.category];
-      changed = true;
-    }
-    if(Array.isArray(p.categories)){
-      var nc = p.categories.map(function(c){ return canonicalMap[c] || c; });
-      // dedup
-      nc = [...new Set(nc)];
-      if(JSON.stringify(nc) !== JSON.stringify(p.categories)){
-        np.categories = nc;
-        changed = true;
-      }
-    }
-    if(changed) prodsAtualizados++;
-    return np;
-  });
-
-  // Persiste produtos atualizados (best-effort)
-  try {
-    const { PUT } = await import('../services/api.js');
-    for(const p of S.products){
-      if(p._id){
-        try { await PUT('/products/'+p._id, p); } catch(_){}
-      }
-    }
-  } catch(_){}
-
-  // 5) Salva nova lista de categorias (preserva tipo: string ou objeto)
-  var novosCats = finais.map(function(n){
-    var orig = cats.find(function(c){ return catName(c)===n; });
-    return orig || n;
-  });
-  saveCategorias(novosCats);
-
-  // 6) Limpa cfg de cats removidas
-  var cfg = getCatCfgSync();
-  Object.keys(cfg).forEach(function(k){
-    if(finais.indexOf(k) < 0) delete cfg[k];
-  });
-  saveCatCfg(cfg);
-
-  // Retorna stats — chamador decide se mostra toast
-  var stats = { inuteis: inuteis, duplicadas: dupsRemovidas, produtos: prodsAtualizados };
-  if(inuteis > 0 || dupsRemovidas > 0){
-    toast('🧹 Categorias limpas: '+inuteis+' inútil(eis) + '+dupsRemovidas+' duplicada(s). '+prodsAtualizados+' produto(s) atualizado(s).');
-  }
-  if(!silent) render();
-  return stats;
-}
+// (limparCategorias e helpers removidos — agora é tudo automatico via _cleanCatList
+//  dentro de saveCategorias e getCategoriasFromAPI. Sem botoes manuais.)
 
 // ── MOVER ─────────────────────────────────────────────────────
 export function moveCat(idx, dir){
