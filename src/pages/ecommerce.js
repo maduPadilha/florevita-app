@@ -11,46 +11,53 @@ async function render(){
 }
 
 // ── Helper: render seção CATEGORIAS DO SITE ─────────────────
-// Permite ao ADM escolher quais categorias aparecem no site,
-// onde aparecem (Topo / Página Inicial / Final) e em qual ordem.
+// State-buffered: edições ficam em window._csState até o "Salvar tudo".
+// Isso elimina o race condition (GET → mexe → PUT) e dá feedback claro.
 function renderCategoriasSiteSection(cfg) {
   // Lista de TODAS as categorias do sistema
   let allCats = [];
   try { allCats = JSON.parse(localStorage.getItem('fv_categorias')||'[]'); } catch(_){}
   const catNames = allCats.map(c => typeof c === 'string' ? c : (c?.name || c?.nome || '')).filter(Boolean);
 
-  // Config de exibição (cfg.categoriasSite = { [nome]: { posicao, ordem, ativo } })
-  const map = cfg.categoriasSite || {};
-  // Monta array combinando todas as cats com sua config (defaults)
-  const items = catNames.map(nome => {
-    const c = map[nome] || {};
-    return {
-      nome,
-      ativo: c.ativo !== false, // default true
-      posicao: c.posicao || 'inicial', // topo | inicial | final | oculto
-      ordem: typeof c.ordem === 'number' ? c.ordem : 999,
+  // Inicializa state buffer (preserva edições não salvas em re-renders)
+  if (!window._csState || window._csState._snap !== catNames.join('|')) {
+    const map = cfg.categoriasSite || {};
+    window._csState = {
+      _snap: catNames.join('|'),
+      _dirty: false,
+      cats: catNames.map(nome => {
+        const c = map[nome] || {};
+        return {
+          nome,
+          ativo: c.ativo !== false,
+          posicao: c.posicao || 'inicial',
+          ordem: typeof c.ordem === 'number' ? c.ordem : 999,
+        };
+      }).sort((a,b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome,'pt-BR'))
     };
-  }).sort((a,b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome,'pt-BR'));
-
-  // Agrupa por posição (para visualização)
-  const porPos = { topo: [], inicial: [], final: [], oculto: [] };
-  items.forEach(it => { (porPos[it.posicao] || porPos.inicial).push(it); });
+  }
+  const items = window._csState.cats;
+  const dirty = window._csState._dirty;
 
   const posLabel = {
-    topo:    { l: '⬆️ Topo (Menu/Header)',    cor: '#1E40AF', bg: '#DBEAFE' },
-    inicial: { l: '🏠 Página Inicial',          cor: '#15803D', bg: '#DCFCE7' },
-    final:   { l: '⬇️ Final (Rodapé)',          cor: '#92400E', bg: '#FEF3C7' },
-    oculto:  { l: '🚫 Oculto',                  cor: '#64748B', bg: '#F1F5F9' },
+    topo:    { l: '⬆️ Topo',    n: 'Topo (Menu)',     cor: '#1E40AF', bg: '#DBEAFE' },
+    inicial: { l: '🏠 Início',   n: 'Página Inicial',  cor: '#15803D', bg: '#DCFCE7' },
+    final:   { l: '⬇️ Rodapé',   n: 'Final (Rodapé)',  cor: '#92400E', bg: '#FEF3C7' },
   };
+
+  // Agrupa para preview (apenas ativas)
+  const porPos = { topo: [], inicial: [], final: [] };
+  items.filter(it => it.ativo && porPos[it.posicao]).forEach(it => porPos[it.posicao].push(it));
 
   return `
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
   <div>
     <h3 style="font-weight:700;">🏷️ Categorias do Site</h3>
-    <p style="font-size:13px;color:var(--muted);">Escolha onde cada categoria aparece no site e a ordem de exibição.</p>
+    <p style="font-size:13px;color:var(--muted);">Escolha quais categorias aparecem no site, onde e em qual ordem.</p>
   </div>
-  <div style="font-size:12px;color:var(--muted);background:#FAE8E6;padding:8px 14px;border-radius:8px;">
-    💡 Cadastre categorias em <a href="javascript:setPage('categorias')" style="color:#9F1239;font-weight:700;">Categorias</a>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-ghost btn-sm" id="btn-cs-limpar" style="background:#FEF3C7;color:#92400E;border-color:#FCD34D;">🧹 Limpar duplicadas</button>
+    <a href="javascript:setPage('categorias')" class="btn btn-ghost btn-sm" style="color:#9F1239;text-decoration:none;">⚙️ Gerenciar categorias</a>
   </div>
 </div>
 
@@ -61,59 +68,83 @@ ${catNames.length === 0 ? `
   <p style="font-size:12px;margin-top:6px;">Crie categorias no módulo <strong>Categorias</strong> primeiro.</p>
 </div>
 ` : `
-<div class="card" style="margin-bottom:14px;">
-  <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
-    📌 Para cada categoria, escolha a <strong>posição</strong> e a <strong>ordem</strong> (menor número = aparece primeiro).
-  </p>
 
-  <div style="overflow-x:auto;">
-    <table style="width:100%;font-size:12px;border-collapse:collapse;">
-      <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
-        <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;width:50px;">Ativo</th>
-        <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Categoria</th>
-        <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;width:240px;">Posição no site</th>
-        <th style="padding:10px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;width:90px;">Ordem</th>
-        <th style="padding:10px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;width:120px;">Mover</th>
-      </tr></thead>
-      <tbody>
-        ${items.map((it, i) => `<tr style="border-bottom:1px solid #F1F5F9;${!it.ativo?'opacity:.5;':''}">
-          <td style="padding:8px;text-align:center;">
-            <input type="checkbox" data-cs-ativo="${it.nome.replace(/"/g,'&quot;')}" ${it.ativo?'checked':''}
-              style="width:18px;height:18px;cursor:pointer;accent-color:#15803D;"/>
-          </td>
-          <td style="padding:8px;font-weight:700;font-size:13px;">${it.nome}</td>
-          <td style="padding:8px;">
-            <select class="fi" data-cs-pos="${it.nome.replace(/"/g,'&quot;')}" style="width:100%;font-size:12px;">
-              ${Object.entries(posLabel).map(([k,v]) => `<option value="${k}" ${it.posicao===k?'selected':''}>${v.l}</option>`).join('')}
-            </select>
-          </td>
-          <td style="padding:8px;text-align:center;">
-            <input type="number" class="fi" data-cs-ordem="${it.nome.replace(/"/g,'&quot;')}" value="${it.ordem===999?'':it.ordem}"
-              min="0" step="1" placeholder="—" style="width:70px;text-align:center;font-weight:700;"/>
-          </td>
-          <td style="padding:8px;text-align:center;white-space:nowrap;">
-            <button class="btn btn-ghost btn-xs" data-cs-move-up="${it.nome.replace(/"/g,'&quot;')}" title="Subir"  ${i===0?'disabled style="opacity:.3;"':''}>⬆️</button>
-            <button class="btn btn-ghost btn-xs" data-cs-move-down="${it.nome.replace(/"/g,'&quot;')}" title="Descer" ${i===items.length-1?'disabled style="opacity:.3;"':''}>⬇️</button>
-          </td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>
-
-  <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
-    <button class="btn btn-ghost btn-sm" id="btn-cs-reset" style="color:var(--red);">↩️ Resetar tudo</button>
-    <button class="btn btn-primary" id="btn-cs-salvar">💾 Salvar configuração</button>
+<!-- Banner instruções -->
+<div class="card" style="background:linear-gradient(135deg,#DBEAFE 0%,#DCFCE7 100%);border:none;margin-bottom:14px;">
+  <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+    <div style="font-size:32px;">💡</div>
+    <div style="flex:1;min-width:240px;font-size:13px;color:#1E3A8A;">
+      <strong>Como funciona:</strong>
+      <ol style="margin:6px 0 0 18px;line-height:1.6;">
+        <li><strong>👁️ Mostrar/Ocultar</strong>: define se a categoria aparece no site.</li>
+        <li><strong>📍 Posição</strong>: clique para escolher onde aparece.</li>
+        <li><strong>↕️ Ordem</strong>: use as setinhas para reordenar.</li>
+        <li>Clique em <strong>💾 Salvar tudo</strong> no final pra publicar.</li>
+      </ol>
+    </div>
   </div>
 </div>
 
-<!-- Preview por posição -->
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+<!-- Lista de categorias (cards) -->
+<div class="card" style="margin-bottom:14px;padding:8px;">
+  ${items.map((it, i) => {
+    const isOcult = !it.ativo;
+    return `
+    <div data-cs-row="${it.nome.replace(/"/g,'&quot;')}" style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #F1F5F9;${isOcult?'background:#FAFAFA;':''}flex-wrap:wrap;">
+
+      <!-- Ordem visual -->
+      <div style="font-size:11px;color:#94A3B8;font-weight:700;min-width:24px;text-align:center;">
+        ${isOcult ? '—' : '#'+(i+1)}
+      </div>
+
+      <!-- Toggle Mostrar/Ocultar (botão grande) -->
+      <button type="button" class="btn btn-xs" data-cs-toggle="${it.nome.replace(/"/g,'&quot;')}"
+        style="min-width:96px;font-weight:700;${it.ativo
+          ? 'background:#DCFCE7;color:#15803D;border:1px solid #86EFAC;'
+          : 'background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;'}">
+        ${it.ativo ? '👁️ Mostrar' : '🚫 Ocultar'}
+      </button>
+
+      <!-- Nome -->
+      <div style="flex:1;min-width:120px;font-weight:700;font-size:14px;${isOcult?'color:#94A3B8;text-decoration:line-through;':''}">
+        ${it.nome}
+      </div>
+
+      <!-- Chips de posição -->
+      <div style="display:flex;gap:4px;${isOcult?'opacity:.4;pointer-events:none;':''}">
+        ${Object.entries(posLabel).map(([k,v]) => `
+          <button type="button" class="btn btn-xs" data-cs-pos="${it.nome.replace(/"/g,'&quot;')}" data-cs-pos-val="${k}"
+            style="font-weight:700;${it.posicao===k
+              ? `background:${v.cor};color:#fff;border:1px solid ${v.cor};`
+              : `background:#fff;color:${v.cor};border:1px solid ${v.cor};`}">
+            ${v.l}
+          </button>
+        `).join('')}
+      </div>
+
+      <!-- Setas mover -->
+      <div style="display:flex;gap:2px;${isOcult?'opacity:.3;pointer-events:none;':''}">
+        <button type="button" class="btn btn-ghost btn-xs" data-cs-move-up="${it.nome.replace(/"/g,'&quot;')}"
+          ${i===0?'disabled':''} style="font-size:14px;padding:4px 8px;" title="Mover acima">⬆️</button>
+        <button type="button" class="btn btn-ghost btn-xs" data-cs-move-down="${it.nome.replace(/"/g,'&quot;')}"
+          ${i===items.length-1?'disabled':''} style="font-size:14px;padding:4px 8px;" title="Mover abaixo">⬇️</button>
+      </div>
+
+      <!-- Excluir categoria do sistema -->
+      <button type="button" class="btn btn-ghost btn-xs" data-cs-del="${it.nome.replace(/"/g,'&quot;')}"
+        style="color:var(--red);font-size:14px;padding:4px 8px;" title="Excluir categoria do sistema">🗑️</button>
+    </div>`;
+  }).join('')}
+</div>
+
+<!-- Preview lado a lado -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:80px;">
   ${Object.entries(posLabel).map(([k,v]) => {
-    const list = porPos[k].filter(it => it.ativo);
+    const list = porPos[k];
     return `<div class="card" style="border-left:4px solid ${v.cor};background:${v.bg};">
-      <div style="font-size:13px;font-weight:800;color:${v.cor};margin-bottom:8px;">${v.l}</div>
+      <div style="font-size:13px;font-weight:800;color:${v.cor};margin-bottom:8px;">${v.n} <span style="background:#fff;padding:2px 8px;border-radius:10px;font-size:11px;">${list.length}</span></div>
       ${list.length === 0
-        ? `<div style="font-size:11px;color:var(--muted);font-style:italic;">Nenhuma categoria.</div>`
+        ? `<div style="font-size:11px;color:var(--muted);font-style:italic;">Nenhuma categoria aqui.</div>`
         : `<div style="display:flex;flex-direction:column;gap:4px;">${list.map((it,i) => `
             <div style="background:#fff;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;">
               ${i+1}. ${it.nome}
@@ -121,6 +152,17 @@ ${catNames.length === 0 ? `
       }
     </div>`;
   }).join('')}
+</div>
+
+<!-- Barra fixa Salvar -->
+<div id="cs-savebar" style="position:sticky;bottom:0;background:#fff;border-top:2px solid ${dirty?'#F59E0B':'#E5E7EB'};padding:12px 16px;margin:0 -16px -16px -16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 -4px 12px rgba(0,0,0,.05);z-index:10;">
+  <div id="cs-status" style="font-size:13px;font-weight:700;color:${dirty?'#92400E':'#15803D'};">
+    ${dirty ? '⚠️ Você tem alterações não salvas.' : '✅ Tudo salvo e publicado.'}
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button class="btn btn-ghost btn-sm" id="btn-cs-descartar" ${dirty?'':'disabled style="opacity:.4;"'}>Descartar</button>
+    <button class="btn btn-primary" id="btn-cs-salvar" ${dirty?'':'disabled style="opacity:.4;"'} style="font-weight:700;">💾 Salvar tudo no site</button>
+  </div>
 </div>
 `}
 `;

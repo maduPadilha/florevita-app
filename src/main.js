@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-11';
+const APP_VERSION = '20260504-12';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3669,124 +3669,124 @@ function bindPageActions(){
     };}
 
     // ── Categorias do Site (tab "categorias") ─────────────────────
-    if (document.querySelector('[data-cs-ativo],[data-cs-pos],[data-cs-ordem]')) {
-      // Helper: lê a config atual do backend, faz merge e salva
-      const _csUpdate = async (mutator, opts={}) => {
-        try {
-          const r = await GET('/settings/ecommerce').catch(()=>null);
-          const cfg = r?.value || {};
-          cfg.categoriasSite = cfg.categoriasSite || {};
-          mutator(cfg);
-          await PUT('/settings/ecommerce', { value: cfg });
-          if (opts.silent !== true) {
-            // re-render só no movimento/save explícito (evita perder foco ao digitar ordem)
-            if (opts.rerender) render();
-          }
-          if (opts.toast) toast(opts.toast);
-        } catch(e) {
-          toast('❌ Erro ao salvar: ' + (e.message||'erro'));
-        }
+    if (document.querySelector('[data-cs-row]')) {
+      const st = window._csState;
+      if (!st) return;
+
+      const _findCat = (nome) => st.cats.find(c => c.nome === nome);
+      const _markDirty = () => { st._dirty = true; render(); };
+
+      // Toggle Mostrar/Ocultar
+      document.querySelectorAll('[data-cs-toggle]').forEach(btn => {
+        btn.onclick = () => {
+          const c = _findCat(btn.dataset.csToggle);
+          if (!c) return;
+          c.ativo = !c.ativo;
+          _markDirty();
+        };
+      });
+
+      // Chips de posição
+      document.querySelectorAll('[data-cs-pos]').forEach(btn => {
+        btn.onclick = () => {
+          const c = _findCat(btn.dataset.csPos);
+          if (!c) return;
+          c.posicao = btn.dataset.csPosVal;
+          _markDirty();
+        };
+      });
+
+      // Mover acima/abaixo
+      const _move = (nome, dir) => {
+        const idx = st.cats.findIndex(c => c.nome === nome);
+        const t = idx + dir;
+        if (idx < 0 || t < 0 || t >= st.cats.length) return;
+        [st.cats[idx], st.cats[t]] = [st.cats[t], st.cats[idx]];
+        // Reatribui ordem sequencial 0..N
+        st.cats.forEach((c, i) => { c.ordem = i; });
+        _markDirty();
       };
+      document.querySelectorAll('[data-cs-move-up]').forEach(b => {
+        b.onclick = () => _move(b.dataset.csMoveUp, -1);
+      });
+      document.querySelectorAll('[data-cs-move-down]').forEach(b => {
+        b.onclick = () => _move(b.dataset.csMoveDown, 1);
+      });
 
-      // Garante entrada para a categoria
-      const _ensureEntry = (cfg, nome) => {
-        if (!cfg.categoriasSite[nome]) {
-          cfg.categoriasSite[nome] = { ativo: true, posicao: 'inicial', ordem: 999 };
-        }
-        return cfg.categoriasSite[nome];
-      };
-
-      // Checkbox ativo
-      document.querySelectorAll('[data-cs-ativo]').forEach(cb => {
-        cb.onchange = () => {
-          const nome = cb.dataset.csAtivo;
-          _csUpdate(cfg => { _ensureEntry(cfg, nome).ativo = cb.checked; });
+      // Excluir categoria do sistema (deleta do fv_categorias)
+      document.querySelectorAll('[data-cs-del]').forEach(b => {
+        b.onclick = async () => {
+          const nome = b.dataset.csDel;
+          try {
+            const allCats = JSON.parse(localStorage.getItem('fv_categorias')||'[]');
+            const idx = allCats.findIndex(c => (typeof c === 'string' ? c : (c?.name || c?.nome || '')) === nome);
+            if (idx < 0) return;
+            const { deleteCat } = await import('./pages/categorias.js');
+            await deleteCat(idx);
+            // Força reset do _csState pra recarregar lista
+            window._csState = null;
+            render();
+          } catch(e) { toast('❌ ' + (e.message||'erro')); }
         };
       });
 
-      // Select posição
-      document.querySelectorAll('[data-cs-pos]').forEach(sel => {
-        sel.onchange = () => {
-          const nome = sel.dataset.csPos;
-          _csUpdate(cfg => { _ensureEntry(cfg, nome).posicao = sel.value; }, { rerender: true });
-        };
-      });
-
-      // Input ordem (debounced)
-      document.querySelectorAll('[data-cs-ordem]').forEach(inp => {
-        let _t = null;
-        inp.oninput = () => {
-          clearTimeout(_t);
-          _t = setTimeout(() => {
-            const nome = inp.dataset.csOrdem;
-            const v = inp.value === '' ? 999 : Number(inp.value);
-            _csUpdate(cfg => { _ensureEntry(cfg, nome).ordem = isNaN(v) ? 999 : v; }, { silent: true });
-          }, 500);
-        };
-      });
-
-      // Mover para cima/baixo (troca ordem com vizinho)
-      const _moverHandler = (dir) => async (btn) => {
-        const nome = dir === 'up' ? btn.dataset.csMoveUp : btn.dataset.csMoveDown;
+      // 🧹 Limpar duplicadas
+      {const _el = document.getElementById('btn-cs-limpar'); if (_el) _el.onclick = async () => {
         try {
-          const r = await GET('/settings/ecommerce').catch(()=>null);
-          const cfg = r?.value || {};
-          cfg.categoriasSite = cfg.categoriasSite || {};
-
-          // Reconstrói lista igual à do render
-          let allCats = [];
-          try { allCats = JSON.parse(localStorage.getItem('fv_categorias')||'[]'); } catch(_){}
-          const catNames = allCats.map(c => typeof c === 'string' ? c : (c?.name || c?.nome || '')).filter(Boolean);
-          const items = catNames.map(n => {
-            const c = cfg.categoriasSite[n] || {};
-            return { nome:n, ordem: typeof c.ordem === 'number' ? c.ordem : 999 };
-          }).sort((a,b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome,'pt-BR'));
-
-          const idx = items.findIndex(x => x.nome === nome);
-          const targetIdx = dir === 'up' ? idx - 1 : idx + 1;
-          if (idx < 0 || targetIdx < 0 || targetIdx >= items.length) return;
-
-          // Reatribui ordem sequencial 0..N para garantir consistência
-          items.forEach((it, i) => { _ensureEntry(cfg, it.nome).ordem = i; });
-          // Troca
-          const a = items[idx].nome, b = items[targetIdx].nome;
-          const oa = cfg.categoriasSite[a].ordem;
-          cfg.categoriasSite[a].ordem = cfg.categoriasSite[b].ordem;
-          cfg.categoriasSite[b].ordem = oa;
-
-          await PUT('/settings/ecommerce', { value: cfg });
+          const { limparCategorias } = await import('./pages/categorias.js');
+          await limparCategorias();
+          window._csState = null; // força reload
           render();
-        } catch(e) {
-          toast('❌ Erro ao mover: ' + (e.message||'erro'));
-        }
-      };
-      document.querySelectorAll('[data-cs-move-up]').forEach(b => { b.onclick = () => _moverHandler('up')(b); });
-      document.querySelectorAll('[data-cs-move-down]').forEach(b => { b.onclick = () => _moverHandler('down')(b); });
-
-      // Salvar explícito (apenas confirmação)
-      {const _el = document.getElementById('btn-cs-salvar'); if (_el) _el.onclick = async () => {
-        try {
-          const r = await GET('/settings/ecommerce').catch(()=>null);
-          const cfg = r?.value || {};
-          await PUT('/settings/ecommerce', { value: cfg });
-          toast('✅ Configuração de categorias salva! Site reflete em até 15s.');
-        } catch(e) {
-          toast('❌ Erro: ' + (e.message||'erro'));
-        }
+        } catch(e) { toast('❌ ' + (e.message||'erro')); }
       };}
 
-      // Resetar
-      {const _el = document.getElementById('btn-cs-reset'); if (_el) _el.onclick = async () => {
-        if (!confirm('Resetar configuração de TODAS as categorias do site? Todas voltarão para "Página Inicial" sem ordem definida.')) return;
+      // Descartar alterações
+      {const _el = document.getElementById('btn-cs-descartar'); if (_el) _el.onclick = () => {
+        window._csState = null;
+        render();
+      };}
+
+      // 💾 Salvar tudo (PUT atômico)
+      {const _el = document.getElementById('btn-cs-salvar'); if (_el) _el.onclick = async () => {
+        const status = document.getElementById('cs-status');
+        if (status) { status.textContent = '💾 Salvando...'; status.style.color = '#1E40AF'; }
         try {
+          // Reatribui ordem sequencial para garantir consistência
+          st.cats.forEach((c, i) => { c.ordem = i; });
+          // Monta map { nome: { ativo, posicao, ordem } }
+          const categoriasSite = {};
+          st.cats.forEach(c => {
+            categoriasSite[c.nome] = { ativo: c.ativo, posicao: c.posicao, ordem: c.ordem };
+          });
+          // GET → merge → PUT (preserva outros campos do cfg)
           const r = await GET('/settings/ecommerce').catch(()=>null);
           const cfg = r?.value || {};
-          cfg.categoriasSite = {};
+          cfg.categoriasSite = categoriasSite;
           await PUT('/settings/ecommerce', { value: cfg });
-          toast('↩️ Configuração resetada');
-          render();
+
+          // Verifica propagação no endpoint público
+          if (status) status.textContent = '✅ Salvo! Verificando propagação no site...';
+          setTimeout(async () => {
+            try {
+              const r2 = await fetch('https://florevita-backend-2-0.onrender.com/api/settings/public/ecommerce', { cache:'no-store' });
+              const d2 = await r2.json();
+              const ok = d2 && d2.categoriasSite && Object.keys(d2.categoriasSite).length === st.cats.length;
+              if (status) {
+                status.style.color = '#15803D';
+                status.textContent = ok
+                  ? `✅ Publicado! ${st.cats.filter(c=>c.ativo).length} categoria(s) ativa(s) no site.`
+                  : '✅ Salvo (servidor pode levar 30s pra propagar).';
+              }
+            } catch(_) {
+              if (status) { status.textContent = '✅ Salvo localmente.'; status.style.color = '#15803D'; }
+            }
+          }, 1500);
+
+          st._dirty = false;
+          toast('✅ Categorias publicadas no site!');
         } catch(e) {
-          toast('❌ Erro: ' + (e.message||'erro'));
+          if (status) { status.textContent = '❌ ' + (e.message||'erro'); status.style.color = '#DC2626'; }
+          toast('❌ Erro ao salvar: ' + (e.message||'erro'));
         }
       };}
     }

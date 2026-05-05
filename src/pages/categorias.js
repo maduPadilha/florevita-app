@@ -176,6 +176,120 @@ export async function deleteCat(idx){
   render();
 }
 
+// ── LIMPEZA: dedup + remove inúteis ──────────────────────────
+// Lista de categorias inúteis que vieram por engano (turnos, horários, etc)
+const CAT_INUTIL = ['horario','horarios','horário','horários','turno','turnos','manha','manhã','tarde','noite','periodo','período','hora','horas'];
+
+// Normaliza pra detectar duplicatas: minúscula, sem acento, sem plural simples
+function _normCat(s){
+  if(!s) return '';
+  let n = String(s).toLowerCase().trim()
+    .normalize('NFD').replace(/[̀-ͯ]/g,'') // remove acentos
+    .replace(/\s+/g,' ');
+  // remove plural simples (es/s) — mas só pra comparação
+  if(n.endsWith('oes')) n = n.slice(0,-3)+'ao'; // buquês→buque, NÃO funciona, mas aproxima
+  if(n.endsWith('es') && n.length > 4) n = n.slice(0,-2);
+  else if(n.endsWith('s') && n.length > 3) n = n.slice(0,-1);
+  return n;
+}
+
+export async function limparCategorias(){
+  if(!confirm('🧹 LIMPAR CATEGORIAS\n\nIsto vai:\n• Remover categorias inúteis (Horários, Turnos, etc)\n• Mesclar duplicatas (ex: Buquê + Buquês = Buquê)\n• Atualizar produtos pra usar o nome canônico\n\nContinuar?')) return;
+
+  var cats = getCategoriasSync();
+  var nomes = cats.map(catName).filter(Boolean);
+
+  // 1) Remove inúteis
+  var antes = nomes.length;
+  nomes = nomes.filter(function(n){ return CAT_INUTIL.indexOf(_normCat(n)) < 0; });
+  var inuteis = antes - nomes.length;
+
+  // 2) Detecta duplicatas por forma normalizada
+  var grupos = {}; // norm → [variantes]
+  nomes.forEach(function(n){
+    var k = _normCat(n);
+    if(!grupos[k]) grupos[k] = [];
+    grupos[k].push(n);
+  });
+
+  // 3) Para cada grupo, escolhe canônico (o que tem MAIS produtos, ou o mais bem formatado)
+  var canonicalMap = {}; // variante → canônico
+  var finais = [];
+  var dupsRemovidas = 0;
+
+  Object.keys(grupos).forEach(function(k){
+    var variantes = grupos[k];
+    if(variantes.length === 1){
+      finais.push(variantes[0]);
+      canonicalMap[variantes[0]] = variantes[0];
+      return;
+    }
+    // Escolhe canônico: o com mais produtos. Em empate, o que tem acento (mais "bonito")
+    var melhor = variantes[0];
+    var melhorScore = -1;
+    variantes.forEach(function(v){
+      var qtd = S.products.filter(function(p){
+        return Array.isArray(p.categories) ? p.categories.indexOf(v)>=0 : p.category===v;
+      }).length;
+      var temAcento = /[áéíóúâêôãõç]/i.test(v) ? 0.5 : 0;
+      var score = qtd + temAcento + (v.charAt(0)===v.charAt(0).toUpperCase() ? 0.1 : 0);
+      if(score > melhorScore){ melhorScore = score; melhor = v; }
+    });
+    finais.push(melhor);
+    variantes.forEach(function(v){ canonicalMap[v] = melhor; });
+    dupsRemovidas += variantes.length - 1;
+  });
+
+  // 4) Atualiza produtos: troca todas as variantes pelo canônico
+  var prodsAtualizados = 0;
+  S.products = S.products.map(function(p){
+    var changed = false;
+    var np = Object.assign({}, p);
+    if(p.category && canonicalMap[p.category] && canonicalMap[p.category] !== p.category){
+      np.category = canonicalMap[p.category];
+      changed = true;
+    }
+    if(Array.isArray(p.categories)){
+      var nc = p.categories.map(function(c){ return canonicalMap[c] || c; });
+      // dedup
+      nc = [...new Set(nc)];
+      if(JSON.stringify(nc) !== JSON.stringify(p.categories)){
+        np.categories = nc;
+        changed = true;
+      }
+    }
+    if(changed) prodsAtualizados++;
+    return np;
+  });
+
+  // Persiste produtos atualizados (best-effort)
+  try {
+    const { PUT } = await import('../services/api.js');
+    for(const p of S.products){
+      if(p._id){
+        try { await PUT('/products/'+p._id, p); } catch(_){}
+      }
+    }
+  } catch(_){}
+
+  // 5) Salva nova lista de categorias (preserva tipo: string ou objeto)
+  var novosCats = finais.map(function(n){
+    var orig = cats.find(function(c){ return catName(c)===n; });
+    return orig || n;
+  });
+  saveCategorias(novosCats);
+
+  // 6) Limpa cfg de cats removidas
+  var cfg = getCatCfgSync();
+  Object.keys(cfg).forEach(function(k){
+    if(finais.indexOf(k) < 0) delete cfg[k];
+  });
+  saveCatCfg(cfg);
+
+  toast('🧹 Limpeza concluída: '+inuteis+' inútil(eis) + '+dupsRemovidas+' duplicada(s) removida(s). '+prodsAtualizados+' produto(s) atualizado(s).');
+  render();
+}
+
 // ── MOVER ─────────────────────────────────────────────────────
 export function moveCat(idx, dir){
   var cats = getCategoriasSync();
