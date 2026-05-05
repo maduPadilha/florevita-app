@@ -427,10 +427,146 @@ export async function printComanda(orderId){
   }
 }
 
-function _printComandaInternal(orderId){
+// ── PRINT BATCH (CHAO DE DATAS) ────────────────────────────────
+// Imprime VARIAS comandas em UM UNICO job de impressao.
+// Antes: chamada antiga abria N overlays empilhadas (uma por pedido) e
+// travava o navegador. Agora: combina tudo em 1 documento HTML, abre 1
+// iframe so, 1 click de imprimir manda tudo pra impressora de uma vez.
+export async function printComandasBatch(orderIds) {
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    try { toast('Nenhuma comanda para imprimir', true); } catch(_){}
+    return;
+  }
+
+  try {
+    // Carrega imagens dos produtos de TODOS os pedidos antes de gerar HTML
+    for (const id of orderIds) {
+      try { await ensureProductImagesForOrder(id); } catch(_){}
+    }
+
+    // Coleta o HTML de cada comanda (em modo batch — so o pageHtml)
+    const partes = [];
+    let cmdFonte = 'Arial', cmdTam = '14', cmdBg = '#FFFFFF';
+    for (const id of orderIds) {
+      const r = _printComandaInternal(id, { returnHtml: true });
+      if (r && r.pageHtml) {
+        partes.push(r.pageHtml);
+        cmdFonte = r.cmdFonte; cmdTam = r.cmdTam; cmdBg = r.cmdBg;
+      }
+    }
+    if (partes.length === 0) {
+      try { toast('Nenhuma comanda valida pra imprimir', true); } catch(_){}
+      return;
+    }
+
+    // Doc HTML consolidado: 1 estilo + N paginas separadas por page-break
+    const htmlDoc = `<!DOCTYPE html>
+<html><head><title>Comandas em massa (${partes.length})</title>
+<meta charset="utf-8"/>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#f0f0f0;font-family:${cmdFonte},Arial,sans-serif;font-size:${cmdTam}px;text-transform:uppercase;}
+  .page{
+    width:210mm;
+    height:297mm;
+    margin:0 auto 8mm auto;
+    background:${cmdBg};
+    page-break-after:always;
+    break-after:page;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; margin-bottom:0; }
+  .comanda{
+    width:210mm;
+    height:148mm;
+    background:${cmdBg};
+    overflow:hidden;
+    box-sizing:border-box;
+    position:relative;
+    page-break-inside:avoid;
+    break-inside:avoid;
+  }
+  .comanda.tipo-arquivo{ border-bottom:2px dashed #888; }
+  .cut-label{
+    position:absolute; bottom:-9px; left:50%;
+    transform:translateX(-50%);
+    background:#fff; padding:0 14px; font-size:9px; color:#888;
+    white-space:nowrap; font-family:Arial; letter-spacing:2px; z-index:5;
+  }
+  @media print{
+    body{background:#fff;margin:0;}
+    .page{width:100%;height:auto;margin:0;page-break-after:always;}
+    .page:last-child{page-break-after:auto;}
+    .comanda{width:100%;height:50vh;box-shadow:none;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
+    @page{size:A4 portrait;margin:0;}
+  }
+</style></head>
+<body>
+${partes.join('\n')}
+</body></html>`;
+
+    // Overlay UNICO com iframe + botao Imprimir
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+    overlay.setAttribute('data-overlay','true');
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:16px;width:100%;max-width:960px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);margin:auto;';
+    box.innerHTML = `
+      <div style="padding:14px 20px;background:#8B2252;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;">
+        <span style="color:#fff;font-weight:bold;font-size:15px;">🧾 Comandas em massa — ${partes.length} pedido(s)</span>
+        <div style="display:flex;gap:8px;">
+          <button id="btn-do-print-batch" style="background:#fff;color:#8B2252;border:none;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">🖨️ IMPRIMIR TODAS (A4)</button>
+          <button id="btn-close-overlay-batch" style="background:rgba(255,255,255,0.2);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:16px;">✕</button>
+        </div>
+      </div>
+      <div style="padding:8px 14px;background:#FEF3C7;border-bottom:1px solid #FCD34D;font-size:12px;color:#92400E;">
+        💡 Dica: clique em <b>IMPRIMIR TODAS</b> uma única vez — o navegador vai imprimir as ${partes.length} comandas em sequência.
+      </div>
+      <div style="padding:16px;background:#f5f5f5;">
+        <iframe id="comanda-iframe-batch" style="width:100%;height:700px;border:none;border-radius:8px;background:#fff;"></iframe>
+      </div>`;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => {
+      const iframe = document.getElementById('comanda-iframe-batch');
+      if (iframe) {
+        iframe.contentDocument.open();
+        iframe.contentDocument.write(htmlDoc);
+        iframe.contentDocument.close();
+      }
+    }, 50);
+
+    document.getElementById('btn-do-print-batch')?.addEventListener('click', () => {
+      const iframe = document.getElementById('comanda-iframe-batch');
+      if (iframe) iframe.contentWindow.print();
+      // Marca todos como impressos
+      const printed = JSON.parse(localStorage.getItem('fv_printed_comanda')||'{}');
+      orderIds.forEach(id => { printed[id] = true; });
+      localStorage.setItem('fv_printed_comanda', JSON.stringify(printed));
+      S._printedComanda = printed;
+    });
+    const close = () => overlay.remove();
+    document.getElementById('btn-close-overlay-batch')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  } catch (err) {
+    console.error('[printComandasBatch] ERRO:', err);
+    try {
+      if (typeof toast === 'function') toast('❌ Erro ao imprimir lote: ' + (err?.message || err), true);
+      else alert('Erro ao imprimir lote: ' + (err?.message || err));
+    } catch(_){}
+  }
+}
+
+function _printComandaInternal(orderId, opts){
+  // Modo BATCH: opts.returnHtml=true -> retorna { htmlDoc, pageHtml, styleHtml }
+  // ao inves de criar overlay. Usado por printComandasBatch para combinar
+  // varias comandas em um unico job de impressao (sem abrir N overlays).
+  opts = opts || {};
   const o = S.orders.find(x=>x._id===orderId);
   if(!o) {
     console.warn('[printComanda] pedido nao encontrado:', orderId, 'total em S.orders=', S.orders?.length);
+    if (opts.returnHtml) return null;
     try { if (typeof toast === 'function') toast('❌ Pedido não encontrado', true); } catch(_){}
     return;
   }
@@ -768,7 +904,10 @@ function _printComandaInternal(orderId){
 </style></head>
 <body>
 <button class="btn-print" onclick="window.print()">\u{1F5A8}\uFE0F Imprimir Comanda (A4)</button>
-<div class="page">
+${(() => {
+  // Marker pra extrair o style + body em modo batch (sem regex pesada)
+  return '';
+})()}<div class="page">
   <div class="comanda tipo-arquivo">
     ${viaCD}
     <div class="cut-label">✂ ─────── DESTACAR AQUI ─────── ✂</div>
@@ -778,6 +917,26 @@ function _printComandaInternal(orderId){
   </div>
 </div>
 </body></html>`;
+
+  // Modo BATCH: retorna apenas o HTML de uma pagina (sem o wrapper completo)
+  // pra que printComandasBatch combine multiplas paginas com page-break.
+  if (opts.returnHtml) {
+    const pageHtml = `<div class="page">
+      <div class="comanda tipo-arquivo">
+        ${viaCD}
+        <div class="cut-label">✂ ─────── DESTACAR AQUI ─────── ✂</div>
+      </div>
+      <div class="comanda tipo-entregador">
+        ${viaEntregador}
+      </div>
+    </div>`;
+    return {
+      htmlDoc,
+      pageHtml,
+      orderNumFmt,
+      cmdFonte, cmdTam, cmdBg,
+    };
+  }
 
   // ── Overlay preview ─────────────────────────────────────────
   const overlay = document.createElement('div');

@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-17';
+const APP_VERSION = '20260504-18';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2421,51 +2421,25 @@ function bindPageActions(){
         ord.sort((a,b) => (a.deliveryNeighborhood||'zzz').localeCompare(b.deliveryNeighborhood||'zzz','pt-BR'));
       }
       if (!ord.length) { toast('Nenhuma comanda para imprimir', true); return; }
-      if (!confirm(`Imprimir ${ord.length} comanda(s) na ordem (${org})?\n\nVoce vera uma janela de impressao para CADA pedido — confirme/feche cada uma para passar para a proxima.\n\nDica: para volumes grandes (>10), prefira imprimir por turno separadamente para nao sobrecarregar o navegador.`)) return;
+      if (!confirm(`Imprimir ${ord.length} comanda(s) na ordem (${org})?\n\nTodas serao geradas em UM UNICO documento — voce so precisa clicar em "Imprimir" uma vez no preview que vai aparecer.`)) return;
 
-      // Fila NAO-bloqueante usando setTimeout encadeado.
-      // Cada printComanda abre uma nova janela com window.print() (bloqueante
-      // do lado do usuario, nao do JS). Disparar tudo num for/await rapido
-      // criava 30+ popups simultaneos e travava o Chrome. Agora dispara
-      // 1 por vez com 1.8s de respiro entre cada — UI livre, sem trava.
+      // FIX: antes abria N overlays (um por pedido) com setTimeout encadeado
+      // → navegador travava com 10+. Agora gera UM documento com N paginas
+      // separadas por page-break, abre 1 overlay so, 1 click imprime tudo.
       const ids = ord.map(o => o._id);
-      let i = 0;
-      const total = ids.length;
-      // Cancelavel via tecla ESC ou botao "Parar"
-      window._chaoPrintCancel = false;
       const stopBtn = document.getElementById('btn-print-chao-comandas');
       const origLabel = stopBtn ? stopBtn.innerHTML : '';
-      const onKey = (e) => { if (e.key === 'Escape') window._chaoPrintCancel = true; };
-      document.addEventListener('keydown', onKey);
-
-      const tick = () => {
-        if (window._chaoPrintCancel) {
-          toast(`⏸️ Impressao cancelada em ${i}/${total}`);
-          if (stopBtn) { stopBtn.innerHTML = origLabel; stopBtn.disabled = false; }
-          document.removeEventListener('keydown', onKey);
-          return;
-        }
-        if (i >= total) {
-          toast(`✅ ${total} comanda(s) enviada(s) para impressao`);
-          if (stopBtn) { stopBtn.innerHTML = origLabel; stopBtn.disabled = false; }
-          document.removeEventListener('keydown', onKey);
-          return;
-        }
-        if (stopBtn) {
-          stopBtn.innerHTML = `⏳ ${i+1}/${total} (ESC para parar)`;
-          stopBtn.disabled = false; // permite clicar novamente para parar? nao — ESC e simbolico
-        }
-        try {
-          if (typeof window.printComanda === 'function') {
-            window.printComanda(ids[i]);
-          }
-        } catch(_){}
-        i++;
-        // 1800ms da tempo do navegador renderizar a nova janela e da
-        // chance ao usuario fechar a anterior. Nao trava a UI.
-        setTimeout(tick, 1800);
-      };
-      tick();
+      if (stopBtn) { stopBtn.innerHTML = `⏳ Gerando ${ids.length}...`; stopBtn.disabled = true; }
+      try {
+        const { printComandasBatch } = await import('./pages/impressao.js');
+        await printComandasBatch(ids);
+        toast(`✅ ${ids.length} comanda(s) prontas — clique em IMPRIMIR no preview`);
+      } catch(e) {
+        console.error('[chao-print] erro:', e);
+        toast('❌ Erro ao gerar lote: ' + (e?.message||'erro'), true);
+      } finally {
+        if (stopBtn) { stopBtn.innerHTML = origLabel; stopBtn.disabled = false; }
+      }
     });
     // Vendas por Unidade
     document.getElementById('rep-prod-filter')?.addEventListener('input', e => {
