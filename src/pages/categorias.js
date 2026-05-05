@@ -240,9 +240,10 @@ export function openBulkAddModal(){
 }
 
 export function toggleBulkProd(productId){
-  if(!S._catBulkSelected) S._catBulkSelected = new Set();
-  if(S._catBulkSelected.has(productId)) S._catBulkSelected.delete(productId);
-  else S._catBulkSelected.add(productId);
+  if(!S._catBulkSelected || !(S._catBulkSelected instanceof Set)) S._catBulkSelected = new Set();
+  const id = String(productId||'');
+  if(S._catBulkSelected.has(id)) S._catBulkSelected.delete(id);
+  else S._catBulkSelected.add(id);
   render();
 }
 
@@ -302,7 +303,7 @@ function _filtraBulk(){
 }
 
 function _getBulkVisibleIds(){
-  return _filtraBulk().map(p => p._id || p.id);
+  return _filtraBulk().map(p => String(p._id || p.id || ''));
 }
 
 function _renderBulkList(){
@@ -314,13 +315,13 @@ function _renderBulkList(){
   }
 
   return available.map(p => {
-    const id = p._id || p.id;
+    const id = String(p._id || p.id || '');
     const isSelected = selected.has(id);
     const img = p.images?.[0] || '';
     const currentCats = Array.isArray(p.categories) ? p.categories.join(', ') : (p.category || '—');
     return `
     <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${isSelected?'#F0FDF4':'#fff'};transition:background .1s;">
-      <input type="checkbox" data-bulk-toggle="${id}" ${isSelected?'checked':''} style="width:18px;height:18px;accent-color:#16A34A;cursor:pointer;flex-shrink:0;"/>
+      <input type="checkbox" data-bulk-toggle="${id}" onchange="window.toggleBulkProd('${id}')" ${isSelected?'checked':''} style="width:18px;height:18px;accent-color:#16A34A;cursor:pointer;flex-shrink:0;"/>
       ${img
         ? `<img src="${img}" style="width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0;"/>`
         : `<div style="width:38px;height:38px;border-radius:6px;background:#FAE8E6;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🌸</div>`}

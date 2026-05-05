@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-10';
+const APP_VERSION = '20260504-11';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3667,6 +3667,129 @@ function bindPageActions(){
         if (status) { status.textContent = '❌ '+(e.message||'erro'); status.style.color = '#DC2626'; }
       }
     };}
+
+    // ── Categorias do Site (tab "categorias") ─────────────────────
+    if (document.querySelector('[data-cs-ativo],[data-cs-pos],[data-cs-ordem]')) {
+      // Helper: lê a config atual do backend, faz merge e salva
+      const _csUpdate = async (mutator, opts={}) => {
+        try {
+          const r = await GET('/settings/ecommerce').catch(()=>null);
+          const cfg = r?.value || {};
+          cfg.categoriasSite = cfg.categoriasSite || {};
+          mutator(cfg);
+          await PUT('/settings/ecommerce', { value: cfg });
+          if (opts.silent !== true) {
+            // re-render só no movimento/save explícito (evita perder foco ao digitar ordem)
+            if (opts.rerender) render();
+          }
+          if (opts.toast) toast(opts.toast);
+        } catch(e) {
+          toast('❌ Erro ao salvar: ' + (e.message||'erro'));
+        }
+      };
+
+      // Garante entrada para a categoria
+      const _ensureEntry = (cfg, nome) => {
+        if (!cfg.categoriasSite[nome]) {
+          cfg.categoriasSite[nome] = { ativo: true, posicao: 'inicial', ordem: 999 };
+        }
+        return cfg.categoriasSite[nome];
+      };
+
+      // Checkbox ativo
+      document.querySelectorAll('[data-cs-ativo]').forEach(cb => {
+        cb.onchange = () => {
+          const nome = cb.dataset.csAtivo;
+          _csUpdate(cfg => { _ensureEntry(cfg, nome).ativo = cb.checked; });
+        };
+      });
+
+      // Select posição
+      document.querySelectorAll('[data-cs-pos]').forEach(sel => {
+        sel.onchange = () => {
+          const nome = sel.dataset.csPos;
+          _csUpdate(cfg => { _ensureEntry(cfg, nome).posicao = sel.value; }, { rerender: true });
+        };
+      });
+
+      // Input ordem (debounced)
+      document.querySelectorAll('[data-cs-ordem]').forEach(inp => {
+        let _t = null;
+        inp.oninput = () => {
+          clearTimeout(_t);
+          _t = setTimeout(() => {
+            const nome = inp.dataset.csOrdem;
+            const v = inp.value === '' ? 999 : Number(inp.value);
+            _csUpdate(cfg => { _ensureEntry(cfg, nome).ordem = isNaN(v) ? 999 : v; }, { silent: true });
+          }, 500);
+        };
+      });
+
+      // Mover para cima/baixo (troca ordem com vizinho)
+      const _moverHandler = (dir) => async (btn) => {
+        const nome = dir === 'up' ? btn.dataset.csMoveUp : btn.dataset.csMoveDown;
+        try {
+          const r = await GET('/settings/ecommerce').catch(()=>null);
+          const cfg = r?.value || {};
+          cfg.categoriasSite = cfg.categoriasSite || {};
+
+          // Reconstrói lista igual à do render
+          let allCats = [];
+          try { allCats = JSON.parse(localStorage.getItem('fv_categorias')||'[]'); } catch(_){}
+          const catNames = allCats.map(c => typeof c === 'string' ? c : (c?.name || c?.nome || '')).filter(Boolean);
+          const items = catNames.map(n => {
+            const c = cfg.categoriasSite[n] || {};
+            return { nome:n, ordem: typeof c.ordem === 'number' ? c.ordem : 999 };
+          }).sort((a,b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome,'pt-BR'));
+
+          const idx = items.findIndex(x => x.nome === nome);
+          const targetIdx = dir === 'up' ? idx - 1 : idx + 1;
+          if (idx < 0 || targetIdx < 0 || targetIdx >= items.length) return;
+
+          // Reatribui ordem sequencial 0..N para garantir consistência
+          items.forEach((it, i) => { _ensureEntry(cfg, it.nome).ordem = i; });
+          // Troca
+          const a = items[idx].nome, b = items[targetIdx].nome;
+          const oa = cfg.categoriasSite[a].ordem;
+          cfg.categoriasSite[a].ordem = cfg.categoriasSite[b].ordem;
+          cfg.categoriasSite[b].ordem = oa;
+
+          await PUT('/settings/ecommerce', { value: cfg });
+          render();
+        } catch(e) {
+          toast('❌ Erro ao mover: ' + (e.message||'erro'));
+        }
+      };
+      document.querySelectorAll('[data-cs-move-up]').forEach(b => { b.onclick = () => _moverHandler('up')(b); });
+      document.querySelectorAll('[data-cs-move-down]').forEach(b => { b.onclick = () => _moverHandler('down')(b); });
+
+      // Salvar explícito (apenas confirmação)
+      {const _el = document.getElementById('btn-cs-salvar'); if (_el) _el.onclick = async () => {
+        try {
+          const r = await GET('/settings/ecommerce').catch(()=>null);
+          const cfg = r?.value || {};
+          await PUT('/settings/ecommerce', { value: cfg });
+          toast('✅ Configuração de categorias salva! Site reflete em até 15s.');
+        } catch(e) {
+          toast('❌ Erro: ' + (e.message||'erro'));
+        }
+      };}
+
+      // Resetar
+      {const _el = document.getElementById('btn-cs-reset'); if (_el) _el.onclick = async () => {
+        if (!confirm('Resetar configuração de TODAS as categorias do site? Todas voltarão para "Página Inicial" sem ordem definida.')) return;
+        try {
+          const r = await GET('/settings/ecommerce').catch(()=>null);
+          const cfg = r?.value || {};
+          cfg.categoriasSite = {};
+          await PUT('/settings/ecommerce', { value: cfg });
+          toast('↩️ Configuração resetada');
+          render();
+        } catch(e) {
+          toast('❌ Erro: ' + (e.message||'erro'));
+        }
+      };}
+    }
   }
 
   // ── Colaboradores ─────────────────────────────────────────────

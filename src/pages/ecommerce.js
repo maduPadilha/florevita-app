@@ -10,6 +10,122 @@ async function render(){
   r();
 }
 
+// ── Helper: render seção CATEGORIAS DO SITE ─────────────────
+// Permite ao ADM escolher quais categorias aparecem no site,
+// onde aparecem (Topo / Página Inicial / Final) e em qual ordem.
+function renderCategoriasSiteSection(cfg) {
+  // Lista de TODAS as categorias do sistema
+  let allCats = [];
+  try { allCats = JSON.parse(localStorage.getItem('fv_categorias')||'[]'); } catch(_){}
+  const catNames = allCats.map(c => typeof c === 'string' ? c : (c?.name || c?.nome || '')).filter(Boolean);
+
+  // Config de exibição (cfg.categoriasSite = { [nome]: { posicao, ordem, ativo } })
+  const map = cfg.categoriasSite || {};
+  // Monta array combinando todas as cats com sua config (defaults)
+  const items = catNames.map(nome => {
+    const c = map[nome] || {};
+    return {
+      nome,
+      ativo: c.ativo !== false, // default true
+      posicao: c.posicao || 'inicial', // topo | inicial | final | oculto
+      ordem: typeof c.ordem === 'number' ? c.ordem : 999,
+    };
+  }).sort((a,b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome,'pt-BR'));
+
+  // Agrupa por posição (para visualização)
+  const porPos = { topo: [], inicial: [], final: [], oculto: [] };
+  items.forEach(it => { (porPos[it.posicao] || porPos.inicial).push(it); });
+
+  const posLabel = {
+    topo:    { l: '⬆️ Topo (Menu/Header)',    cor: '#1E40AF', bg: '#DBEAFE' },
+    inicial: { l: '🏠 Página Inicial',          cor: '#15803D', bg: '#DCFCE7' },
+    final:   { l: '⬇️ Final (Rodapé)',          cor: '#92400E', bg: '#FEF3C7' },
+    oculto:  { l: '🚫 Oculto',                  cor: '#64748B', bg: '#F1F5F9' },
+  };
+
+  return `
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+  <div>
+    <h3 style="font-weight:700;">🏷️ Categorias do Site</h3>
+    <p style="font-size:13px;color:var(--muted);">Escolha onde cada categoria aparece no site e a ordem de exibição.</p>
+  </div>
+  <div style="font-size:12px;color:var(--muted);background:#FAE8E6;padding:8px 14px;border-radius:8px;">
+    💡 Cadastre categorias em <a href="javascript:setPage('categorias')" style="color:#9F1239;font-weight:700;">Categorias</a>
+  </div>
+</div>
+
+${catNames.length === 0 ? `
+<div class="card" style="text-align:center;padding:40px;color:var(--muted);">
+  <div style="font-size:48px;margin-bottom:10px;">🏷️</div>
+  <p style="font-weight:700;">Nenhuma categoria cadastrada ainda.</p>
+  <p style="font-size:12px;margin-top:6px;">Crie categorias no módulo <strong>Categorias</strong> primeiro.</p>
+</div>
+` : `
+<div class="card" style="margin-bottom:14px;">
+  <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+    📌 Para cada categoria, escolha a <strong>posição</strong> e a <strong>ordem</strong> (menor número = aparece primeiro).
+  </p>
+
+  <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="background:#FAFAFA;border-bottom:1px solid var(--border);">
+        <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;width:50px;">Ativo</th>
+        <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;">Categoria</th>
+        <th style="padding:10px;text-align:left;font-size:10px;color:#94A3B8;text-transform:uppercase;width:240px;">Posição no site</th>
+        <th style="padding:10px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;width:90px;">Ordem</th>
+        <th style="padding:10px;text-align:center;font-size:10px;color:#94A3B8;text-transform:uppercase;width:120px;">Mover</th>
+      </tr></thead>
+      <tbody>
+        ${items.map((it, i) => `<tr style="border-bottom:1px solid #F1F5F9;${!it.ativo?'opacity:.5;':''}">
+          <td style="padding:8px;text-align:center;">
+            <input type="checkbox" data-cs-ativo="${it.nome.replace(/"/g,'&quot;')}" ${it.ativo?'checked':''}
+              style="width:18px;height:18px;cursor:pointer;accent-color:#15803D;"/>
+          </td>
+          <td style="padding:8px;font-weight:700;font-size:13px;">${it.nome}</td>
+          <td style="padding:8px;">
+            <select class="fi" data-cs-pos="${it.nome.replace(/"/g,'&quot;')}" style="width:100%;font-size:12px;">
+              ${Object.entries(posLabel).map(([k,v]) => `<option value="${k}" ${it.posicao===k?'selected':''}>${v.l}</option>`).join('')}
+            </select>
+          </td>
+          <td style="padding:8px;text-align:center;">
+            <input type="number" class="fi" data-cs-ordem="${it.nome.replace(/"/g,'&quot;')}" value="${it.ordem===999?'':it.ordem}"
+              min="0" step="1" placeholder="—" style="width:70px;text-align:center;font-weight:700;"/>
+          </td>
+          <td style="padding:8px;text-align:center;white-space:nowrap;">
+            <button class="btn btn-ghost btn-xs" data-cs-move-up="${it.nome.replace(/"/g,'&quot;')}" title="Subir"  ${i===0?'disabled style="opacity:.3;"':''}>⬆️</button>
+            <button class="btn btn-ghost btn-xs" data-cs-move-down="${it.nome.replace(/"/g,'&quot;')}" title="Descer" ${i===items.length-1?'disabled style="opacity:.3;"':''}>⬇️</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+    <button class="btn btn-ghost btn-sm" id="btn-cs-reset" style="color:var(--red);">↩️ Resetar tudo</button>
+    <button class="btn btn-primary" id="btn-cs-salvar">💾 Salvar configuração</button>
+  </div>
+</div>
+
+<!-- Preview por posição -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+  ${Object.entries(posLabel).map(([k,v]) => {
+    const list = porPos[k].filter(it => it.ativo);
+    return `<div class="card" style="border-left:4px solid ${v.cor};background:${v.bg};">
+      <div style="font-size:13px;font-weight:800;color:${v.cor};margin-bottom:8px;">${v.l}</div>
+      ${list.length === 0
+        ? `<div style="font-size:11px;color:var(--muted);font-style:italic;">Nenhuma categoria.</div>`
+        : `<div style="display:flex;flex-direction:column;gap:4px;">${list.map((it,i) => `
+            <div style="background:#fff;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;">
+              ${i+1}. ${it.nome}
+            </div>`).join('')}</div>`
+      }
+    </div>`;
+  }).join('')}
+</div>
+`}
+`;
+}
+
 // ── Helper: render paginas section ──────────────────────────
 function renderPaginasSection(cfg) {
   const paginas = cfg.paginas || [];
@@ -250,6 +366,7 @@ export function renderEcommerce(){
     {k:'horario',l:'🕐 Horários'},
     {k:'pagamentos',l:'💳 Pagamentos'},
     {k:'paginas',l:'📄 Páginas'},
+    {k:'categorias',l:'🏷️ Categorias do Site'},
     {k:'redes',l:'📱 Redes Sociais'},
     {k:'banners',l:'🖼️ Banners'},
     {k:'cores',l:'🎨 Aparência'},
@@ -671,6 +788,9 @@ ${tab==='paginas'?`
 
 ${renderPaginasSection(cfg)}
 `:''}
+
+<!-- ══ ABA CATEGORIAS DO SITE ════════════════════════════════ -->
+${tab==='categorias'?renderCategoriasSiteSection(cfg):''}
 
 <!-- ══ ABA REDES SOCIAIS ══════════════════════════════════════ -->
 ${tab==='redes'?`
