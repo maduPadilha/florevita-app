@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-15';
+const APP_VERSION = '20260504-16';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -1326,9 +1326,9 @@ function renderApp(){
     {k:'config',l:'Configurações',i:'⚙️',m:'config',s:'Config'},
     {k:'auditLogs',l:'Auditoria & Segurança',i:'🔒',m:'auditLogs',s:'Config'},
     {k:'agenteTI',l:'Agente de TI',i:'🤖',m:'agenteTI',s:'Sistema'},
-    {k:'ecommerce',l:'E-commerce',i:'🛒',m:'ecommerce',s:'Config', adminOnly:true},
+    {k:'ecommerce',l:'E-commerce',i:'🛒',m:'ecommerce',s:'E-commerce', adminOnly:true},
     {k:'meuPainel',l:'Meu Painel',i:'👤',m:'_alwaysOn',s:'Principal', hide:['Administrador','Entregador']},
-    {k:'orcamento',l:'Orçamentos',i:'📋',m:'orcamentos',s:'E-commerce'},
+    {k:'orcamento',l:'Orçamentos',i:'📋',m:'orcamentos',s:'Operação'},
   ].filter(n => {
     if (n.adminOnly && S.user?.role !== 'Administrador') return false;
     if ((n.hide||[]).includes(_isEntregador()?'Entregador':S.user?.role)) return false;
@@ -3669,76 +3669,82 @@ function bindPageActions(){
     };}
 
     // ── Categorias do Site (tab "categorias") ─────────────────────
-    if (document.querySelector('[data-cs-row]')) {
+    // Modelo ADD-only: state.cats contem apenas as cats explicitamente
+    // adicionadas pelo admin. Bindings tambem precisam disparar quando
+    // a lista esta vazia (pra capturar btn-cs-add).
+    if (S._ecTab === 'categorias') {
       const st = window._csState;
-      if (!st) return;
+      if (st) {
+        const _findCat = (nome) => st.cats.find(c => c.nome === nome);
+        const _markDirty = () => { st._dirty = true; render(); };
 
-      const _findCat = (nome) => st.cats.find(c => c.nome === nome);
-      const _markDirty = () => { st._dirty = true; render(); };
+        // + Adicionar categoria selecionada no dropdown
+        {const _el = document.getElementById('btn-cs-add'); if (_el) _el.onclick = () => {
+          const sel = document.getElementById('cs-add-select');
+          const nome = sel?.value;
+          if (!nome) { toast('❌ Escolha uma categoria primeiro'); return; }
+          if (st.cats.find(c => c.nome === nome)) return;
+          st.cats.push({ nome, posicoes: ['inicial'], ordem: st.cats.length });
+          _markDirty();
+        };}
 
-      // Toggle Mostrar/Ocultar
-      document.querySelectorAll('[data-cs-toggle]').forEach(btn => {
-        btn.onclick = () => {
-          const c = _findCat(btn.dataset.csToggle);
-          if (!c) return;
-          c.ativo = !c.ativo;
-          // Se ativando e sem posição, default = página inicial
-          if (c.ativo && (!Array.isArray(c.posicoes) || c.posicoes.length === 0)) {
-            c.posicoes = ['inicial'];
-          }
+        // + Adicionar TODAS as categorias do sistema de uma vez
+        {const _el = document.getElementById('btn-cs-add-all'); if (_el) _el.onclick = () => {
+          let allCats = [];
+          try { allCats = JSON.parse(localStorage.getItem('fv_categorias')||'[]'); } catch(_){}
+          const catNames = allCats.map(c => typeof c === 'string' ? c : (c?.name || c?.nome || '')).filter(Boolean);
+          catNames.forEach(n => {
+            if (!st.cats.find(c => c.nome === n)) {
+              st.cats.push({ nome: n, posicoes: ['inicial'], ordem: st.cats.length });
+            }
+          });
+          _markDirty();
+        };}
+
+        // Chips de posição (multi-select: toggle individual por posição)
+        document.querySelectorAll('[data-cs-pos]').forEach(btn => {
+          btn.onclick = () => {
+            const c = _findCat(btn.dataset.csPos);
+            if (!c) return;
+            if (!Array.isArray(c.posicoes)) c.posicoes = [];
+            const v = btn.dataset.csPosVal;
+            const idx = c.posicoes.indexOf(v);
+            if (idx >= 0) c.posicoes.splice(idx, 1); // remove
+            else c.posicoes.push(v); // adiciona
+            // Garante pelo menos uma posição (senão fica órfã)
+            if (c.posicoes.length === 0) c.posicoes = ['inicial'];
+            _markDirty();
+          };
+        });
+
+        // Mover acima/abaixo
+        const _move = (nome, dir) => {
+          const idx = st.cats.findIndex(c => c.nome === nome);
+          const t = idx + dir;
+          if (idx < 0 || t < 0 || t >= st.cats.length) return;
+          [st.cats[idx], st.cats[t]] = [st.cats[t], st.cats[idx]];
+          st.cats.forEach((c, i) => { c.ordem = i; });
           _markDirty();
         };
-      });
+        document.querySelectorAll('[data-cs-move-up]').forEach(b => {
+          b.onclick = () => _move(b.dataset.csMoveUp, -1);
+        });
+        document.querySelectorAll('[data-cs-move-down]').forEach(b => {
+          b.onclick = () => _move(b.dataset.csMoveDown, 1);
+        });
 
-      // Chips de posição (multi-select: toggle individual por posição)
-      document.querySelectorAll('[data-cs-pos]').forEach(btn => {
-        btn.onclick = () => {
-          const c = _findCat(btn.dataset.csPos);
-          if (!c) return;
-          if (!Array.isArray(c.posicoes)) c.posicoes = [];
-          const v = btn.dataset.csPosVal;
-          const idx = c.posicoes.indexOf(v);
-          if (idx >= 0) c.posicoes.splice(idx, 1); // remove
-          else c.posicoes.push(v); // adiciona
-          // Garante pelo menos uma posição se estiver ativa (senão fica órfã)
-          if (c.ativo && c.posicoes.length === 0) c.posicoes = ['inicial'];
-          _markDirty();
-        };
-      });
-
-      // Mover acima/abaixo
-      const _move = (nome, dir) => {
-        const idx = st.cats.findIndex(c => c.nome === nome);
-        const t = idx + dir;
-        if (idx < 0 || t < 0 || t >= st.cats.length) return;
-        [st.cats[idx], st.cats[t]] = [st.cats[t], st.cats[idx]];
-        // Reatribui ordem sequencial 0..N
-        st.cats.forEach((c, i) => { c.ordem = i; });
-        _markDirty();
-      };
-      document.querySelectorAll('[data-cs-move-up]').forEach(b => {
-        b.onclick = () => _move(b.dataset.csMoveUp, -1);
-      });
-      document.querySelectorAll('[data-cs-move-down]').forEach(b => {
-        b.onclick = () => _move(b.dataset.csMoveDown, 1);
-      });
-
-      // Excluir categoria do sistema (deleta do fv_categorias)
-      document.querySelectorAll('[data-cs-del]').forEach(b => {
-        b.onclick = async () => {
-          const nome = b.dataset.csDel;
-          try {
-            const allCats = JSON.parse(localStorage.getItem('fv_categorias')||'[]');
-            const idx = allCats.findIndex(c => (typeof c === 'string' ? c : (c?.name || c?.nome || '')) === nome);
-            if (idx < 0) return;
-            const { deleteCat } = await import('./pages/categorias.js');
-            await deleteCat(idx);
-            // Força reset do _csState pra recarregar lista
-            window._csState = null;
-            render();
-          } catch(e) { toast('❌ ' + (e.message||'erro')); }
-        };
-      });
+        // 🗑️ Remover do site (NÃO apaga do sistema)
+        document.querySelectorAll('[data-cs-rm]').forEach(b => {
+          b.onclick = () => {
+            const nome = b.dataset.csRm;
+            const i = st.cats.findIndex(c => c.nome === nome);
+            if (i >= 0) {
+              st.cats.splice(i, 1);
+              st.cats.forEach((c, j) => { c.ordem = j; });
+              _markDirty();
+            }
+          };
+        });
 
       // Descartar alterações
       {const _el = document.getElementById('btn-cs-descartar'); if (_el) _el.onclick = () => {
@@ -3753,16 +3759,24 @@ function bindPageActions(){
         try {
           // Reatribui ordem sequencial para garantir consistência
           st.cats.forEach((c, i) => { c.ordem = i; });
-          // Monta map { nome: { ativo, posicoes[], ordem } }
+          // Monta map { nome: { posicoes[], ordem, icone } }
           // Mantém também 'posicao' (string) por compatibilidade com leitores antigos do site
+          // Lê icone das categorias do sistema pra enviar pro site
+          let allCatsForIcone = [];
+          try { allCatsForIcone = JSON.parse(localStorage.getItem('fv_categorias')||'[]'); } catch(_){}
+          const iconeBy = {};
+          allCatsForIcone.forEach(c => {
+            if (c && typeof c === 'object' && c.name && c.icone) iconeBy[c.name] = c.icone;
+          });
           const categoriasSite = {};
           st.cats.forEach(c => {
             const posicoes = Array.isArray(c.posicoes) ? c.posicoes : [];
             categoriasSite[c.nome] = {
-              ativo: c.ativo,
+              ativo: true, // sempre true (UX add-only — se tá na lista, tá ativo)
               posicoes,
               posicao: posicoes[0] || 'inicial', // fallback compat
               ordem: c.ordem,
+              icone: iconeBy[c.nome] || c.icone || '',
             };
           });
           // GET → merge → PUT (preserva outros campos do cfg)
@@ -3796,7 +3810,8 @@ function bindPageActions(){
           toast('❌ Erro ao salvar: ' + (e.message||'erro'));
         }
       };}
-    }
+      } // fim if(st)
+    } // fim if (S._ecTab === 'categorias')
   }
 
   // ── Colaboradores ─────────────────────────────────────────────

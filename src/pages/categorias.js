@@ -255,28 +255,70 @@ export function isCatAtiva(nome){ const cfg=getCatCfgSync(); return cfg[nome]?.a
 
 // ── MODAL ─────────────────────────────────────────────────────
 export function showCatModal(idx){
-  var cats   = getCategoriasSync();
-  var isEdit = idx !== undefined && idx !== null;
-  var val    = isEdit ? catName(cats[parseInt(idx)]) : '';
-  var title  = isEdit ? '\u270f\ufe0f Editar Categoria' : '\ud83c\udff7\ufe0f Nova Categoria';
-  var btnTxt = isEdit ? '\ud83d\udcbe Salvar Altera\u00e7\u00e3o' : '\u2705 Criar Categoria';
-  var idxVal = isEdit ? parseInt(idx) : 'null';
+  var cats    = getCategoriasSync();
+  var isEdit  = idx !== undefined && idx !== null;
+  var raw     = isEdit ? cats[parseInt(idx)] : null;
+  var val     = isEdit ? catName(raw) : '';
+  var iconeAt = (isEdit && raw && typeof raw === 'object') ? (raw.icone || '') : '';
+  var title   = isEdit ? '\u270f\ufe0f Editar Categoria' : '\ud83c\udff7\ufe0f Nova Categoria';
+  var btnTxt  = isEdit ? '\ud83d\udcbe Salvar Altera\u00e7\u00e3o' : '\u2705 Criar Categoria';
+  var idxVal  = isEdit ? parseInt(idx) : 'null';
+  var emojis  = ['\ud83c\udf38','\ud83d\udc90','\ud83c\udf39','\ud83c\udf37','\ud83c\udf3a','\ud83c\udf3b','\ud83c\udf3c','\ud83c\udf3f','\ud83e\udeb4','\ud83c\udf81','\ud83e\uddfa','\ud83d\udc9d','\u2728','\ud83c\udf82','\ud83d\udc51','\ud83d\udd4a\ufe0f'];
+  var isImg   = iconeAt && (iconeAt.indexOf('http') === 0 || iconeAt.indexOf('data:image') === 0);
+  var preview = isImg ? '<img src="' + iconeAt + '" style="width:100%;height:100%;object-fit:cover;"/>' : (iconeAt || '\ud83c\udf38');
 
   S._modal = '<div class="mo" id="mo" onclick="if(event.target===this){S._modal=\'\';render();}">'
-    + '<div class="mo-box" style="max-width:400px;" onclick="event.stopPropagation()">'
+    + '<div class="mo-box" style="max-width:460px;" onclick="event.stopPropagation()">'
     + '<div style="font-family:\'Playfair Display\',serif;font-size:17px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">'
-    + title
+    + title + '</div>'
+    + '<div class="fg">'
+    +   '<label class="fl">Nome da categoria *</label>'
+    +   '<input class="fi" id="cat-name-input" placeholder="Ex: Buqu\u00ea Premium" value="' + val.replace(/"/g,'&quot;') + '"/>'
     + '</div>'
     + '<div class="fg">'
-    + '<label class="fl">Nome da categoria *</label>'
-    + '<input class="fi" id="cat-name-input" placeholder="Ex: Buqu\u00ea Premium" value="' + val + '"/>'
+    +   '<label class="fl">\u00cdcone <span style="color:var(--muted);font-weight:400;">(emoji ou anexar PNG quadrado)</span></label>'
+    +   '<div style="display:flex;gap:8px;align-items:center;">'
+    +     '<div id="cat-icon-preview" style="width:50px;height:50px;border:1.5px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:28px;background:#FAFAFA;flex-shrink:0;overflow:hidden;">' + preview + '</div>'
+    +     '<input class="fi" id="cat-icon-input" placeholder="Cole emoji ou anexe imagem" value="' + iconeAt.replace(/"/g,'&quot;') + '" style="flex:1;" oninput="window._catIconPrev(this.value)"/>'
+    +     '<label class="btn btn-ghost btn-sm" style="cursor:pointer;flex-shrink:0;" title="Anexar PNG/JPG quadrado (max 200KB)">\ud83d\udcce'
+    +       '<input type="file" accept="image/*" style="display:none;" onchange="window._catIconUpload(this)"/>'
+    +     '</label>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'
+    +     emojis.map(function(e){
+            return '<button type="button" onclick="document.getElementById(\'cat-icon-input\').value=\''+e+'\';window._catIconPrev(\''+e+'\')" style="font-size:18px;padding:4px 8px;background:#FAFAFA;border:1px solid var(--border);border-radius:6px;cursor:pointer;">'+e+'</button>';
+          }).join('')
+    +   '</div>'
     + '</div>'
     + '<div style="display:flex;gap:8px;margin-top:16px;">'
-    + '<button type="button" class="btn btn-primary" style="flex:1;" onclick="saveCatFromModal(' + idxVal + ')">' + btnTxt + '</button>'
-    + '<button type="button" class="btn btn-ghost" onclick="S._modal=\'\';render();">Cancelar</button>'
+    +   '<button type="button" class="btn btn-primary" style="flex:1;" onclick="saveCatFromModal(' + idxVal + ')">' + btnTxt + '</button>'
+    +   '<button type="button" class="btn btn-ghost" onclick="S._modal=\'\';render();">Cancelar</button>'
     + '</div></div></div>';
   render();
   setTimeout(function(){ var el=document.getElementById('cat-name-input'); if(el){el.focus();el.select();} }, 100);
+}
+
+// Helpers globais (preview do icone, upload PNG)
+if (typeof window !== 'undefined') {
+  window._catIconPrev = function(v){
+    var p = document.getElementById('cat-icon-preview'); if (!p) return;
+    if (v && (/^https?:\/\//.test(v) || v.indexOf('data:image') === 0)) {
+      p.innerHTML = '<img src="' + v + '" style="width:100%;height:100%;object-fit:cover;"/>';
+    } else if (v) { p.textContent = v; } else { p.textContent = '\ud83c\udf38'; }
+  };
+  window._catIconUpload = function(input){
+    var f = input && input.files && input.files[0];
+    if (!f) return;
+    if (f.size > 200*1024) { try { (window.toast||alert)('Imagem muito grande \u2014 max 200KB'); } catch(_){} return; }
+    var rd = new FileReader();
+    rd.onload = function(e){
+      var dataUrl = e.target.result;
+      var inp = document.getElementById('cat-icon-input');
+      if (inp) inp.value = dataUrl;
+      window._catIconPrev(dataUrl);
+    };
+    rd.readAsDataURL(f);
+  };
 }
 
 // ── SALVAR DO MODAL ───────────────────────────────────────────
@@ -285,18 +327,21 @@ export function saveCatFromModal(idx){
   if(!input){ toast('Erro: campo n\u00e3o encontrado', true); return; }
   var name = input.value.trim();
   if(!name){ toast('\u274c Digite o nome da categoria', true); return; }
+  var iconeInp = document.getElementById('cat-icon-input');
+  var icone = iconeInp ? (iconeInp.value || '').trim() : '';
   var cats = getCategoriasSync();
   var cfg  = getCatCfgSync();
   if(idx === null || idx === 'null' || idx === undefined){
     if(cats.some(function(c){ return catName(c) === name; })){ toast('\u26a0\ufe0f Categoria j\u00e1 existe', true); return; }
-    cats.push(name);
+    // Salva sempre como objeto pra suportar icone
+    cats.push({ name: name, icone: icone });
     cfg[name] = {activeOnSystem: true, activeOnEcommerce: true};
     toast('\u2705 Categoria criada: ' + name);
   } else {
     var i   = parseInt(idx);
     var old = catName(cats[i]);
-    if(cats[i] && typeof cats[i] === 'object') cats[i] = Object.assign({}, cats[i], { name: name });
-    else cats[i] = name;
+    var existing = (cats[i] && typeof cats[i] === 'object') ? cats[i] : { name: old };
+    cats[i] = Object.assign({}, existing, { name: name, icone: icone });
     if(old !== name){
       cfg[name] = cfg[old] || {activeOnSystem: true, activeOnEcommerce: true};
       delete cfg[old];

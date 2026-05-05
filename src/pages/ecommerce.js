@@ -11,36 +11,46 @@ async function render(){
 }
 
 // ── Helper: render seção CATEGORIAS DO SITE ─────────────────
-// State-buffered: edições ficam em window._csState até o "Salvar tudo".
-// Isso elimina o race condition (GET → mexe → PUT) e dá feedback claro.
+// Modelo ADD-only: por padrão NENHUMA categoria está no site.
+// Admin clica "+ Adicionar" pra incluir uma. Removida = some da lista.
+// State buffer: edições ficam em window._csState até o "Salvar tudo".
 function renderCategoriasSiteSection(cfg) {
-  // Lista de TODAS as categorias do sistema
+  // Lista de TODAS as categorias do sistema (com objetos pra ler icone)
   let allCats = [];
   try { allCats = JSON.parse(localStorage.getItem('fv_categorias')||'[]'); } catch(_){}
-  const catNames = allCats.map(c => typeof c === 'string' ? c : (c?.name || c?.nome || '')).filter(Boolean);
+  const catObjs = allCats.map(c => typeof c === 'string' ? { name: c } : c).filter(c => c && c.name);
+  const catNames = catObjs.map(c => c.name);
+  const iconeMap = {}; catObjs.forEach(c => { if (c.icone) iconeMap[c.name] = c.icone; });
 
-  // Inicializa state buffer (preserva edições não salvas em re-renders)
-  if (!window._csState || window._csState._snap !== catNames.join('|')) {
-    const map = cfg.categoriasSite || {};
+  // Inicializa state buffer apenas com categorias EXPLICITAMENTE adicionadas pelo admin.
+  // Snap usa keys do categoriasSite (não a lista completa) — assim adicionar
+  // categoria nova no sistema NÃO quebra a seleção feita aqui.
+  const map = (cfg.categoriasSite || {});
+  const explicitNames = Object.keys(map);
+  const snapKey = explicitNames.sort().join('|');
+  if (!window._csState || window._csState._snap !== snapKey) {
     window._csState = {
-      _snap: catNames.join('|'),
+      _snap: snapKey,
       _dirty: false,
-      cats: catNames.map(nome => {
-        const c = map[nome] || {};
-        // Compat: aceita posicoes (array novo) OU posicao (string antigo)
-        let posicoes = Array.isArray(c.posicoes) ? c.posicoes
-                     : (c.posicao ? [c.posicao] : ['inicial']);
-        return {
-          nome,
-          ativo: c.ativo !== false,
-          posicoes, // multi-select: ['topo','inicial','final']
-          ordem: typeof c.ordem === 'number' ? c.ordem : 999,
-        };
-      }).sort((a,b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome,'pt-BR'))
+      cats: explicitNames
+        .filter(n => catNames.includes(n)) // ignora cats que sumiram do sistema
+        .map(nome => {
+          const c = map[nome] || {};
+          let posicoes = Array.isArray(c.posicoes) ? c.posicoes
+                       : (c.posicao ? [c.posicao] : ['inicial']);
+          return {
+            nome,
+            posicoes,
+            ordem: typeof c.ordem === 'number' ? c.ordem : 999,
+            icone: iconeMap[nome] || c.icone || '',
+          };
+        }).sort((a,b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome,'pt-BR'))
     };
   }
   const items = window._csState.cats;
   const dirty = window._csState._dirty;
+  // Categorias do sistema que ainda NÃO foram adicionadas (oferecer no botão "+")
+  const naoAdicionadas = catNames.filter(n => !items.find(it => it.nome === n));
 
   const posLabel = {
     topo:    { l: '⬆️ Topo',    n: 'Topo (Menu)',     cor: '#1E40AF', bg: '#DBEAFE' },
@@ -50,7 +60,7 @@ function renderCategoriasSiteSection(cfg) {
 
   // Agrupa para preview: cada cat aparece em TODAS as posições selecionadas
   const porPos = { topo: [], inicial: [], final: [] };
-  items.filter(it => it.ativo).forEach(it => {
+  items.forEach(it => {
     (it.posicoes||[]).forEach(p => { if (porPos[p]) porPos[p].push(it); });
   });
 
@@ -80,42 +90,54 @@ ${catNames.length === 0 ? `
     <div style="flex:1;min-width:240px;font-size:13px;color:#1E3A8A;">
       <strong>Como funciona:</strong>
       <ol style="margin:6px 0 0 18px;line-height:1.6;">
-        <li><strong>👁️ Mostrar/Ocultar</strong>: define se a categoria aparece no site.</li>
-        <li><strong>📍 Posição</strong>: clique nos chips — pode marcar <strong>mais de uma posição</strong> (Topo + Início + Rodapé).</li>
+        <li><strong>+ Adicionar categoria</strong>: escolha quais aparecem no site (por padrão, nenhuma aparece).</li>
+        <li><strong>📍 Posição</strong>: clique nos chips — pode marcar <strong>mais de uma</strong> (Topo + Início + Rodapé).</li>
         <li><strong>↕️ Ordem</strong>: use as setinhas para reordenar.</li>
+        <li><strong>🗑️ Remover</strong>: tira a categoria do site (não apaga do sistema).</li>
         <li>Clique em <strong>💾 Salvar tudo</strong> no final pra publicar.</li>
       </ol>
     </div>
   </div>
 </div>
 
+<!-- Botão Adicionar + dropdown -->
+<div class="card" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+  <span style="font-size:13px;font-weight:700;color:var(--ink);">${items.length} categoria(s) no site</span>
+  ${naoAdicionadas.length > 0 ? `
+    <select class="fi" id="cs-add-select" style="flex:1;min-width:200px;max-width:280px;font-size:13px;">
+      <option value="">— escolher categoria pra adicionar —</option>
+      ${naoAdicionadas.map(n => `<option value="${n.replace(/"/g,'&quot;')}">${iconeMap[n] ? iconeMap[n]+' ' : ''}${n}</option>`).join('')}
+    </select>
+    <button class="btn btn-primary btn-sm" id="btn-cs-add" style="font-weight:700;">+ Adicionar</button>
+    ${naoAdicionadas.length > 1 ? `<button class="btn btn-ghost btn-sm" id="btn-cs-add-all" style="color:var(--muted);">+ Adicionar todas (${naoAdicionadas.length})</button>` : ''}
+  ` : `
+    <span style="font-size:12px;color:#15803D;font-weight:700;">✅ Todas as categorias do sistema já estão no site.</span>
+  `}
+</div>
+
+${items.length === 0 ? `
+<div class="card" style="text-align:center;padding:40px;color:var(--muted);background:#FAFAFA;">
+  <div style="font-size:48px;margin-bottom:10px;">🌿</div>
+  <p style="font-weight:700;color:var(--ink);">Nenhuma categoria selecionada para o site ainda.</p>
+  <p style="font-size:12px;margin-top:6px;">Use o botão <strong>+ Adicionar</strong> acima pra escolher quais categorias aparecem.</p>
+</div>
+` : `
 <!-- Lista de categorias (cards) -->
 <div class="card" style="margin-bottom:14px;padding:8px;">
-  ${items.map((it, i) => {
-    const isOcult = !it.ativo;
-    return `
-    <div data-cs-row="${it.nome.replace(/"/g,'&quot;')}" style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #F1F5F9;${isOcult?'background:#FAFAFA;':''}flex-wrap:wrap;">
+  ${items.map((it, i) => `
+    <div data-cs-row="${it.nome.replace(/"/g,'&quot;')}" style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #F1F5F9;flex-wrap:wrap;">
 
-      <!-- Ordem visual -->
-      <div style="font-size:11px;color:#94A3B8;font-weight:700;min-width:24px;text-align:center;">
-        ${isOcult ? '—' : '#'+(i+1)}
-      </div>
+      <!-- Ordem -->
+      <div style="font-size:11px;color:#94A3B8;font-weight:700;min-width:24px;text-align:center;">#${i+1}</div>
 
-      <!-- Toggle Mostrar/Ocultar (botão grande) -->
-      <button type="button" class="btn btn-xs" data-cs-toggle="${it.nome.replace(/"/g,'&quot;')}"
-        style="min-width:96px;font-weight:700;${it.ativo
-          ? 'background:#DCFCE7;color:#15803D;border:1px solid #86EFAC;'
-          : 'background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;'}">
-        ${it.ativo ? '👁️ Mostrar' : '🚫 Ocultar'}
-      </button>
+      <!-- Ícone -->
+      <div style="font-size:22px;width:34px;text-align:center;">${iconeMap[it.nome] || '🌸'}</div>
 
       <!-- Nome -->
-      <div style="flex:1;min-width:120px;font-weight:700;font-size:14px;${isOcult?'color:#94A3B8;text-decoration:line-through;':''}">
-        ${it.nome}
-      </div>
+      <div style="flex:1;min-width:120px;font-weight:700;font-size:14px;">${it.nome}</div>
 
-      <!-- Chips de posição (multi-select: pode marcar mais de um) -->
-      <div style="display:flex;gap:4px;flex-wrap:wrap;${isOcult?'opacity:.4;pointer-events:none;':''}" title="Pode marcar mais de uma posição">
+      <!-- Chips de posição (multi-select) -->
+      <div style="display:flex;gap:4px;flex-wrap:wrap;" title="Pode marcar mais de uma posição">
         ${Object.entries(posLabel).map(([k,v]) => {
           const sel = (it.posicoes||[]).indexOf(k) >= 0;
           return `
@@ -130,19 +152,20 @@ ${catNames.length === 0 ? `
       </div>
 
       <!-- Setas mover -->
-      <div style="display:flex;gap:2px;${isOcult?'opacity:.3;pointer-events:none;':''}">
+      <div style="display:flex;gap:2px;">
         <button type="button" class="btn btn-ghost btn-xs" data-cs-move-up="${it.nome.replace(/"/g,'&quot;')}"
           ${i===0?'disabled':''} style="font-size:14px;padding:4px 8px;" title="Mover acima">⬆️</button>
         <button type="button" class="btn btn-ghost btn-xs" data-cs-move-down="${it.nome.replace(/"/g,'&quot;')}"
           ${i===items.length-1?'disabled':''} style="font-size:14px;padding:4px 8px;" title="Mover abaixo">⬇️</button>
       </div>
 
-      <!-- Excluir categoria do sistema -->
-      <button type="button" class="btn btn-ghost btn-xs" data-cs-del="${it.nome.replace(/"/g,'&quot;')}"
-        style="color:var(--red);font-size:14px;padding:4px 8px;" title="Excluir categoria do sistema">🗑️</button>
-    </div>`;
-  }).join('')}
+      <!-- Remover do site (NÃO apaga do sistema) -->
+      <button type="button" class="btn btn-ghost btn-xs" data-cs-rm="${it.nome.replace(/"/g,'&quot;')}"
+        style="color:var(--red);font-size:14px;padding:4px 8px;" title="Remover do site (categoria continua no sistema)">🗑️</button>
+    </div>
+  `).join('')}
 </div>
+`}
 
 <!-- Preview lado a lado -->
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:80px;">
