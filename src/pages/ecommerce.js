@@ -61,7 +61,6 @@ function renderCategoriasSiteSection(cfg) {
     <p style="font-size:13px;color:var(--muted);">Escolha quais categorias aparecem no site, onde e em qual ordem.</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <button class="btn btn-ghost btn-sm" id="btn-cs-limpar" style="background:#FEF3C7;color:#92400E;border-color:#FCD34D;">🧹 Limpar duplicadas</button>
     <a href="javascript:setPage('categorias')" class="btn btn-ghost btn-sm" style="color:#9F1239;text-decoration:none;">⚙️ Gerenciar categorias</a>
   </div>
 </div>

@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260504-13';
+const APP_VERSION = '20260504-14';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -3740,16 +3740,6 @@ function bindPageActions(){
         };
       });
 
-      // 🧹 Limpar duplicadas
-      {const _el = document.getElementById('btn-cs-limpar'); if (_el) _el.onclick = async () => {
-        try {
-          const { limparCategorias } = await import('./pages/categorias.js');
-          await limparCategorias();
-          window._csState = null; // força reload
-          render();
-        } catch(e) { toast('❌ ' + (e.message||'erro')); }
-      };}
-
       // Descartar alterações
       {const _el = document.getElementById('btn-cs-descartar'); if (_el) _el.onclick = () => {
         window._csState = null;
@@ -4015,6 +4005,32 @@ async function init(){
     // Real-time: SSE para sincronizacao automatica entre maquinas
     // (elimina F5 manual quando outra unidade lanca/atualiza pedido).
     import('./services/realtime.js').then(m => m.startRealtime?.()).catch(()=>{});
+
+    // ── LIMPEZA DE CATEGORIAS (uma vez por usuaria, em background) ──
+    // Remove inuteis (Horarios, Turnos) e mescla duplicatas (Buque/Buques).
+    // Roda silenciosamente apos os dados carregarem. Flag global no localStorage
+    // garante 1x por instalacao — pra rodar de novo, apaga 'fv_cat_cleanup_v2'.
+    const ehAdminCleanup = S.user && (S.user.role === 'Administrador' || S.user.cargo === 'admin');
+    if (ehAdminCleanup && !localStorage.getItem('fv_cat_cleanup_v2')) {
+      // Polling: espera S.products carregar (ate 30s), entao executa
+      let _waitTries = 0;
+      const _waitProds = setInterval(() => {
+        _waitTries++;
+        if (_waitTries > 30) { clearInterval(_waitProds); return; }
+        if (Array.isArray(S.products) && S.products.length > 0) {
+          clearInterval(_waitProds);
+          import('./pages/categorias.js').then(m => {
+            if (typeof m.limparCategorias === 'function') {
+              try {
+                m.limparCategorias(true).then(() => {
+                  localStorage.setItem('fv_cat_cleanup_v2', new Date().toISOString());
+                }).catch(()=>{});
+              } catch(_){}
+            }
+          }).catch(()=>{});
+        }
+      }, 1000);
+    }
 
     // ── Ponto: lembretes de horário ──────────────────────────
     import('./pages/ponto.js').then(m => {

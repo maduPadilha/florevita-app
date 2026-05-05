@@ -200,8 +200,8 @@ function _stems(s){
   return [...out];
 }
 
-export async function limparCategorias(){
-  if(!confirm('🧹 LIMPAR CATEGORIAS\n\nIsto vai:\n• Remover categorias inúteis (Horários, Turnos, etc)\n• Mesclar duplicatas (ex: Buquê + Buquês = Buquê)\n• Atualizar produtos pra usar o nome canônico\n\nContinuar?')) return;
+export async function limparCategorias(silent){
+  if(!silent && !confirm('🧹 LIMPAR CATEGORIAS\n\nIsto vai:\n• Remover categorias inúteis (Horários, Turnos, etc)\n• Mesclar duplicatas (ex: Buquê + Buquês = Buquê)\n• Atualizar produtos pra usar o nome canônico\n\nContinuar?')) return;
 
   var cats = getCategoriasSync();
   var nomes = cats.map(catName).filter(Boolean);
@@ -307,8 +307,13 @@ export async function limparCategorias(){
   });
   saveCatCfg(cfg);
 
-  toast('🧹 Limpeza concluída: '+inuteis+' inútil(eis) + '+dupsRemovidas+' duplicada(s) removida(s). '+prodsAtualizados+' produto(s) atualizado(s).');
-  render();
+  // Retorna stats — chamador decide se mostra toast
+  var stats = { inuteis: inuteis, duplicadas: dupsRemovidas, produtos: prodsAtualizados };
+  if(inuteis > 0 || dupsRemovidas > 0){
+    toast('🧹 Categorias limpas: '+inuteis+' inútil(eis) + '+dupsRemovidas+' duplicada(s). '+prodsAtualizados+' produto(s) atualizado(s).');
+  }
+  if(!silent) render();
+  return stats;
 }
 
 // ── MOVER ─────────────────────────────────────────────────────
@@ -543,7 +548,6 @@ window.toggleBulkProd = toggleBulkProd;
 window.setBulkSearch = setBulkSearch;
 window.applyBulkAdd = applyBulkAdd;
 window.closeBulkModal = closeBulkModal;
-window.limparCategorias = limparCategorias;
 
 // ── RENDER: DRILL-DOWN (produtos de uma categoria) ────────────
 function renderCatDetail(catName){
@@ -698,10 +702,7 @@ export function renderCategorias(){
   html += '<h2 style="font-family:\'Playfair Display\',serif;font-size:22px;color:var(--primary);">\ud83c\udff7\ufe0f Categorias</h2>';
   html += '<p style="font-size:13px;color:var(--muted);">Gerencie categorias \u2014 cada produto pode ter m\u00faltiplas categorias</p>';
   html += '</div>';
-  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
-  html += '<button type="button" class="btn btn-ghost" onclick="window.limparCategorias()" style="background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;">🧹 Limpar duplicadas</button>';
   html += '<button type="button" class="btn btn-primary" onclick="showCatModal()">+ Nova Categoria</button>';
-  html += '</div>';
   html += '</div>';
 
   html += '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 16px;font-size:12px;color:#1D4ED8;margin-bottom:16px;">';
