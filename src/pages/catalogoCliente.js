@@ -10,11 +10,41 @@
 // + Botao "Baixar imagem" (download direto)
 // + Botao geral "Compartilhar" (Web Share API quando disponivel)
 
-import { S } from '../state.js';
+import { S, API } from '../state.js';
 import { $c } from '../utils/formatters.js';
 import { toast } from '../utils/helpers.js';
 
 async function render(){ const m = await import('../main.js'); m.render(); }
+
+// Fetch das imagens em lote (mesma abordagem da impressao.js).
+// Produtos vem 'lite' (sem imagem) na listagem inicial — precisamos
+// puxar /products/images?ids=... em batches.
+async function _ensureImages(produtos){
+  const need = produtos
+    .filter(p => p && !(p.imagem || p.images?.[0] || p.image))
+    .map(p => String(p._id||p.id))
+    .filter(id => /^[a-f0-9]{24}$/i.test(id));
+  if (!need.length) return false;
+  const tk = S.token || localStorage.getItem('fv2_token') || '';
+  // Chunks de 30 IDs (URL muito longa pode ser truncada)
+  const CHUNK = 30;
+  let any = false;
+  for (let i=0; i<need.length; i+=CHUNK) {
+    const group = need.slice(i, i+CHUNK);
+    try {
+      const res = await fetch(API + '/products/images?ids=' + encodeURIComponent(group.join(',')), {
+        headers: { 'Authorization':'Bearer '+tk }
+      });
+      if (!res.ok) continue;
+      const map = await res.json();
+      for (const id of Object.keys(map||{})) {
+        const p = S.products.find(x => String(x._id) === String(id));
+        if (p && map[id]) { p.imagem = map[id]; any = true; }
+      }
+    } catch(_){}
+  }
+  return any;
+}
 
 // State helpers em S (persiste entre re-renders enquanto a aba esta aberta)
 function _state(){
@@ -22,15 +52,28 @@ function _state(){
     selecionados: new Set(),  // Set de _id dos produtos
     catFiltro: 'todas',       // 'todas' | nome de cat
     busca: '',                // texto livre
-    apenasComFoto: true,      // mostra so produtos com imagem
+    apenasComFoto: false,     // default false: mostra todos (imagens carregam async)
     visualizar: false,        // false = lista de selecao | true = catalogo final
+    _imagensCarregadas: false,
   };
   if (!(S._catCli.selecionados instanceof Set)) S._catCli.selecionados = new Set(S._catCli.selecionados || []);
   return S._catCli;
 }
 
+// Normaliza URL/dataURL da imagem.
+// Backend pode retornar so o base64 (sem prefixo data:image) — precisa adicionar.
+function _normalizaImg(src){
+  if (!src) return '';
+  const s = String(src).trim();
+  if (s.startsWith('http') || s.startsWith('data:') || s.startsWith('blob:')) return s;
+  // Provavelmente base64 puro — adiciona prefixo
+  if (/^[A-Za-z0-9+/]+=*$/.test(s.slice(0, 100))) return 'data:image/jpeg;base64,' + s;
+  return s;
+}
+
 function _produtoFoto(p){
-  return p.imagem || p.images?.[0] || p.image || p.foto || '';
+  const raw = p.imagem || p.images?.[0] || p.image || p.foto || '';
+  return _normalizaImg(raw);
 }
 
 function _produtoPreco(p){
@@ -75,7 +118,7 @@ function _renderHeader(){
   return `
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
   <div>
-    <h2 style="font-family:'Playfair Display',serif;font-size:22px;color:var(--primary);">📤 Catálogo para Cliente</h2>
+    <h2 style="font-family:'Playfair Display',serif;font-size:22px;color:var(--primary);">📤 Catálogo para Cliente <span id="cat-cli-loading" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:400;background:#FEF3C7;padding:4px 10px;border-radius:12px;margin-left:8px;vertical-align:middle;">⏳ Carregando fotos...</span></h2>
     <p style="font-size:13px;color:var(--muted);margin-top:2px;">Monte uma vitrine pra mandar pelo WhatsApp ou Instagram. As fotos podem ser arrastadas direto pra conversa.</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -237,6 +280,24 @@ export function renderCatalogoCliente(){
 export function bindCatalogoCliente(){
   if (S.page !== 'catalogoCliente') return;
   const st = _state();
+
+  // Lazy-load: fetch das imagens dos produtos visiveis (so 1x por sessao
+  // a nao ser que filtros mudem visiveis novos).
+  (async () => {
+    const visiveis = _filtraProdutos();
+    const semFoto = visiveis.filter(p => !_produtoFoto(p));
+    if (semFoto.length === 0) return;
+    const indicador = document.getElementById('cat-cli-loading');
+    if (indicador) indicador.style.display = 'inline-flex';
+    const houveMudanca = await _ensureImages(semFoto);
+    st._imagensCarregadas = true;
+    if (houveMudanca) {
+      // Re-renderiza pra mostrar as imagens recem-carregadas
+      try { const m = await import('../main.js'); m.render(); } catch(_){}
+    } else if (indicador) {
+      indicador.style.display = 'none';
+    }
+  })();
 
   // Filtros
   const inpBusca = document.getElementById('cat-cli-busca');
