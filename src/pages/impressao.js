@@ -642,8 +642,23 @@ function _printComandaInternal(orderId, opts){
   const bairro= UC(o.deliveryNeighborhood||o.deliveryZone||'');
   const cidade= UC(o.deliveryCity||'MANAUS');
   const cond  = o.isCondominium ? [o.condName?UC(o.condName):'', o.block?'BLOCO '+UC(o.block):'', o.apt?'AP '+UC(o.apt):''].filter(Boolean).join(' \u2014 ') : '';
-  const ref   = UC(o.deliveryReference||o.notes||'');
+  // REF = referencia do endereco (ex: "casa azul, ao lado da padaria")
+  const ref   = UC(o.deliveryReference||'');
+  // OBS = observacoes do PDV (anotadas pelo atendimento — ex: "tocar interfone 2x")
+  // Mantido SEPARADO do ref pra ficar claro o que e uma coisa e outra.
+  const obsTxt = String(o.notes || o.observacoes || '').trim();
   const phone = o.recipientPhone||'';
+
+  // ── BLOCO OBSERVACOES (PDV) ────────────────────────────────
+  // Aparece destacado em amarelo nas duas vias (CD e Entregador).
+  // Respeita a config layout.comandaMostrarObs (default true).
+  const mostrarObs = (layout.comandaMostrarObs !== false) && obsTxt.length > 0;
+  const obsBlock = mostrarObs
+    ? `<div style="background:#FEF9C3;border:2px solid #CA8A04;border-radius:8px;padding:8px 12px;margin-bottom:6px;">
+        <div style="font-size:10px;font-weight:800;color:#713F12;letter-spacing:1px;margin-bottom:3px;">📝 OBSERVAÇÕES DO PEDIDO</div>
+        <div style="font-size:14px;font-weight:700;color:#422006;line-height:1.3;text-transform:none;">${obsTxt}</div>
+       </div>`
+    : '';
 
   // ── ITENS COM FOTO ─────────────────────────────────────────
   // Truncate helper: corta nomes/descricoes longas para evitar
@@ -685,6 +700,44 @@ function _printComandaInternal(orderId, opts){
     </div>`;
 
   // ── COBRANCA ────────────────────────────────────────────────
+  // Caso 1: DINHEIRO  → destaca valor + troco / sem troco
+  // Caso 2: LEVAR MAQUINETA → destaca aceitar Debito/Credito/Pix
+  // Caso 3: PIX → destaca receber via Pix
+  // Caso 4: outro → alerta para verificar
+  const _totalFmt = (o.total||0).toFixed(2).replace('.',',');
+  let _detalheEntrega = '';
+  if (o.payment === 'Pagar na Entrega') {
+    const _pod = String(o.paymentOnDelivery||'').toLowerCase().trim();
+    if (_pod === 'dinheiro') {
+      const _trocoP = parseFloat(o.trocoPara||0);
+      const _temTroco = _trocoP > (o.total||0);
+      const _semTroco = !o.trocoPara || _trocoP === 0;
+      _detalheEntrega = '<div style="background:#FEF3C7;border-left:5px solid #B45309;padding:6px 10px;margin-top:5px;border-radius:0 6px 6px 0;">'
+        + '<div style="font-size:13px;font-weight:900;color:#7C2D12;">💵 RECEBER EM DINHEIRO</div>'
+        + (_temTroco
+            ? '<div style="font-size:14px;font-weight:900;color:#065F46;margin-top:3px;">💰 TROCO P/ R$ ' + _trocoP.toFixed(2).replace('.',',') + ' — LEVAR R$ ' + (_trocoP - (o.total||0)).toFixed(2).replace('.',',') + '</div>'
+            : (_semTroco
+                ? '<div style="font-size:13px;font-weight:800;color:#7C2D12;margin-top:3px;">⚠️ NAO PRECISA DE TROCO (cliente paga valor exato)</div>'
+                : '<div style="font-size:13px;font-weight:800;color:#7C2D12;margin-top:3px;">ℹ️ Cliente paga R$ ' + _trocoP.toFixed(2).replace('.',',') + ' (sem troco)</div>'
+              )
+          )
+        + '</div>';
+    } else if (_pod === 'levar maquineta' || _pod === 'maquineta' || _pod === 'maquina' || _pod === 'cartao' || _pod === 'cartão') {
+      _detalheEntrega = '<div style="background:#DBEAFE;border-left:5px solid #1D4ED8;padding:6px 10px;margin-top:5px;border-radius:0 6px 6px 0;">'
+        + '<div style="font-size:13px;font-weight:900;color:#1E3A8A;">💳 LEVAR MAQUINETA</div>'
+        + '<div style="font-size:11px;font-weight:700;color:#1E3A8A;margin-top:2px;text-transform:none;">Aceitar Débito / Crédito / Pix</div>'
+        + '</div>';
+    } else if (_pod === 'pix') {
+      _detalheEntrega = '<div style="background:#DCFCE7;border-left:5px solid #15803D;padding:6px 10px;margin-top:5px;border-radius:0 6px 6px 0;">'
+        + '<div style="font-size:13px;font-weight:900;color:#14532D;">📲 RECEBER VIA PIX</div>'
+        + '</div>';
+    } else {
+      _detalheEntrega = '<div style="background:#FEE2E2;border-left:5px solid #DC2626;padding:6px 10px;margin-top:5px;border-radius:0 6px 6px 0;">'
+        + '<div style="font-size:13px;font-weight:900;color:#7F1D1D;">⚠️ FORMA DE PAGAMENTO NÃO DEFINIDA — VERIFICAR COM CLIENTE</div>'
+        + '</div>';
+    }
+  }
+  // (variavel mantida pra compat — agora retorna vazio porque info ja esta em _detalheEntrega)
   const trocoLinha = (o.paymentOnDelivery === 'Dinheiro' && o.trocoPara && parseFloat(o.trocoPara) > (o.total||0))
     ? `<div style="background:#D1FAE5;border:2px solid #059669;border-radius:6px;padding:6px 10px;text-align:center;font-size:14px;font-weight:900;color:#065F46;margin-top:4px;">
         \uD83D\uDCB0 TROCO P/ R$ ${parseFloat(o.trocoPara).toFixed(2).replace('.',',')} \u2014 LEVAR R$ ${(parseFloat(o.trocoPara) - (o.total||0)).toFixed(2).replace('.',',')}
@@ -692,9 +745,9 @@ function _printComandaInternal(orderId, opts){
   const cobrancaBlock = o.payment==='Pagar na Entrega'
     ? `<div style="margin-bottom:6px;">
          <div style="background:#FFF8E1;border:2px solid #B7860F;border-radius:6px;padding:8px 10px;text-align:center;font-size:16px;font-weight:900;color:#8B6914;">
-           \u{1F4B0} COBRAR NA ENTREGA: R$ ${(o.total||0).toFixed(2).replace('.',',')} \u2014 ${UC(o.paymentOnDelivery||'VERIFICAR')}
+           \u{1F4B0} COBRAR NA ENTREGA: R$ ${_totalFmt}
          </div>
-         ${trocoLinha}
+         ${_detalheEntrega}
        </div>` : '';
 
   // ═══════════════════════════════════════════════════════════
@@ -745,6 +798,9 @@ function _printComandaInternal(orderId, opts){
 
     <!-- Horario Especifico (destaque se aplicavel) -->
     ${horarioEspecificoBadge}
+
+    <!-- Observacoes do PDV (se houver) -->
+    ${obsBlock}
 
     <!-- Cobranca -->
     ${cobrancaBlock}
@@ -811,6 +867,9 @@ function _printComandaInternal(orderId, opts){
 
     <!-- Horario Especifico -->
     ${horarioEspecificoBadge}
+
+    <!-- Observacoes do PDV (se houver) -->
+    ${obsBlock}
 
     <!-- Cobranca -->
     ${cobrancaBlock}
