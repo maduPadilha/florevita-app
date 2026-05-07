@@ -609,8 +609,8 @@ export function renderPDV(){
       }).join('')}
     </div>
     ${PDV.pickupPayMode === 'pago' ? `
-      <div style="margin-top:8px;background:#fff;border-radius:8px;padding:10px 12px;font-size:11px;color:var(--ink2);">
-        \u2705 Cliente j\u00E1 pagou via <strong>${PDV.payment}</strong>. Confirma\u00E7\u00E3o aparecer\u00E1 nos pedidos como Aprovado.
+      <div style="margin-top:8px;background:#DCFCE7;border:1px solid #86EFAC;border-radius:8px;padding:8px 12px;font-size:12px;color:#065F46;font-weight:700;">
+        \u2705 Pago Total \u2014 pedido ser\u00E1 dado baixa como <strong>Aprovado</strong>
       </div>
     ` : ''}
     ${PDV.pickupPayMode === 'total_retirada' ? `
@@ -903,11 +903,13 @@ export async function _finalizePDV(){
     // com seu status proprio.
     paymentStatus: PDV.payment==='Pagar na Entrega'
       ? 'Ag. Pagamento na Entrega'
-      : (PDV.type==='Retirada' && PDV.pickupPayMode==='total_retirada'
-          ? 'Ag. Pagamento na Retirada'
-          : (PDV.type==='Retirada' && PDV.pickupPayMode==='parcial'
-              ? 'Parcial — Falta na Retirada'
-              : 'Aguardando Pagamento')),
+      : (PDV.type==='Retirada' && PDV.pickupPayMode==='pago'
+          ? 'Aprovado' // 'Pago' direto: dar baixa, ja confirmado
+          : (PDV.type==='Retirada' && PDV.pickupPayMode==='total_retirada'
+              ? 'Ag. Pagamento na Retirada'
+              : (PDV.type==='Retirada' && PDV.pickupPayMode==='parcial'
+                  ? 'Parcial — Falta na Retirada'
+                  : 'Aguardando Pagamento'))),
     scheduledDate:PDV.deliveryDate||undefined,
     scheduledPeriod:PDV.deliveryPeriod,
     scheduledTime:(PDV.deliveryPeriod==='Hor\u00E1rio espec\u00EDfico' ? (PDV.deliveryTimeFrom||'') : (PDV.deliveryTime||''))||undefined,

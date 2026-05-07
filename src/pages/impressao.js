@@ -779,13 +779,9 @@ function _printComandaInternal(orderId, opts){
           <div style="font-size:13px;font-weight:900;color:#7F1D1D;">🏪 COBRAR NA RETIRADA: R$ ${pendente.toFixed(2).replace('.',',')}</div>
         </div>
       </div>`;
-    } else if (o.pickupPayMode === 'pago') {
-      pickupBlock = `<div style="margin-bottom:6px;">
-        <div style="background:#DCFCE7;border:2px solid #15803D;border-radius:6px;padding:6px 10px;text-align:center;font-size:13px;font-weight:800;color:#14532D;">
-          ✅ JÁ PAGO INTEGRALMENTE — R$ ${_totalFmt} via ${UC(o.payment||'')}
-        </div>
-      </div>`;
     }
+    // Caso 'pago': SILENCIO. Pedido ja deu baixa como Aprovado.
+    // Nao precisa exibir nada extra na comanda — ninguem precisa cobrar.
   }
 
   // ═══════════════════════════════════════════════════════════
