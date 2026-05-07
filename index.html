@@ -14,7 +14,22 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Laços Eternos — Sistema de Gestão</title>
+<!-- Preconnect ao backend pra DNS + TLS handshake acontecer ANTES do bundle JS -->
+<link rel="preconnect" href="https://florevita-backend-2-0.onrender.com" crossorigin>
+<link rel="dns-prefetch" href="https://florevita-backend-2-0.onrender.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Wake-up ping IMEDIATO ao carregar a pagina — desperta o Render free tier
+     enquanto o usuario ainda esta vendo a tela de login. Se o backend estiver
+     dormindo (~30s), assim que o user logar ele ja vai estar respondendo. -->
+<script>
+(function(){
+  try {
+    fetch('https://florevita-backend-2-0.onrender.com/api/health', {
+      method:'GET', cache:'no-store', keepalive:true,
+    }).catch(function(){});
+  } catch(_){}
+})();
+</script>
 </head>
 <body>
 <div id="root"></div>

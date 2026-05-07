@@ -12,6 +12,15 @@ const POLL_PAGES = ['producao','expedicao','entregador','rota','pedidos','dashbo
 
 export async function pollData(){
   if(!S.user||!S.token||S.loading||S._modal||S._iaLoading) return;
+  // OTIMIZACAO CRITICA: quando o usuario esta numa pagina que NAO depende de
+  // dados em tempo real (categorias, produtos, configuracoes, RH, ecommerce,
+  // catalogoCliente, etc), NAO faz fetch nenhum. Antes: rodava todo ciclo e
+  // baixava 200-1000 registros a cada 3s mesmo sem usar — UI travava em
+  // celulares e PCs mais fracos.
+  if (!POLL_PAGES.includes(S.page)) {
+    // Mantem o sync-dot animando suave pra dar sinal de vida
+    return;
+  }
   _pollCount++;
 
   // ENTREGADOR: poll otimizado — so pedidos, sem activities/products/etc.
@@ -34,9 +43,11 @@ export async function pollData(){
 
   try{
     // A cada ciclo: atualiza pedidos e atividades (sincroniza entre dispositivos)
+    // FIX: adicionar limits — antes, /orders e /activities sem limit retornavam
+    // listas inteiras a cada 3s (centenas de KB/req). 300 e suficiente.
     const [orders, activities] = await Promise.all([
-      GET('/orders').catch(()=>null),
-      GET('/activities').catch(()=>null),
+      GET('/orders?limit=300').catch(()=>null),
+      GET('/activities?limit=200').catch(()=>null),
     ]);
     let changed = false;
     if(orders){
@@ -235,13 +246,12 @@ export async function pollData(){
   }catch(e){ console.warn('pollData erro:', e); }
 }
 
-export function startPolling(ms=3000){
+export function startPolling(ms=5000){
   stopPolling();
   _pollCount=0;
-  // Render Starter: servidor sempre warm, pode acelerar polling.
-  // Entregador: 2s (tempo real — designacoes E entregas confirmadas
-  // somem rapido; payload e leve com loadData otimizado)
-  // Outros: 3s (antes 5s)
+  // OTIMIZADO 07/05/2026: 3s era agressivo demais — UI travava em celulares
+  // mais fracos com muitos pedidos. Agora 5s pra admin/atendimento (real-time
+  // suficiente pra operacao). Entregador continua 2s (designacoes mudam rapido).
   const isDriver = S.user?.role === 'Entregador' || S.user?.cargo === 'entregador';
   const interval = isDriver ? 2000 : ms;
   _pollTimer = setInterval(pollData, interval);
