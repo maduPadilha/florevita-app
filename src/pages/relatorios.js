@@ -87,6 +87,10 @@ function getColabStatsForPeriod(colab, inPeriod){
   for (const o of orders) {
     const dataRef = o.createdAt || o.scheduledDate;
     if (!inPeriod(dataRef)) continue;
+    // FIX: Cancelado nunca conta — mesmo se o pagamento estava 'Aprovado'
+    // antes do cancelamento, comissao e zerada pra evitar pagar pelo
+    // que nao foi entregue
+    if (o.status === 'Cancelado') continue;
     const itemsQty = (o.items||[]).reduce((s,i)=>s+(Number(i.qty)||1), 0) || 1;
 
     // VENDAS — pedido APROVADO + colab e o vendedor (fallback createdBy)
@@ -567,7 +571,12 @@ export function renderRelatorios(){
     if(c.name)  knownKeys.add((c.name ||'').toLowerCase());
   });
   const orphanMap={};
+  // Pedidos cancelados nao contam (mesmo no fallback orphan)
+  const cancelledIdsRel = new Set(
+    (S.orders||[]).filter(o => o.status === 'Cancelado').map(o => String(o._id))
+  );
   acts.forEach(a=>{
+    if (a.orderId && cancelledIdsRel.has(String(a.orderId))) return;
     const k1 = a.userId   ? String(a.userId)            : '';
     const k2 = a.userEmail? (a.userEmail||'').toLowerCase() : '';
     const k3 = a.userName ? (a.userName ||'').toLowerCase() : '';

@@ -53,6 +53,12 @@ export function getColabStats(colab){
   const mStart = getMetasPeriod(mPer);
   const eStart = getMetasPeriod(ePer);
 
+  // Pedidos CANCELADOS NAO contam pra comissoes — atividade fica
+  // registrada (auditoria) mas o valor e zerado nas estatisticas.
+  const cancelledIds = new Set(
+    (S.orders||[]).filter(o => o.status === 'Cancelado').map(o => String(o._id))
+  );
+
   let vendas=0, comissao=0, montagens=0, expedicoes=0;
   acts.forEach(a=>{
     const byId   = ids.has(a.userId);
@@ -60,6 +66,8 @@ export function getColabStats(colab){
     const byName = (a.userName||'').toLowerCase()===(colab.name||'').toLowerCase();
     const isMe   = byId || byEmail || byName;
     if(!isMe) return;
+    // Skip se a atividade aponta pra um pedido cancelado
+    if (a.orderId && cancelledIds.has(String(a.orderId))) return;
     const aDate = new Date(a.date);
     if(a.type==='venda'){
       vendas++;

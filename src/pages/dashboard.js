@@ -53,15 +53,18 @@ export function renderDashboard(){
     dateLabel = parts.length===3 ? `${parts[2]}/${parts[1]}` : S._dashDate;
   }
 
-  const totalToday = todayOrders.length;
+  // 'Total do Dia' e demais KPIs operacionais NAO incluem cancelados —
+  // eles aparecem so no card 'Cancelados' como informacao isolada.
+  const todayOrdersAtivos = todayOrders.filter(o => o.status !== 'Cancelado');
+  const totalToday = todayOrdersAtivos.length;
   const recebidos = totalToday;
-  const aguardandoImpressao = todayOrders.filter(o=>o.status==='Aguardando' && !S._printedComanda?.[o._id]).length;
-  const aguardandoProducao = todayOrders.filter(o=>o.status==='Aguardando').length;
-  const emPreparo = todayOrders.filter(o=>o.status==='Em preparo').length;
-  const saiuEntrega = todayOrders.filter(o=>o.status==='Saiu p/ entrega').length;
-  const entregas = todayOrders.filter(o=>o.status==='Entregue').length;
-  const produzidos = todayOrders.filter(o=>o.status==='Pronto').length;
-  const retiradaLoja = todayOrders.filter(o=>o.type==='Retirada'||o.type==='Balcao'||o.type===String.fromCharCode(66,97,108,99,227,111)).length;
+  const aguardandoImpressao = todayOrdersAtivos.filter(o=>o.status==='Aguardando' && !S._printedComanda?.[o._id]).length;
+  const aguardandoProducao = todayOrdersAtivos.filter(o=>o.status==='Aguardando').length;
+  const emPreparo = todayOrdersAtivos.filter(o=>o.status==='Em preparo').length;
+  const saiuEntrega = todayOrdersAtivos.filter(o=>o.status==='Saiu p/ entrega').length;
+  const entregas = todayOrdersAtivos.filter(o=>o.status==='Entregue').length;
+  const produzidos = todayOrdersAtivos.filter(o=>o.status==='Pronto').length;
+  const retiradaLoja = todayOrdersAtivos.filter(o=>o.type==='Retirada'||o.type==='Balcao'||o.type===String.fromCharCode(66,97,108,99,227,111)).length;
   const cancelados = todayOrders.filter(o=>o.status==='Cancelado').length;
 
   const statusColors = {
