@@ -563,10 +563,11 @@ export async function showConfirmDeliveryModal(orderId){
     <div style="border:2px dashed var(--border);border-radius:var(--r);padding:16px;text-align:center;cursor:pointer;transition:all .2s;" id="photo-drop-zone" onclick="document.getElementById('conf-photo-input').click()">
       <div id="photo-preview-wrap">
         <div style="font-size:28px;margin-bottom:6px;">📷</div>
-        <div style="font-size:12px;color:var(--muted);">Toque para tirar foto ou escolher da galeria</div>
+        <div style="font-size:13px;font-weight:600;color:var(--ink);">Tirar foto ou escolher da galeria</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Toque aqui — você poderá escolher câmera ou fotos do celular</div>
       </div>
     </div>
-    <input type="file" id="conf-photo-input" accept="image/*" capture="environment" style="display:none"/>
+    <input type="file" id="conf-photo-input" accept="image/*" style="display:none"/>
   </div>
 
   <div class="mo-foot">
@@ -595,21 +596,55 @@ export async function showConfirmDeliveryModal(orderId){
 
   document.getElementById('btn-mo-close')?.addEventListener('click',()=>{S._modal='';render();});
 
-  // Preview da foto
+  // Preview + COMPRESSAO da foto.
+  // Antes: lia foto crua via FileReader (5-15MB) e jogava no DOM como
+  // dataURL. Travava o celular e o upload depois falhava.
+  // Agora: carrega na <img>, desenha em canvas reduzido a 1280px no
+  // maior lado, exporta como JPEG q=0.72 → tipicamente 150-400KB.
   let photoBase64 = '';
   document.getElementById('conf-photo-input')?.addEventListener('change',e=>{
     const file = e.target.files?.[0];
     if(!file) return;
-    const reader = new FileReader();
-    reader.onload = ev=>{
-      photoBase64 = ev.target.result;
-      const wrap = document.getElementById('photo-preview-wrap');
-      if(wrap) wrap.innerHTML=`<img src="${photoBase64}" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:contain;"/>
-        <div style="font-size:11px;color:var(--leaf);margin-top:6px;">✅ Foto adicionada — toque para trocar</div>`;
-      const zone = document.getElementById('photo-drop-zone');
-      if(zone){ zone.style.borderColor='var(--leaf)'; zone.style.background='var(--leaf-l)'; }
+    const wrap = document.getElementById('photo-preview-wrap');
+    const zone = document.getElementById('photo-drop-zone');
+    // Indicador de processamento
+    if(wrap) wrap.innerHTML = `<div style="font-size:28px;margin-bottom:6px;">⏳</div>
+      <div style="font-size:12px;color:var(--muted);">Processando foto...</div>`;
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const MAX = 1280;
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > h && w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        else if (h >= w && h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        photoBase64 = canvas.toDataURL('image/jpeg', 0.72);
+        URL.revokeObjectURL(url);
+
+        // Mostra preview
+        const sizeKB = Math.round(photoBase64.length * 0.75 / 1024); // base64 ~75% do tamanho real
+        if (wrap) wrap.innerHTML = `<img src="${photoBase64}" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:contain;"/>
+          <div style="font-size:11px;color:var(--leaf);margin-top:6px;">✅ Foto adicionada (${sizeKB} KB) — toque para trocar</div>`;
+        if (zone) { zone.style.borderColor = 'var(--leaf)'; zone.style.background = 'var(--leaf-l)'; }
+      } catch(err) {
+        console.error('[confirmDelivery] erro processando foto:', err);
+        if (wrap) wrap.innerHTML = `<div style="font-size:28px;margin-bottom:6px;">❌</div>
+          <div style="font-size:12px;color:var(--red);">Erro ao processar foto. Tente outra.</div>`;
+      }
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      if (wrap) wrap.innerHTML = `<div style="font-size:28px;margin-bottom:6px;">❌</div>
+        <div style="font-size:12px;color:var(--red);">Não foi possível ler esta foto. Tente outra.</div>`;
+    };
+    img.src = url;
   });
 
   // Confirmar
