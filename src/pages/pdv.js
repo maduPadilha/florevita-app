@@ -592,6 +592,66 @@ export function renderPDV(){
       }).join('')}
     </div>
   </div>
+  ${PDV.type==='Retirada'?`
+  <div style="background:linear-gradient(135deg,#FAE8E6,#FEF3C7);border-radius:var(--r);padding:14px;border:1px solid #FCD34D;margin-bottom:8px;">
+    <div style="font-size:12px;font-weight:700;color:#92400E;margin-bottom:10px;">\uD83D\uDCE6 Como o cliente quer pagar?</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px;">
+      ${[
+        {k:'pago', l:'\u2705 Pago', sub:'j\u00E1 pagou tudo agora'},
+        {k:'total_retirada', l:'\uD83C\uDFEA Total na retirada', sub:'paga tudo ao retirar'},
+        {k:'parcial', l:'\uD83D\uDCB3 50% agora + 50% depois', sub:'parte agora, parte na retirada'},
+      ].map(o => {
+        const sel = PDV.pickupPayMode === o.k;
+        return `<button type="button" data-pickup-mode="${o.k}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:64px;border:1.5px solid ${sel?'#B45309':'#E5E7EB'};background:${sel?'#FEF3C7':'#fff'};border-radius:8px;cursor:pointer;padding:6px;text-align:center;">
+          <span style="font-size:12px;font-weight:${sel?'700':'600'};color:${sel?'#7C2D12':'#374151'};">${o.l}</span>
+          <span style="font-size:10px;color:#6B7280;">${o.sub}</span>
+        </button>`;
+      }).join('')}
+    </div>
+    ${PDV.pickupPayMode === 'pago' ? `
+      <div style="margin-top:8px;background:#fff;border-radius:8px;padding:10px 12px;font-size:11px;color:var(--ink2);">
+        \u2705 Cliente j\u00E1 pagou via <strong>${PDV.payment}</strong>. Confirma\u00E7\u00E3o aparecer\u00E1 nos pedidos como Aprovado.
+      </div>
+    ` : ''}
+    ${PDV.pickupPayMode === 'total_retirada' ? `
+      <div style="margin-top:8px;background:#fff;border-radius:8px;padding:10px 12px;font-size:11px;color:var(--ink2);">
+        \uD83C\uDFEA Cliente vai pagar <strong>${$c(total)}</strong> ao retirar. Pedido fica como <strong>Ag. Pagamento na Retirada</strong>.
+      </div>
+    ` : ''}
+    ${PDV.pickupPayMode === 'parcial' ? `
+      <div style="margin-top:8px;background:#fff;border-radius:8px;padding:12px;">
+        <div style="font-size:11px;font-weight:600;color:var(--ink);margin-bottom:8px;">\uD83D\uDCB3 Pagamento agora \u2014 escolher m\u00E9todo:</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <button type="button" data-pickup-parcial-method="Pix" class="btn btn-sm ${PDV.pickupParcialMethod==='Pix'?'btn-green':'btn-ghost'}" style="flex:1;justify-content:center;padding:8px;">\uD83D\uDCF1 Pix</button>
+          <button type="button" data-pickup-parcial-method="Link" class="btn btn-sm ${PDV.pickupParcialMethod==='Link'?'btn-green':'btn-ghost'}" style="flex:1;justify-content:center;padding:8px;">\uD83D\uDD17 Link</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <label style="font-size:11px;font-weight:600;color:var(--ink);">Valor pago agora:</label>
+          <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:140px;">
+            <span style="font-size:12px;color:var(--muted);">R$</span>
+            <input type="number" step="0.01" min="0" max="${total}" id="pdv-pickup-parcial-amt" value="${PDV.pickupParcialPago||(total/2).toFixed(2)}" placeholder="${(total/2).toFixed(2)}"
+              style="flex:1;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;color:var(--rose);"/>
+          </div>
+          <button type="button" id="pdv-pickup-parcial-50" class="btn btn-ghost btn-xs" style="padding:6px 10px;font-size:11px;" title="Define 50%">50%</button>
+        </div>
+        ${(() => {
+          const pago = parseFloat(PDV.pickupParcialPago) || (total/2);
+          const resta = Math.max(0, total - pago);
+          const valido = pago > 0 && pago < total;
+          return `
+            <div style="background:${valido?'#F0FDF4':'#FEF3C7'};border-radius:6px;padding:8px 10px;font-size:11px;color:${valido?'#065F46':'#92400E'};font-weight:600;">
+              ${valido
+                ? `\uD83D\uDCB0 <strong>${$c(pago)}</strong> agora via ${PDV.pickupParcialMethod||'?'} \u00B7 \uD83C\uDFEA <strong>${$c(resta)}</strong> ao retirar`
+                : `\u26A0\uFE0F Valor pago agora deve ser maior que 0 e menor que o total (${$c(total)})`}
+            </div>
+          `;
+        })()}
+        ${!PDV.pickupParcialMethod?`<div style="margin-top:6px;font-size:11px;color:#92400E;">\u26A0\uFE0F Selecione Pix ou Link para o pagamento agora</div>`:''}
+      </div>
+    ` : ''}
+    ${!PDV.pickupPayMode?`<div style="margin-top:6px;font-size:11px;color:#92400E;font-weight:500;">\u26A0\uFE0F Escolha como o cliente vai pagar</div>`:''}
+  </div>`:''}
+
   ${PDV.payment==='Pagar na Entrega'?`
   <div style="background:var(--gold-l);border-radius:var(--r);padding:14px;border:1px solid rgba(183,134,15,.2);margin-bottom:8px;">
     <div style="font-size:12px;font-weight:600;color:var(--gold);margin-bottom:10px;">\uD83D\uDCB0 Como o cliente vai pagar na entrega?</div>
@@ -709,6 +769,31 @@ export async function _finalizePDV(){
     toast('\u274C Selecione a loja de retirada');
     return;
   }
+  // Retirada: como o cliente quer pagar
+  if (PDV.type === 'Retirada') {
+    if (!PDV.pickupPayMode) {
+      toast('\u274C Selecione como o cliente quer pagar (Pago / Total na retirada / Parcial)');
+      return;
+    }
+    if (PDV.pickupPayMode === 'parcial') {
+      if (!PDV.pickupParcialMethod) {
+        toast('\u274C Escolha Pix ou Link para o pagamento agora');
+        return;
+      }
+      const pago = parseFloat(PDV.pickupParcialPago);
+      // Calcula total atual
+      let totAtual = 0;
+      try {
+        totAtual = (PDV.cart||[]).reduce((s,i) => s + (Number(i.price)||0)*(Number(i.qty)||0), 0)
+                 - (Number(PDV.discount)||0)
+                 + (Number(PDV.deliveryFee)||0);
+      } catch(_){}
+      if (!pago || pago <= 0 || pago >= totAtual) {
+        toast('\u274C Valor pago agora inv\u00E1lido \u2014 deve ser maior que 0 e menor que o total');
+        return;
+      }
+    }
+  }
   if(PDV.type==='Delivery'){
     // Cidade (taxa de entrega)
     if(!PDV.city?.trim()){
@@ -816,7 +901,13 @@ export async function _finalizePDV(){
     // (atendente precisa clicar no botao para aprovar manualmente apos
     // confirmar comprovante / Pix / cartao). 'Pagar na Entrega' continua
     // com seu status proprio.
-    paymentStatus: PDV.payment==='Pagar na Entrega' ? 'Ag. Pagamento na Entrega' : 'Aguardando Pagamento',
+    paymentStatus: PDV.payment==='Pagar na Entrega'
+      ? 'Ag. Pagamento na Entrega'
+      : (PDV.type==='Retirada' && PDV.pickupPayMode==='total_retirada'
+          ? 'Ag. Pagamento na Retirada'
+          : (PDV.type==='Retirada' && PDV.pickupPayMode==='parcial'
+              ? 'Parcial — Falta na Retirada'
+              : 'Aguardando Pagamento')),
     scheduledDate:PDV.deliveryDate||undefined,
     scheduledPeriod:PDV.deliveryPeriod,
     scheduledTime:(PDV.deliveryPeriod==='Hor\u00E1rio espec\u00EDfico' ? (PDV.deliveryTimeFrom||'') : (PDV.deliveryTime||''))||undefined,
@@ -854,6 +945,13 @@ export async function _finalizePDV(){
     paymentOnDelivery: PDV.payment==='Pagar na Entrega' ? PDV.paymentOnDelivery : undefined,
     trocoPara: (PDV.payment==='Pagar na Entrega' && PDV.paymentOnDelivery==='Dinheiro' && PDV.trocoPara)
       ? parseFloat(PDV.trocoPara) || 0 : undefined,
+    // Retirada: como o cliente quer pagar (so quando type === 'Retirada')
+    pickupPayMode: PDV.type === 'Retirada' ? (PDV.pickupPayMode || undefined) : undefined,
+    pickupParcialMethod: (PDV.type === 'Retirada' && PDV.pickupPayMode === 'parcial') ? (PDV.pickupParcialMethod || undefined) : undefined,
+    pickupParcialPago: (PDV.type === 'Retirada' && PDV.pickupPayMode === 'parcial' && PDV.pickupParcialPago)
+      ? parseFloat(PDV.pickupParcialPago) || 0 : undefined,
+    pickupParcialPendente: (PDV.type === 'Retirada' && PDV.pickupPayMode === 'parcial' && PDV.pickupParcialPago)
+      ? Math.max(0, total - (parseFloat(PDV.pickupParcialPago) || 0)) : undefined,
     deliveryFee:PDV.deliveryFee||0,
     deliveryZone:PDV.zone,
     deliveryCity:PDV.city,

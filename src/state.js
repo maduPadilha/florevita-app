@@ -104,6 +104,13 @@ export let PDV = {
   reference:'', isCondominium:false, condName:'', block:'', apt:'',
   type:'Delivery', deliveryFee:0, zone:'', clientSearch:'',
   pickupUnit:'', saleUnit:'', salesChannel:'', notifyClient:true, identifyClient:true,
+  // Retirada na loja: como o cliente quer pagar
+  // 'pago' = paga tudo agora (usa PDV.payment normal)
+  // 'total_retirada' = paga TUDO ao retirar
+  // 'parcial' = paga parte agora (Pix/Link) e o resto ao retirar
+  pickupPayMode:'',          // '' | 'pago' | 'total_retirada' | 'parcial'
+  pickupParcialMethod:'',    // 'Pix' | 'Link' (so quando parcial)
+  pickupParcialPago:'',      // valor pago agora (editavel — pode ser != 50%)
   _showQuickReg:false
 };
 
@@ -118,6 +125,7 @@ export function resetPDV(){
     type:'Delivery', deliveryFee:0, zone:'', clientSearch:'',
     pickupUnit:'', saleUnit:'', salesChannel:'', notifyClient:true, identifyClient:true, recipientPhone:'',
     paymentOnDelivery:'', trocoPara:'',
+    pickupPayMode:'', pickupParcialMethod:'', pickupParcialPago:'',
     _showQuickReg:false
   });
 }

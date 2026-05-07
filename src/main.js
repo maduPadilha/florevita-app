@@ -5,7 +5,7 @@ import './styles/main.css';
 // Bump esse numero a cada release para forcar TODAS as maquinas
 // a limpar cache e baixar a nova versao no proximo F5/login.
 // Formato: AAAAMMDDX (ano-mes-dia-build do dia)
-const APP_VERSION = '20260506-03';
+const APP_VERSION = '20260507-01';
 try {
   const stored = localStorage.getItem('fv_app_version');
   if (stored && stored !== APP_VERSION) {
@@ -2002,6 +2002,48 @@ function bindPageActions(){
     }}
     {const _el=document.getElementById('pdv-troco-sem');if(_el)_el.onclick=()=>{PDV.trocoPara='0';render();};}
     document.querySelectorAll('[data-pay]').forEach(b=>{b.onclick=()=>{PDV.payment=b.dataset.pay;PDV.paymentOnDelivery='';render();};});
+
+    // ── Retirada na loja: como o cliente quer pagar ──────────────
+    document.querySelectorAll('[data-pickup-mode]').forEach(b => {
+      b.onclick = () => {
+        PDV.pickupPayMode = b.dataset.pickupMode;
+        // Reseta sub-config quando troca de modo
+        if (PDV.pickupPayMode !== 'parcial') {
+          PDV.pickupParcialMethod = '';
+          PDV.pickupParcialPago = '';
+        }
+        render();
+      };
+    });
+    document.querySelectorAll('[data-pickup-parcial-method]').forEach(b => {
+      b.onclick = () => {
+        PDV.pickupParcialMethod = b.dataset.pickupParcialMethod;
+        render();
+      };
+    });
+    {
+      const _el = document.getElementById('pdv-pickup-parcial-amt');
+      if (_el) {
+        _el.addEventListener('input', e => { PDV.pickupParcialPago = e.target.value; });
+        _el.addEventListener('change', e => { PDV.pickupParcialPago = e.target.value; render(); });
+      }
+    }
+    {
+      const _el = document.getElementById('pdv-pickup-parcial-50');
+      if (_el) _el.onclick = () => {
+        // Calcula 50% do total atual (pega do display do total)
+        const totEl = document.querySelector('[data-pdv-total]');
+        // Fallback: re-calcula do PDV.cart
+        let tot = 0;
+        try {
+          tot = (PDV.cart||[]).reduce((s,i) => s + (Number(i.price)||0)*(Number(i.qty)||0), 0)
+              - (Number(PDV.discount)||0)
+              + (Number(PDV.deliveryFee)||0);
+        } catch(_){}
+        if (tot > 0) PDV.pickupParcialPago = (tot/2).toFixed(2);
+        render();
+      };
+    }
     document.getElementById('pdv-sale-unit')?.addEventListener('change',e=>{PDV.saleUnit=e.target.value});
     document.getElementById('pdv-vendedor')?.addEventListener('change', e => {
       const v = String(e.target.value||'').split('|');

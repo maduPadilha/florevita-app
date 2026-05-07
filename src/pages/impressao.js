@@ -750,6 +750,44 @@ function _printComandaInternal(orderId, opts){
          ${_detalheEntrega}
        </div>` : '';
 
+  // ── COBRANCA NA RETIRADA ──────────────────────────────────
+  // Pedidos do tipo Retirada: pickupPayMode pode ser
+  //  - 'pago'             → ja pagou tudo agora (so confirma)
+  //  - 'total_retirada'   → cobra TOTAL ao retirar
+  //  - 'parcial'          → cobra a diferenca ao retirar
+  let pickupBlock = '';
+  if (o.type === 'Retirada' && o.pickupPayMode) {
+    if (o.pickupPayMode === 'total_retirada') {
+      pickupBlock = `<div style="margin-bottom:6px;">
+        <div style="background:#FEF3C7;border:2px solid #B45309;border-radius:6px;padding:8px 10px;text-align:center;font-size:16px;font-weight:900;color:#7C2D12;">
+          🏪 COBRAR NA RETIRADA: R$ ${_totalFmt}
+        </div>
+      </div>`;
+    } else if (o.pickupPayMode === 'parcial') {
+      const pago = Number(o.pickupParcialPago||0);
+      const pendente = Number(o.pickupParcialPendente||0);
+      const metodo = String(o.pickupParcialMethod||'').toUpperCase();
+      pickupBlock = `<div style="margin-bottom:6px;">
+        <div style="background:#FEF3C7;border:2px solid #B45309;border-radius:6px;padding:8px 10px;text-align:center;">
+          <div style="font-size:13px;font-weight:900;color:#7C2D12;">💳 PAGAMENTO PARCIAL</div>
+          <div style="font-size:11px;color:#7C2D12;margin-top:3px;">Total: R$ ${_totalFmt}</div>
+        </div>
+        <div style="background:#DCFCE7;border-left:5px solid #15803D;padding:6px 10px;margin-top:5px;border-radius:0 6px 6px 0;">
+          <div style="font-size:12px;font-weight:900;color:#14532D;">✅ JÁ PAGO: R$ ${pago.toFixed(2).replace('.',',')}${metodo?' via '+metodo:''}</div>
+        </div>
+        <div style="background:#FEE2E2;border-left:5px solid #DC2626;padding:6px 10px;margin-top:5px;border-radius:0 6px 6px 0;">
+          <div style="font-size:13px;font-weight:900;color:#7F1D1D;">🏪 COBRAR NA RETIRADA: R$ ${pendente.toFixed(2).replace('.',',')}</div>
+        </div>
+      </div>`;
+    } else if (o.pickupPayMode === 'pago') {
+      pickupBlock = `<div style="margin-bottom:6px;">
+        <div style="background:#DCFCE7;border:2px solid #15803D;border-radius:6px;padding:6px 10px;text-align:center;font-size:13px;font-weight:800;color:#14532D;">
+          ✅ JÁ PAGO INTEGRALMENTE — R$ ${_totalFmt} via ${UC(o.payment||'')}
+        </div>
+      </div>`;
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════
   // VIA CD -- Arquivo interno
   // ═══════════════════════════════════════════════════════════
@@ -804,6 +842,7 @@ function _printComandaInternal(orderId, opts){
 
     <!-- Cobranca -->
     ${cobrancaBlock}
+    ${pickupBlock}
 
     <!-- Entregador + QR -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:6px;border-top:1px dashed #bbb;">
@@ -873,6 +912,7 @@ function _printComandaInternal(orderId, opts){
 
     <!-- Cobranca -->
     ${cobrancaBlock}
+    ${pickupBlock}
 
     <!-- Entregador + QR -->
     <div style="display:flex;align-items:center;justify-content:space-between;background:#f0f0f0;border-radius:6px;padding:6px 10px;border-top:1px dashed #aaa;">
