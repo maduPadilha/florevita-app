@@ -242,9 +242,42 @@ export function renderDashboard(){
         ${phone?`<div style="font-size:10px;color:#94A3B8;">${esc(phone)}</div>`:''}
       </td>
       <td style="${recipStyle}font-size:12px;">${esc(recip)}</td>
-      <td>
-        <div style="font-size:12px;color:#1E293B;font-weight:600;">${bairro?esc(bairro):'<span style="color:#94A3B8;font-weight:400;">—</span>'}</div>
-      </td>
+      <td>${(()=>{
+        // Coluna 'Entrega':
+        //  - Delivery → bairro
+        //  - Retirada → "RETIRADA — UNIDADE" em destaque + valor pendente
+        //    (quando 'total_retirada' ou 'parcial')
+        const tipoRaw = String(o.tipo || o.type || 'delivery').toLowerCase();
+        const isRetirada = (tipoRaw === 'retirada' || tipoRaw === 'retirada na loja');
+        if (!isRetirada) {
+          return `<div style="font-size:12px;color:#1E293B;font-weight:600;">${bairro?esc(bairro):'<span style="color:#94A3B8;font-weight:400;">—</span>'}</div>`;
+        }
+        // Unidade de retirada (pickupUnit). Fallback: destino → unidade venda
+        const pickupRaw = o.pickupUnit || o.destino || o.unidade || '';
+        const pickupSlug = normalizeUnidade(pickupRaw);
+        const pickupLabel = pickupSlug ? labelUnidade(pickupSlug) : (pickupRaw || '—');
+        const pickupUC = String(pickupLabel||'—').toUpperCase();
+        // Valor a receber na retirada (se aplicavel)
+        let valorPendente = 0;
+        let pendenteLabel = '';
+        if (o.pickupPayMode === 'total_retirada') {
+          valorPendente = Number(o.total||0);
+          pendenteLabel = 'TOTAL';
+        } else if (o.pickupPayMode === 'parcial') {
+          valorPendente = Number(o.pickupParcialPendente||0);
+          pendenteLabel = 'FALTA';
+        }
+        const valorBlock = valorPendente > 0
+          ? `<div style="background:#FEE2E2;border:1.5px solid #DC2626;border-radius:6px;padding:4px 8px;margin-top:4px;font-size:11px;font-weight:900;color:#7F1D1D;text-align:center;letter-spacing:.3px;">💰 ${pendenteLabel}: ${$c(valorPendente)}</div>`
+          : '';
+        return `
+          <div style="background:#DCFCE7;border-left:4px solid #15803D;border-radius:6px;padding:5px 8px;">
+            <div style="font-size:11px;font-weight:900;color:#14532D;letter-spacing:.5px;">📦 RETIRADA</div>
+            <div style="font-size:12px;font-weight:800;color:#065F46;letter-spacing:.3px;line-height:1.2;margin-top:2px;">${esc(pickupUC)}</div>
+          </div>
+          ${valorBlock}
+        `;
+      })()}</td>
       <td style="font-weight:700;font-size:12px;color:#1E293B;">${$c(o.total)}</td>
       <td>${timeInputs(o)}</td>
       <td>${paymentSelect(o)}</td>
